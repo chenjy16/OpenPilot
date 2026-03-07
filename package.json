@@ -1,0 +1,67 @@
+{
+  "name": "ai-assistant-mvp",
+  "version": "1.0.0",
+  "description": "AI Assistant MVP with multi-model support and tool calling",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "cp -r src/runtime/prompts dist/runtime/prompts && cp -r src/runtime/skills dist/runtime/skills",
+    "ui:build": "cd frontend && npx vite build",
+    "prepack": "npm run build && npm run ui:build",
+    "gateway": "node dist/index.js",
+    "gateway:dev": "npm run build && npm run ui:build && node dist/index.js",
+    "start": "node dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "init-db": "ts-node scripts/init-db.ts"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "openai",
+    "anthropic",
+    "google",
+    "gemini",
+    "tools"
+  ],
+  "author": "",
+  "license": "MIT",
+  "_piAgentDependencies_NOTE": "These packages are the official Pi Agent Runtime ecosystem from the OpenPilot project. Install them when switching from local shim (MODE A) to real packages (MODE B) in src/pi-agent/index.ts. Real imports: AgentTool/AgentToolResult from pi-agent-core, AgentSession/ToolDefinition from pi-coding-agent.",
+  "_piAgentDependencies": {
+    "@mariozechner/pi-agent-core": "^1.0.0",
+    "@mariozechner/pi-coding-agent": "^1.0.0",
+    "@mariozechner/pi-tools": "^1.2.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/generative-ai": "^0.24.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/ws": "^8.18.1",
+    "better-sqlite3": "^9.0.0",
+    "cors": "^2.8.6",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.3.1",
+    "eventemitter3": "^5.0.1",
+    "express": "^5.2.1",
+    "grammy": "^1.41.1",
+    "helmet": "^8.1.0",
+    "openai": "^4.0.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.19.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/jest": "^29.5.0",
+    "@types/lodash": "^4.14.202",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.7",
+    "jest": "^29.0.0",
+    "nodemon": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
