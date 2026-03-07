@@ -9,7 +9,7 @@ interface ConfigState {
 export const useConfigStore = create<ConfigState>()(
   persist(
     (set) => ({
-      selectedModel: 'gpt-3.5-turbo',
+      selectedModel: 'google/gemini-2.0-flash',
       setModel: (model: string) => set({ selectedModel: model }),
     }),
     { name: 'ai-assistant-config' }

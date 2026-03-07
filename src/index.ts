@@ -121,6 +121,42 @@ async function main(): Promise<void> {
 
   // 3. Create ModelManager and sync allowed models to middleware
   const modelManager = new ModelManager();
+
+  // 3a. Apply custom model providers from config.json5
+  const modelsConfig = appConfig.models;
+  if (modelsConfig?.providers) {
+    for (const [providerId, provCfg] of Object.entries(modelsConfig.providers)) {
+      // Register provider API key if present
+      if (provCfg.apiKey) {
+        modelManager.registerProvider(providerId, provCfg.apiKey);
+      }
+      // Register individual models under this provider
+      if (provCfg.models) {
+        for (const m of provCfg.models) {
+          modelManager.registerModel({
+            provider: providerId,
+            modelId: m.id,
+            name: m.name ?? m.id,
+            api: (provCfg.api as any) ?? 'openai-completions',
+            reasoning: m.reasoning ?? false,
+            input: ['text'],
+            contextWindow: m.contextWindow ?? 128_000,
+            defaultMaxTokens: m.maxTokens ?? 4096,
+            defaultTemperature: 0.7,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          }, provCfg.apiKey);
+          // If provider has a custom baseUrl, patch the config
+          if (provCfg.baseUrl) {
+            const ref = `${providerId}/${m.id}`;
+            const cfg = modelManager.getConfig(ref);
+            if (cfg) cfg.baseUrl = provCfg.baseUrl;
+          }
+        }
+      }
+    }
+    console.log(`[${new Date().toISOString()}] Custom model providers loaded from config.json5`);
+  }
+
   // Use configured models (have API keys) + legacy short names for middleware validation
   const configuredModels = modelManager.getConfiguredModels();
   const supportedModels = modelManager.getSupportedModels();
@@ -371,7 +407,7 @@ async function main(): Promise<void> {
 
   // 14. Create and start Gateway server (single-process deployment)
   //     Serves: WebSocket RPC + HTTP API + Control UI static assets
-  const server = new APIServer(aiRuntime, sessionManager, auditLogger, channelManager, pluginManager, agentManager, appConfig);
+  const server = new APIServer(aiRuntime, sessionManager, auditLogger, channelManager, pluginManager, agentManager, appConfig, policyEngine);
 
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';

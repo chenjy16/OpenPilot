@@ -1,6 +1,26 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { get, put } from '../../services/apiClient';
 
+interface ModelOption { ref: string; name: string; provider: string; providerLabel?: string; configured?: boolean; }
+
+// Module-level model options cache (set by ConfigView, read by FieldEditor/ArrayField)
+let _modelOptions: ModelOption[] = [];
+
+// Paths that should render as model selectors
+const MODEL_FIELD_PATHS = new Set([
+  'agents.defaults.model.primary',
+]);
+// Paths that should render as model multi-select (arrays)
+const MODEL_ARRAY_PATHS = new Set([
+  'agents.defaults.model.fallbacks',
+]);
+function isModelField(path: string): boolean {
+  return MODEL_FIELD_PATHS.has(path);
+}
+function isModelArrayField(path: string): boolean {
+  return MODEL_ARRAY_PATHS.has(path);
+}
+
 // Section metadata — aligned with OpenClaw config structure
 const SECTION_META: Record<string, { icon: string; label: string; description: string; order: number }> = {
   gateway: { icon: '🌐', label: '网关配置', description: '端口、绑定、认证、TLS、热重载', order: 1 },
@@ -92,16 +112,22 @@ const ConfigView: React.FC = () => {
   const [originalRaw, setOriginalRaw] = useState('');
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
 
   const fetchConfig = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await get<Record<string, unknown>>('/config');
+      const [data, models] = await Promise.all([
+        get<Record<string, unknown>>('/config'),
+        get<ModelOption[]>('/models').catch(() => [] as ModelOption[]),
+      ]);
       setConfig(data);
       setOriginalConfig(JSON.parse(JSON.stringify(data)));
       const raw = JSON.stringify(data, null, 2);
       setRawJson(raw);
       setOriginalRaw(raw);
+      setModelOptions(models);
+      _modelOptions = models;
       setError(null);
     } catch (err) {
       setError((err as Error).message);
@@ -371,6 +397,38 @@ const ConfigSection: React.FC<{
 const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknown) => void }> = ({ path, value, onChange }) => {
   const enumOpts = getEnumOptions(path);
 
+  // Model selector for model-related fields
+  if (isModelField(path) && _modelOptions.length > 0) {
+    const grouped = new Map<string, ModelOption[]>();
+    for (const m of _modelOptions) {
+      const key = m.providerLabel ?? m.provider;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(m);
+    }
+    const currentVal = String(value ?? '');
+    const isValid = _modelOptions.some(m => m.ref === currentVal);
+    return (
+      <div>
+        <select value={currentVal} onChange={e => onChange(e.target.value)}
+          className={`w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${isValid ? 'border-gray-300' : 'border-orange-400 bg-orange-50'}`}>
+          {!isValid && currentVal && <option value={currentVal}>⚠️ {currentVal} (未配置)</option>}
+          {[...grouped.entries()].map(([provider, models]) => (
+            <optgroup key={provider} label={provider}>
+              {models.map(m => (
+                <option key={m.ref} value={m.ref}>
+                  {m.name} {m.configured ? '' : '(未配置)'} — {m.ref}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        {!isValid && currentVal && (
+          <p className="mt-1 text-xs text-orange-600">当前值 "{currentVal}" 不在已知模型列表中</p>
+        )}
+      </div>
+    );
+  }
+
   if (enumOpts) {
     return (
       <select value={String(value)} onChange={e => onChange(e.target.value)}
@@ -498,9 +556,10 @@ const NestedBlock: React.FC<{
 // Array field editor
 const ArrayField: React.FC<{
   path: string; value: unknown[]; onChange: (v: unknown) => void;
-}> = ({ value, onChange }) => {
+}> = ({ path, value, onChange }) => {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value.join(', '));
+  const isModelArray = isModelArrayField(path) && _modelOptions.length > 0;
 
   // Sync text when value changes externally
   useEffect(() => {
@@ -508,6 +567,58 @@ const ArrayField: React.FC<{
       setText(value.join(', '));
     }
   }, [value, editing]);
+
+  // Model array: tag-based UI with add dropdown
+  if (isModelArray) {
+    const currentRefs = value.map(String);
+    const available = _modelOptions.filter(m => !currentRefs.includes(m.ref));
+    const grouped = new Map<string, ModelOption[]>();
+    for (const m of available) {
+      const key = m.providerLabel ?? m.provider;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(m);
+    }
+
+    return (
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-1">
+          {currentRefs.length === 0 ? (
+            <span className="text-xs text-gray-400">(空)</span>
+          ) : (
+            currentRefs.map((ref, i) => {
+              const meta = _modelOptions.find(m => m.ref === ref);
+              const isValid = !!meta;
+              return (
+                <span key={i} className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono ${isValid ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                  {meta?.name ?? ref}{!isValid && ' ⚠️'}
+                  <button onClick={() => onChange(currentRefs.filter((_, j) => j !== i))}
+                    className="ml-0.5 text-gray-400 hover:text-red-500" title="移除">×</button>
+                </span>
+              );
+            })
+          )}
+        </div>
+        {available.length > 0 && (
+          <select
+            value=""
+            onChange={e => { if (e.target.value) onChange([...currentRefs, e.target.value]); }}
+            className="rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            <option value="">+ 添加 fallback 模型...</option>
+            {[...grouped.entries()].map(([provider, models]) => (
+              <optgroup key={provider} label={provider}>
+                {models.map(m => (
+                  <option key={m.ref} value={m.ref}>
+                    {m.name} {m.configured ? '' : '(未配置)'} — {m.ref}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
+      </div>
+    );
+  }
 
   if (editing) {
     return (

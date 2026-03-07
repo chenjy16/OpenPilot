@@ -52,6 +52,18 @@ export class PolicyEngine {
     this.sessionPolicies.delete(sessionId);
   }
 
+  /** Update the global policy at runtime (e.g. from config changes). */
+  updateGlobalPolicy(updates: Partial<ToolPolicy>): void {
+    if (updates.denylist !== undefined) this.globalPolicy.denylist = updates.denylist;
+    if (updates.allowlist !== undefined) this.globalPolicy.allowlist = updates.allowlist;
+    if (updates.requireApproval !== undefined) this.globalPolicy.requireApproval = updates.requireApproval;
+  }
+
+  /** Get the current global policy. */
+  getGlobalPolicy(): ToolPolicy {
+    return this.globalPolicy;
+  }
+
   /** Get the effective policy for a session (session override > global). */
   getEffectivePolicy(sessionId?: string): ToolPolicy {
     if (sessionId && this.sessionPolicies.has(sessionId)) {

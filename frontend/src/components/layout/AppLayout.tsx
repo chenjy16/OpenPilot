@@ -14,6 +14,7 @@ import ChannelsView from '../views/ChannelsView';
 import UsageView from '../views/UsageView';
 import CronView from '../views/CronView';
 import ConfigView from '../views/ConfigView';
+import ModelsView from '../views/ModelsView';
 
 const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   chat: <ChatView />,
@@ -27,6 +28,7 @@ const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   agents: <AgentsView />,
   skills: <SkillsView />,
   nodes: <NodesView />,
+  models: <ModelsView />,
   config: <ConfigView />,
 };
 

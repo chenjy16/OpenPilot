@@ -17,6 +17,7 @@ import { SessionManager } from '../session';
 import { DatabaseError } from '../session/SessionManager';
 import { ValidationError } from '../types';
 import { AuditLogger } from '../tools/auditHook';
+import { PolicyEngine } from '../tools/PolicyEngine';
 import {
   AuthenticationError,
   RateLimitError,
@@ -244,14 +245,17 @@ export class APIServer {
   private skillOverrides: Record<string, { enabled?: boolean; apiKey?: string; env?: Record<string, string> }> = {};
   /** Resolved Control UI static assets root directory */
   private controlUiRoot: string | null = null;
+  /** Policy engine for tool access control */
+  private policyEngine?: PolicyEngine;
 
-  constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any) {
+  constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
     this.sessionManager = sessionManager;
     this.auditLogger = auditLogger ?? new AuditLogger();
     this.channelManager = channelManager;
     this.pluginManager = pluginManager;
     this.appConfig = appConfig ?? null;
+    this.policyEngine = policyEngine;
     // Use injected AgentManager if provided, otherwise create a new one
     if (agentManager) {
       this.agentManager = agentManager;
@@ -272,6 +276,105 @@ export class APIServer {
         clawhubBaseUrl: appConfig.skills.community.clawhubBaseUrl,
         skillsmpBaseUrl: appConfig.skills.community.baseUrl,
       });
+    }
+
+    // Load cron jobs from config
+    if (appConfig?.cron?.jobs && Array.isArray(appConfig.cron.jobs)) {
+      this.cronJobs = appConfig.cron.jobs;
+    }
+
+    // Load skill overrides from config
+    if (appConfig?.skills?.overrides && typeof appConfig.skills.overrides === 'object') {
+      this.skillOverrides = appConfig.skills.overrides;
+      this.aiRuntime.setSkillConfigs(this.skillOverrides);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Config persistence helpers
+  // -----------------------------------------------------------------------
+
+  private persistCronJobs(): void {
+    if (!this.appConfig) return;
+    if (!this.appConfig.cron) this.appConfig.cron = {};
+    // Strip runtime-only fields before persisting
+    this.appConfig.cron.jobs = this.cronJobs.map((j: any) => ({
+      id: j.id,
+      schedule: j.schedule,
+      agentId: j.agentId,
+      message: j.message,
+      enabled: j.enabled,
+      createdAt: j.createdAt,
+    }));
+    try {
+      const { saveAppConfig } = require('../config/index');
+      saveAppConfig(this.appConfig);
+    } catch (err: any) {
+      console.warn(`[Config] Cron jobs save failed: ${err.message}`);
+    }
+  }
+
+  private persistSkillOverrides(): void {
+    if (!this.appConfig) return;
+    if (!this.appConfig.skills) this.appConfig.skills = {};
+    this.appConfig.skills.overrides = this.skillOverrides;
+    try {
+      const { saveAppConfig } = require('../config/index');
+      saveAppConfig(this.appConfig);
+    } catch (err: any) {
+      console.warn(`[Config] Skill overrides save failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Apply runtime config changes to live subsystems after PUT /api/config.
+   * Only touches subsystems whose config sections were actually changed.
+   */
+  private applyRuntimeConfigChanges(incoming: any): void {
+    // 1. PolicyEngine: tools.requireApproval, tools.denylist
+    if (incoming.tools && this.policyEngine) {
+      const toolsCfg = this.appConfig.tools;
+      this.policyEngine.updateGlobalPolicy({
+        requireApproval: toolsCfg.requireApproval ?? [],
+        denylist: toolsCfg.denylist ?? [],
+        allowlist: toolsCfg.allowlist ?? [],
+      });
+      console.log(`[Config] PolicyEngine updated: requireApproval=[${toolsCfg.requireApproval?.join(', ') ?? ''}]`);
+    }
+
+    // 2. Logging level
+    if (incoming.logLevel || incoming.logging?.level) {
+      const newLevel = this.appConfig.logLevel || this.appConfig.logging?.level || 'info';
+      process.env.LOG_LEVEL = newLevel;
+      console.log(`[Config] Log level updated to: ${newLevel}`);
+    }
+
+    // 3. Model defaults: validate agents.defaults.model.primary is available
+    if (incoming.agents?.defaults?.model?.primary) {
+      const modelManager = this.aiRuntime.getModelManager();
+      const primary = this.appConfig.agents.defaults.model.primary;
+      const configured = modelManager.getConfiguredModels();
+      if (!configured.includes(primary) && !modelManager.getSupportedModels().includes(primary)) {
+        console.warn(`[Config] Warning: agents.defaults.model.primary '${primary}' is not a configured model`);
+      }
+    }
+
+    // 4. Channel defaults
+    if (incoming.channels?.defaults && this.channelManager) {
+      // ChannelManager reads from appConfig at runtime, so the merged value is already effective
+      console.log('[Config] Channel defaults updated');
+    }
+
+    // 5. Skill overrides from config
+    if (incoming.skills?.overrides) {
+      this.skillOverrides = { ...this.skillOverrides, ...incoming.skills.overrides };
+      this.aiRuntime.setSkillConfigs(this.skillOverrides);
+      console.log('[Config] Skill overrides applied');
+    }
+
+    // 6. Gateway port/host changes require restart — warn user
+    if (incoming.gateway?.port || incoming.gateway?.host) {
+      console.log('[Config] Gateway port/host changed — restart required to take effect');
     }
   }
 
@@ -590,13 +693,52 @@ export class APIServer {
       // Remove from config
       if (this.appConfig?.channels) {
         delete (this.appConfig.channels as any)[channelType];
-        try {
-          const { saveAppConfig } = require('../config/index');
-          saveAppConfig(this.appConfig);
-        } catch { /* ignore */ }
       }
 
-      res.status(200).json({ ok: true, type: channelType, removed: true });
+      // Cascade: remove bindings that reference this channel
+      let bindingsRemoved = 0;
+      if (this.appConfig?.bindings && Array.isArray(this.appConfig.bindings)) {
+        const before = this.appConfig.bindings.length;
+        this.appConfig.bindings = this.appConfig.bindings.filter(
+          (b: any) => b.match?.channel !== channelType
+        );
+        bindingsRemoved = before - this.appConfig.bindings.length;
+      }
+      // Also clean agent-level bindings referencing this channel
+      const allAgents = await this.agentManager.listAgents();
+      for (const agent of allAgents) {
+        if (agent.bindings && Array.isArray(agent.bindings)) {
+          const origLen = agent.bindings.length;
+          agent.bindings = (agent.bindings as any[]).filter(
+            (b: any) => b.match?.channel !== channelType
+          );
+          if (agent.bindings.length < origLen) {
+            await this.agentManager.updateAgent(agent.id, { bindings: agent.bindings });
+            bindingsRemoved += origLen - agent.bindings.length;
+          }
+        }
+      }
+
+      // Rebuild ChannelManager bindings
+      if (this.channelManager) {
+        const merged: any[] = [...((this.appConfig as any)?.bindings ?? [])];
+        for (const a of await this.agentManager.listAgents()) {
+          if (a.bindings) {
+            for (const b of a.bindings as any[]) {
+              merged.push({ agentId: a.id, match: b.match });
+            }
+          }
+        }
+        this.channelManager.setBindings(merged);
+      }
+
+      // Persist
+      try {
+        const { saveAppConfig } = require('../config/index');
+        saveAppConfig(this.appConfig);
+      } catch { /* ignore */ }
+
+      res.status(200).json({ ok: true, type: channelType, removed: true, bindingsRemoved });
     });
 
     // ----- Pairing & AllowFrom endpoints (design doc §设备管理) -----
@@ -714,6 +856,98 @@ export class APIServer {
       res.status(200).json(modelManager.getProviderStatus());
     });
 
+    // Add a custom model provider at runtime + persist to config.json5
+    this.app.post('/api/models/providers', (req: Request, res: Response) => {
+      try {
+        const { providerId, apiKey, baseUrl, api, models } = req.body;
+        if (!providerId || typeof providerId !== 'string') {
+          res.status(400).json({ error: 'providerId is required' });
+          return;
+        }
+        const modelManager = this.aiRuntime.getModelManager();
+
+        // Register provider with API key
+        if (apiKey) {
+          modelManager.registerProvider(providerId, apiKey);
+        }
+
+        // Register individual models
+        const registered: string[] = [];
+        if (Array.isArray(models)) {
+          for (const m of models) {
+            if (!m.id) continue;
+            modelManager.registerModel({
+              provider: providerId,
+              modelId: m.id,
+              name: m.name ?? m.id,
+              api: api ?? 'openai-completions',
+              reasoning: m.reasoning ?? false,
+              input: ['text'],
+              contextWindow: m.contextWindow ?? 128_000,
+              defaultMaxTokens: m.maxTokens ?? 4096,
+              defaultTemperature: 0.7,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            }, apiKey);
+            // Patch baseUrl if provided
+            if (baseUrl) {
+              const ref = `${providerId}/${m.id}`;
+              try {
+                const cfg = modelManager.getConfig(ref);
+                if (cfg) cfg.baseUrl = baseUrl;
+              } catch { /* model may not have been registered if no key */ }
+            }
+            registered.push(`${providerId}/${m.id}`);
+          }
+        }
+
+        // Update middleware allowed models
+        const { setAllowedModels } = require('./middleware');
+        const allModels = [...new Set([...modelManager.getSupportedModels(), ...modelManager.getConfiguredModels()])];
+        setAllowedModels(allModels);
+
+        // Persist to config.json5
+        let savedTo: string | undefined;
+        try {
+          if (!this.appConfig.models) {
+            this.appConfig.models = {};
+          }
+          if (!this.appConfig.models.providers) {
+            this.appConfig.models.providers = {};
+          }
+          // Build provider config entry
+          const provEntry: any = {};
+          if (apiKey) provEntry.apiKey = apiKey;
+          if (baseUrl) provEntry.baseUrl = baseUrl;
+          if (api) provEntry.api = api;
+          if (Array.isArray(models) && models.length > 0) {
+            provEntry.models = models.filter((m: any) => m.id).map((m: any) => ({
+              id: m.id,
+              name: m.name || m.id,
+              ...(m.contextWindow ? { contextWindow: m.contextWindow } : {}),
+              ...(m.maxTokens ? { maxTokens: m.maxTokens } : {}),
+              ...(m.reasoning ? { reasoning: true } : {}),
+            }));
+          }
+          this.appConfig.models.providers[providerId] = provEntry;
+
+          const { saveAppConfig } = require('../config/index');
+          savedTo = saveAppConfig(this.appConfig);
+        } catch (err: any) {
+          console.warn(`[Config] Model provider save failed: ${err.message}`);
+        }
+
+        res.status(200).json({
+          ok: true,
+          providerId,
+          registeredModels: registered,
+          totalConfigured: modelManager.getConfiguredModels().length,
+          savedTo,
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // System status
     this.app.get('/api/status', this.handleGetStatus.bind(this));
 
@@ -789,6 +1023,9 @@ export class APIServer {
       // Fix #3: Invalidate system prompt cache so skill changes take effect
       // Also sync full skillOverrides to runtime so resolveSkillsSnapshot uses them
       this.aiRuntime.setSkillConfigs(this.skillOverrides);
+
+      // Persist to config.json5
+      this.persistSkillOverrides();
 
       res.status(200).json({ ok: true, skill: name, enabled, apiKeySet: !!apiKey });
     });
@@ -935,6 +1172,21 @@ export class APIServer {
           res.status(409).json({ error: `Agent '${id}' already exists` });
           return;
         }
+
+        // Validate model availability if specified
+        if (model?.primary) {
+          const modelManager = this.aiRuntime.getModelManager();
+          const configured = modelManager.getConfiguredModels();
+          const supported = modelManager.getSupportedModels();
+          const allKnown = new Set([...configured, ...supported]);
+          if (!allKnown.has(model.primary)) {
+            res.status(400).json({
+              error: `Model '${model.primary}' is not available. Configured: ${configured.join(', ') || '(none)'}`,
+            });
+            return;
+          }
+        }
+
         const agent = await this.agentManager.createAgent({
           id, name: name || id, description, model, toolProfile, tools, skillFilter,
         });
@@ -956,6 +1208,19 @@ export class APIServer {
 
     this.app.put('/api/agents/:id', async (req: Request, res: Response) => {
       try {
+        // Validate model availability if being changed
+        if (req.body.model?.primary) {
+          const modelManager = this.aiRuntime.getModelManager();
+          const configured = modelManager.getConfiguredModels();
+          const supported = modelManager.getSupportedModels();
+          const allKnown = new Set([...configured, ...supported]);
+          if (!allKnown.has(req.body.model.primary)) {
+            res.status(400).json({
+              error: `Model '${req.body.model.primary}' is not available. Configured: ${configured.join(', ') || '(none)'}`,
+            });
+            return;
+          }
+        }
         const updated = await this.agentManager.updateAgent(req.params.id as string, req.body);
         if (!updated) { res.status(404).json({ error: 'Agent not found' }); return; }
         res.status(200).json(updated);
@@ -966,12 +1231,50 @@ export class APIServer {
 
     this.app.delete('/api/agents/:id', async (req: Request, res: Response) => {
       try {
-        const deleted = await this.agentManager.deleteAgent(req.params.id as string);
+        const agentId = req.params.id as string;
+        const deleted = await this.agentManager.deleteAgent(agentId);
         if (!deleted) {
           res.status(400).json({ error: 'Cannot delete this agent (default agent or not found)' });
           return;
         }
-        res.status(200).json({ ok: true });
+
+        // Cascade: reassign cron jobs referencing this agent to 'default'
+        let cronUpdated = 0;
+        for (const job of this.cronJobs) {
+          if (job.agentId === agentId) {
+            job.agentId = 'default';
+            cronUpdated++;
+          }
+        }
+        if (cronUpdated > 0) this.persistCronJobs();
+
+        // Cascade: remove bindings referencing this agent from appConfig
+        if (this.appConfig?.bindings && Array.isArray(this.appConfig.bindings)) {
+          const before = this.appConfig.bindings.length;
+          this.appConfig.bindings = this.appConfig.bindings.filter((b: any) => b.agentId !== agentId);
+          if (this.appConfig.bindings.length < before) {
+            try {
+              const { saveAppConfig } = require('../config/index');
+              saveAppConfig(this.appConfig);
+            } catch { /* ignore */ }
+          }
+        }
+
+        // Rebuild ChannelManager bindings
+        if (this.channelManager) {
+          const allAgents = await this.agentManager.listAgents();
+          const merged: any[] = [...((this.appConfig as any)?.bindings ?? [])];
+          for (const a of allAgents) {
+            if (a.bindings) {
+              for (const b of a.bindings as any[]) {
+                merged.push({ agentId: a.id, match: b.match });
+              }
+            }
+          }
+          this.channelManager.setBindings(merged);
+        }
+
+        res.status(200).json({ ok: true, cascaded: { cronJobsReassigned: cronUpdated } });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
@@ -1141,16 +1444,23 @@ export class APIServer {
       res.status(200).json(this.cronJobs);
     });
 
-    this.app.post('/api/cron/jobs', (req: Request, res: Response) => {
+    this.app.post('/api/cron/jobs', async (req: Request, res: Response) => {
       const { schedule, agentId, message, enabled } = req.body;
       if (!schedule || !message) {
         res.status(400).json({ error: 'schedule and message are required' });
         return;
       }
+      // Validate agentId exists
+      const targetAgentId = agentId || 'default';
+      const agent = await this.agentManager.getAgent(targetAgentId);
+      if (!agent) {
+        res.status(400).json({ error: `Agent '${targetAgentId}' does not exist` });
+        return;
+      }
       const job = {
         id: `cron-${Date.now()}`,
         schedule,
-        agentId: agentId || 'default',
+        agentId: targetAgentId,
         message,
         enabled: enabled !== false,
         createdAt: new Date().toISOString(),
@@ -1159,6 +1469,7 @@ export class APIServer {
         nextRunAt: null,
       };
       this.cronJobs.push(job);
+      this.persistCronJobs();
       res.status(201).json(job);
     });
 
@@ -1166,6 +1477,7 @@ export class APIServer {
       const idx = this.cronJobs.findIndex((j: any) => j.id === req.params.id);
       if (idx === -1) { res.status(404).json({ error: 'Job not found' }); return; }
       this.cronJobs[idx] = { ...this.cronJobs[idx], ...req.body, id: req.params.id };
+      this.persistCronJobs();
       res.status(200).json(this.cronJobs[idx]);
     });
 
@@ -1173,6 +1485,7 @@ export class APIServer {
       const idx = this.cronJobs.findIndex((j: any) => j.id === req.params.id);
       if (idx === -1) { res.status(404).json({ error: 'Job not found' }); return; }
       this.cronJobs.splice(idx, 1);
+      this.persistCronJobs();
       res.status(200).json({ ok: true });
     });
 
@@ -1180,6 +1493,7 @@ export class APIServer {
       const job = this.cronJobs.find((j: any) => j.id === req.params.id);
       if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
       (job as any).enabled = !(job as any).enabled;
+      this.persistCronJobs();
       res.status(200).json(job);
     });
 
@@ -1235,12 +1549,28 @@ export class APIServer {
       const incoming = JSON.parse(JSON.stringify(req.body));
       // Never allow overwriting apiKeys from the API
       delete incoming.apiKeys;
-      // Strip masked apiKey values that the frontend may send back
-      // (they look like "••••xxxx" and should not overwrite real keys)
+
+      // Strip masked values that the frontend may send back (they look like "••••xxxx")
+      // so they don't overwrite real secrets during deepMerge
+      const stripMasked = (obj: any) => {
+        if (!obj || typeof obj !== 'object') return;
+        for (const key of Object.keys(obj)) {
+          const val = obj[key];
+          if (typeof val === 'string' && val.startsWith('••••')) {
+            delete obj[key];
+          } else if (val && typeof val === 'object') {
+            stripMasked(val);
+          }
+        }
+      };
+      stripMasked(incoming);
 
       // Deep merge instead of shallow Object.assign
       const { deepMergeConfig } = require('../config/index');
       this.appConfig = deepMergeConfig(this.appConfig, incoming);
+
+      // Apply runtime changes to live subsystems
+      this.applyRuntimeConfigChanges(incoming);
 
       // Persist to disk
       try {
@@ -1255,7 +1585,7 @@ export class APIServer {
           }
           safeCopy.apiKeys = masked;
         }
-        res.status(200).json({ ok: true, config: safeCopy, savedTo: savedPath });
+        res.status(200).json({ ok: true, config: safeCopy, savedTo: savedPath, needsRestart: !!(incoming.gateway?.port || incoming.gateway?.host) });
       } catch (err: any) {
         console.warn(`[Config] File save failed: ${err.message}`);
         res.status(200).json({ ok: true, config: this.appConfig, saveError: err.message });

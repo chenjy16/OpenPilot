@@ -12,6 +12,7 @@ export type NavTab =
   | 'agents'
   | 'skills'
   | 'nodes'
+  | 'models'
   | 'config'
   | 'debug'
   | 'logs';
@@ -47,6 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Settings',
     tabs: [
+      { id: 'models', label: '模型', icon: '🧩' },
       { id: 'config', label: '配置', icon: '⚙️' },
       { id: 'debug', label: '调试', icon: '🐛' },
       { id: 'logs', label: '日志', icon: '📜' },

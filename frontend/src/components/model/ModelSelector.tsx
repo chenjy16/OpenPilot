@@ -19,10 +19,10 @@ interface ModelCatalogEntry {
 
 // Fallback for when API is unavailable
 const FALLBACK_MODELS = [
+  { ref: 'google/gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'google' },
+  { ref: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'google' },
   { ref: 'openai/gpt-4o', name: 'GPT-4o', provider: 'openai' },
-  { ref: 'openai/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai' },
   { ref: 'anthropic/claude-sonnet-4-20250514', name: 'Claude Sonnet 4', provider: 'anthropic' },
-  { ref: 'openai/gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai' },
 ];
 
 const ModelSelector: React.FC = () => {
@@ -32,10 +32,22 @@ const ModelSelector: React.FC = () => {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    get<ModelCatalogEntry[]>('/models/configured')
-      .then((data) => { setModels(data); setLoaded(true); })
-      .catch(() => setLoaded(true));
-  }, []);
+    Promise.all([
+      get<ModelCatalogEntry[]>('/models/configured').catch(() => []),
+      get<Record<string, any>>('/config').catch(() => null),
+    ]).then(([data, config]) => {
+      setModels(data);
+      setLoaded(true);
+      // If current selection is a legacy/unavailable model, switch to config default or first configured
+      if (data.length > 0 && !data.some(m => m.ref === selectedModel)) {
+        const configDefault = config?.agents?.defaults?.model?.primary;
+        const best = (configDefault && data.some((m: any) => m.ref === configDefault))
+          ? configDefault
+          : data[0].ref;
+        setModel(best);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Group by provider
   const grouped = new Map<string, ModelCatalogEntry[]>();

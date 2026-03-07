@@ -234,7 +234,11 @@ export interface SkillsConfig {
     apiKey?: string;
     /** SkillsMP API base URL override */
     baseUrl?: string;
+    /** ClawHub base URL override */
+    clawhubBaseUrl?: string;
   };
+  /** Runtime skill overrides (enable/disable, API keys) — persisted from UI */
+  overrides?: Record<string, { enabled?: boolean; apiKey?: string; env?: Record<string, string> }>;
 }
 
 export interface SandboxConfigSection {
@@ -322,6 +326,15 @@ export interface CronConfig {
   retry?: { maxAttempts?: number; backoffMs?: number[]; retryOn?: string[] };
   sessionRetention?: string | false;
   failureAlert?: { enabled?: boolean; after?: number; cooldownMs?: number };
+  /** Persisted cron job definitions */
+  jobs?: Array<{
+    id: string;
+    schedule: string;
+    agentId: string;
+    message: string;
+    enabled: boolean;
+    createdAt: string;
+  }>;
 }
 
 export interface MessagesConfig {
@@ -602,8 +615,8 @@ const DEFAULT_CONFIG: AppConfig = {
   agents: {
     defaults: {
       model: {
-        primary: 'claude-3-sonnet',
-        fallbacks: ['gpt-4', 'gemini-1.5-pro', 'gpt-3.5-turbo'],
+        primary: 'google/gemini-2.0-flash',
+        fallbacks: ['google/gemini-2.5-flash', 'google/gemini-1.5-flash', 'openai/gpt-4o-mini', 'anthropic/claude-3-haiku-20240307'],
       },
       compaction: {
         mode: 'default',
@@ -938,8 +951,30 @@ export function saveAppConfig(config: AppConfig): string {
   }
 
   // Strip sensitive/runtime-only fields
-  const toSave: any = { ...config };
+  const toSave: any = JSON.parse(JSON.stringify(config));
   delete toSave.apiKeys;
+
+  // Strip sensitive keys from nested structures (channel tokens, model provider apiKeys)
+  if (toSave.channels) {
+    for (const ch of Object.values(toSave.channels) as any[]) {
+      if (ch && typeof ch === 'object') {
+        for (const key of ['token', 'signingSecret', 'appToken']) {
+          if (ch[key] && typeof ch[key] === 'string') {
+            // Keep the value — it's needed for restart. Only strip if it's a masked placeholder.
+            if (ch[key].startsWith('••••')) delete ch[key];
+          }
+        }
+      }
+    }
+  }
+  // Strip masked placeholders from model provider apiKeys (keep real keys for restart)
+  if (toSave.models?.providers) {
+    for (const prov of Object.values(toSave.models.providers) as any[]) {
+      if (prov?.apiKey && typeof prov.apiKey === 'string' && prov.apiKey.startsWith('••••')) {
+        delete prov.apiKey;
+      }
+    }
+  }
 
   const content = JSON.stringify(toSave, null, 2);
   fs.writeFileSync(configPath, content, 'utf-8');
