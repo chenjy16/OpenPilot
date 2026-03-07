@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     for (const [providerId, provCfg] of Object.entries(modelsConfig.providers)) {
       // Register provider API key if present
       if (provCfg.apiKey) {
-        modelManager.registerProvider(providerId, provCfg.apiKey);
+        modelManager.registerProvider(providerId, provCfg.apiKey, provCfg.baseUrl);
       }
       // Register individual models under this provider
       if (provCfg.models) {
