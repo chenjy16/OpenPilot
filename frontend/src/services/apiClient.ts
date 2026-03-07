@@ -60,6 +60,9 @@ export function put<T>(endpoint: string, body?: unknown): Promise<T> {
   });
 }
 
-export function del<T>(endpoint: string): Promise<T> {
-  return request<T>(endpoint, { method: 'DELETE' });
+export function del<T>(endpoint: string, body?: unknown): Promise<T> {
+  return request<T>(endpoint, {
+    method: 'DELETE',
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
 }

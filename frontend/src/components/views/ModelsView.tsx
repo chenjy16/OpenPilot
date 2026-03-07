@@ -403,7 +403,7 @@ const ModelsView: React.FC = () => {
   const totalConfigured = catalog.filter(m => m.configured).length;
 
   return (
-    <div style={{ padding: 24, maxWidth: 960, margin: '0 auto' }}>
+    <div style={{ padding: 24, maxWidth: 960, margin: '0 auto', height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, color: '#e6e6e6' }}>🧩 模型管理</div>

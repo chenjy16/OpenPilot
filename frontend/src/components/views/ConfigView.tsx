@@ -396,6 +396,9 @@ const ConfigSection: React.FC<{
 // Generic field editor with enum detection
 const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknown) => void }> = ({ path, value, onChange }) => {
   const enumOpts = getEnumOptions(path);
+  // Must declare all hooks before any early returns (React Rules of Hooks)
+  const isPassword = path.includes('apiKey') || path.includes('token') || path.includes('password') || path.includes('secret');
+  const [showPassword, setShowPassword] = useState(false);
 
   // Model selector for model-related fields
   if (isModelField(path) && _modelOptions.length > 0) {
@@ -461,8 +464,6 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
   }
 
   // String
-  const isPassword = path.includes('apiKey') || path.includes('token') || path.includes('password') || path.includes('secret');
-  const [showPassword, setShowPassword] = useState(false);
   const isMaskedVal = typeof value === 'string' && (value as string).startsWith('••••');
   return (
     <div className="relative">
