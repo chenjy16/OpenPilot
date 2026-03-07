@@ -261,8 +261,12 @@ export class ModelManager {
    */
   getModelCatalog(): ModelCatalogEntry[] {
     const entries: ModelCatalogEntry[] = [];
+    const seen = new Set<string>();
+
+    // Built-in models from MODEL_REGISTRY
     for (const m of MODEL_REGISTRY) {
       const ref = `${m.provider}/${m.modelId}`;
+      seen.add(ref);
       const providerMeta = this.providerIndex.get(m.provider);
       entries.push({
         ref,
@@ -279,6 +283,27 @@ export class ModelManager {
         providerLabel: providerMeta?.label,
       });
     }
+
+    // Custom models registered at runtime (not in MODEL_REGISTRY)
+    for (const [ref, m] of this.modelIndex) {
+      if (seen.has(ref)) continue;
+      const providerMeta = this.providerIndex.get(m.provider);
+      entries.push({
+        ref,
+        provider: m.provider,
+        modelId: m.modelId,
+        name: m.name,
+        api: m.api,
+        reasoning: m.reasoning,
+        input: m.input,
+        contextWindow: m.contextWindow,
+        maxTokens: m.defaultMaxTokens,
+        cost: m.cost,
+        configured: this.configs.has(ref),
+        providerLabel: providerMeta?.label,
+      });
+    }
+
     return entries.sort((a, b) => {
       // Configured first, then by provider, then by name
       if (a.configured !== b.configured) return a.configured ? -1 : 1;
@@ -298,16 +323,37 @@ export class ModelManager {
    * Get detected provider info.
    */
   getProviderStatus(): Array<{ id: string; label: string; detected: boolean; profileCount: number; maskedKey?: string }> {
-    return PROVIDER_REGISTRY.map(p => {
+    const result: Array<{ id: string; label: string; detected: boolean; profileCount: number; maskedKey?: string }> = [];
+    const seen = new Set<string>();
+
+    // Built-in providers
+    for (const p of PROVIDER_REGISTRY) {
+      seen.add(p.id);
       const key = this.getActiveApiKey(p.id);
-      return {
+      result.push({
         id: p.id,
         label: p.label,
         detected: this.detectedProviders.has(p.id),
         profileCount: this.authProfiles.get(p.id)?.length ?? 0,
         maskedKey: key ? '••••' + key.slice(-4) : undefined,
-      };
-    });
+      });
+    }
+
+    // Custom providers registered at runtime (not in PROVIDER_REGISTRY)
+    for (const pid of this.detectedProviders) {
+      if (seen.has(pid)) continue;
+      const key = this.getActiveApiKey(pid);
+      const providerMeta = this.providerIndex.get(pid);
+      result.push({
+        id: pid,
+        label: providerMeta?.label ?? pid,
+        detected: true,
+        profileCount: this.authProfiles.get(pid)?.length ?? 0,
+        maskedKey: key ? '••••' + key.slice(-4) : undefined,
+      });
+    }
+
+    return result;
   }
 
   // -----------------------------------------------------------------------
@@ -509,9 +555,23 @@ export class ModelManager {
   /**
    * Register a provider with API key at runtime.
    */
-  registerProvider(providerId: string, apiKey: string): void {
+  registerProvider(providerId: string, apiKey: string, baseUrl?: string): void {
     this.detectedProviders.add(providerId);
     this.registerAuthProfiles(providerId, apiKey);
+
+    // Ensure custom providers are in providerIndex
+    if (!this.providerIndex.has(providerId)) {
+      this.providerIndex.set(providerId, {
+        id: providerId,
+        label: providerId,
+        envVar: '',
+        defaultApi: 'openai-completions' as ModelApi,
+        defaultBaseUrl: baseUrl,
+      });
+    } else if (baseUrl) {
+      const existing = this.providerIndex.get(providerId)!;
+      existing.defaultBaseUrl = baseUrl;
+    }
 
     // Auto-configure all known models for this provider
     for (const m of MODEL_REGISTRY) {

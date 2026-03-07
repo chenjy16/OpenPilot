@@ -882,7 +882,7 @@ export class APIServer {
 
         // Register provider with API key
         if (apiKey) {
-          modelManager.registerProvider(providerId, apiKey);
+          modelManager.registerProvider(providerId, apiKey, baseUrl);
         }
 
         // Register individual models
