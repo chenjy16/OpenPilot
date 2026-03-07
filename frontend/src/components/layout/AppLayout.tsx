@@ -74,7 +74,8 @@ const AppLayout: React.FC = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <span className="ml-3 text-sm font-medium text-gray-700">OpenPilot</span>
+          <img src="/app.png" alt="OpenPilot" className="ml-2 h-5 w-5 rounded" />
+          <span className="ml-1 text-sm font-medium text-gray-700">OpenPilot</span>
         </header>
         <main className="flex-1 overflow-hidden">
           {VIEW_MAP[activeTab]}

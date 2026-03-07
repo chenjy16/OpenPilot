@@ -41,7 +41,7 @@ const NavSidebar: React.FC = () => {
     <div className="flex h-full w-56 flex-col bg-gray-900 text-gray-300">
       {/* App header */}
       <div className="flex items-center gap-2 px-4 py-4">
-        <span className="text-xl">🤖</span>
+        <img src="/app.png" alt="OpenPilot" className="h-7 w-7 rounded" />
         <span className="text-base font-semibold text-white">OpenPilot</span>
         <span className={`ml-auto h-2 w-2 rounded-full ${statusColor}`} title={wsStatus} />
       </div>
