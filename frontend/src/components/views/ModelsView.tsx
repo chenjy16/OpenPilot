@@ -25,6 +25,7 @@ interface ProviderStatus {
   label: string;
   detected: boolean;
   profileCount: number;
+  maskedKey?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -35,8 +36,9 @@ const ProviderKeyForm: React.FC<{
   providerId: string;
   providerLabel: string;
   detected: boolean;
+  maskedKey?: string;
   onSaved: () => void;
-}> = ({ providerId, providerLabel, detected, onSaved }) => {
+}> = ({ providerId, providerLabel, detected, maskedKey, onSaved }) => {
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -62,7 +64,12 @@ const ProviderKeyForm: React.FC<{
 
   return (
     <div style={{ padding: '8px 12px', background: '#1a1a2e', borderRadius: 6, marginTop: 4 }}>
-      {detected && (
+      {detected && maskedKey && (
+        <div style={{ fontSize: 12, color: '#4ade80', marginBottom: 6 }}>
+          ✅ 已配置 API Key: <span style={{ fontFamily: 'monospace', color: '#93c5fd' }}>{maskedKey}</span>
+        </div>
+      )}
+      {detected && !maskedKey && (
         <div style={{ fontSize: 12, color: '#4ade80', marginBottom: 6 }}>
           ✅ 已通过环境变量检测到 API Key
         </div>
@@ -296,6 +303,7 @@ const ModelsView: React.FC = () => {
                     providerId={pid}
                     providerLabel={ps?.label ?? pid}
                     detected={ps?.detected ?? false}
+                    maskedKey={ps?.maskedKey}
                     onSaved={refresh}
                   />
                 </div>
@@ -378,6 +386,7 @@ const ModelsView: React.FC = () => {
                 providerId={p.id}
                 providerLabel={p.label}
                 detected={p.detected}
+                maskedKey={p.maskedKey}
                 onSaved={refresh}
               />
             )}

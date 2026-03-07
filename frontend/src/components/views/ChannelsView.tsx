@@ -130,10 +130,22 @@ const ChannelsView: React.FC = () => {
     finally { setBusyType(null); }
   };
 
-  const handleConfigure = (type: string) => {
+  const handleConfigure = async (type: string) => {
     setConfiguring(type);
     setConfigValues({});
     setSaveMsg(null);
+    // Fetch existing config (masked) to pre-fill
+    try {
+      const resp = await get<{ config: Record<string, string> }>(`/channels/${encodeURIComponent(type)}/config`);
+      if (resp.config && Object.keys(resp.config).length > 0) {
+        // Filter out non-string values like 'enabled: true'
+        const vals: Record<string, string> = {};
+        for (const [k, v] of Object.entries(resp.config)) {
+          vals[k] = String(v ?? '');
+        }
+        setConfigValues(vals);
+      }
+    } catch { /* ignore — just show empty form */ }
   };
 
   const handleSaveConfig = async () => {
@@ -141,9 +153,15 @@ const ChannelsView: React.FC = () => {
     setBusyType(configuring);
     setSaveMsg(null);
     try {
+      // Filter out masked placeholder values (••••xxxx) — backend keeps existing values for omitted keys
+      const filtered: Record<string, string> = {};
+      for (const [k, v] of Object.entries(configValues)) {
+        if (typeof v === 'string' && v.startsWith('••••')) continue; // skip masked placeholders
+        filtered[k] = v;
+      }
       const result = await put<{ ok: boolean; connectError?: string }>(
         `/channels/${encodeURIComponent(configuring)}/config`,
-        { config: configValues, connect: true },
+        { config: filtered, connect: true },
       );
       if (result.connectError) {
         setSaveMsg(`配置已保存，连接失败: ${result.connectError}`);
@@ -416,6 +434,62 @@ const ChannelConfigDialog: React.FC<{
   const fields = channel?.fields ?? [];
   const requiredFilled = fields.filter(f => f.required).every(f => values[f.key]?.trim());
 
+  // Track which password fields are revealed and their raw values
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [rawCache, setRawCache] = useState<Record<string, string>>({});
+  const [loadingRaw, setLoadingRaw] = useState(false);
+  // Track which fields the user has manually edited (so we don't submit masked placeholders)
+  const [edited, setEdited] = useState<Set<string>>(new Set());
+
+  const isMasked = (val: string) => val.startsWith('••••');
+
+  const handleReveal = async (fieldKey: string) => {
+    if (revealed[fieldKey]) {
+      // Toggle back to masked
+      setRevealed(prev => ({ ...prev, [fieldKey]: false }));
+      return;
+    }
+    // If we already have the raw value cached, just reveal
+    if (rawCache[fieldKey]) {
+      setRevealed(prev => ({ ...prev, [fieldKey]: true }));
+      return;
+    }
+    // Fetch raw config from backend
+    setLoadingRaw(true);
+    try {
+      const resp = await get<{ config: Record<string, string> }>(
+        `/channels/${encodeURIComponent(channelType)}/config/raw`
+      );
+      if (resp.config) {
+        const newCache: Record<string, string> = {};
+        for (const [k, v] of Object.entries(resp.config)) {
+          if (typeof v === 'string') newCache[k] = v;
+        }
+        setRawCache(newCache);
+      }
+      setRevealed(prev => ({ ...prev, [fieldKey]: true }));
+    } catch { /* ignore */ }
+    finally { setLoadingRaw(false); }
+  };
+
+  const handleFieldChange = (key: string, val: string) => {
+    setEdited(prev => new Set(prev).add(key));
+    onChange({ ...values, [key]: val });
+  };
+
+  // When saving, the parent handleSaveConfig filters out masked placeholders
+  const handleSaveFiltered = () => {
+    onSave();
+  };
+
+  const getDisplayValue = (field: ChannelField): string => {
+    const val = values[field.key] ?? '';
+    if (field.type === 'password' && revealed[field.key] && rawCache[field.key] && !edited.has(field.key)) {
+      return rawCache[field.key];
+    }
+    return val;
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
       <div className="w-full max-w-md rounded-lg bg-white shadow-xl" onClick={e => e.stopPropagation()}>
@@ -431,33 +505,58 @@ const ChannelConfigDialog: React.FC<{
           </div>
         </div>
         <div className="space-y-4 px-5 py-4">
-          {fields.map(field => (
-            <div key={field.key}>
-              <label className="mb-1 block text-xs font-medium text-gray-600">
-                {field.label}
-                {field.required && <span className="text-red-400 ml-0.5">*</span>}
-              </label>
-              {field.type === 'boolean' ? (
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={values[field.key] === 'true'}
-                    onChange={e => onChange({ ...values, [field.key]: e.target.checked ? 'true' : 'false' })}
-                    className="rounded border-gray-300" />
-                  <span className="text-xs text-gray-500">启用</span>
+          {fields.map(field => {
+            const val = values[field.key] ?? '';
+            const isPasswordField = field.type === 'password';
+            const isRevealed = revealed[field.key];
+            const hasMaskedValue = isMasked(val) && !edited.has(field.key);
+            const displayVal = getDisplayValue(field);
+
+            return (
+              <div key={field.key}>
+                <label className="mb-1 block text-xs font-medium text-gray-600">
+                  {field.label}
+                  {field.required && <span className="text-red-400 ml-0.5">*</span>}
                 </label>
-              ) : (
-                <input
-                  type={field.type === 'password' ? 'password' : 'text'}
-                  value={values[field.key] ?? ''}
-                  onChange={e => onChange({ ...values, [field.key]: e.target.value })}
-                  placeholder={field.envVar ? `或设置 ${field.envVar}` : ''}
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
-                />
-              )}
-              {field.description && (
-                <p className="mt-0.5 text-xs text-gray-400">{field.description}</p>
-              )}
-            </div>
-          ))}
+                {field.type === 'boolean' ? (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={values[field.key] === 'true'}
+                      onChange={e => handleFieldChange(field.key, e.target.checked ? 'true' : 'false')}
+                      className="rounded border-gray-300" />
+                    <span className="text-xs text-gray-500">启用</span>
+                  </label>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type={isPasswordField && !isRevealed ? 'password' : 'text'}
+                      value={displayVal}
+                      onChange={e => handleFieldChange(field.key, e.target.value)}
+                      placeholder={field.envVar ? `或设置 ${field.envVar}` : ''}
+                      className={`w-full rounded border px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+                        hasMaskedValue ? 'border-gray-200 bg-gray-50 text-gray-400' : 'border-gray-300'
+                      } ${isPasswordField ? 'pr-16' : ''}`}
+                    />
+                    {isPasswordField && isMasked(val) && !edited.has(field.key) && (
+                      <button
+                        type="button"
+                        onClick={() => handleReveal(field.key)}
+                        disabled={loadingRaw}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-blue-500 hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        {loadingRaw ? '...' : isRevealed ? '🙈 隐藏' : '👁 显示'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {field.description && (
+                  <p className="mt-0.5 text-xs text-gray-400">{field.description}</p>
+                )}
+                {hasMaskedValue && !isRevealed && (
+                  <p className="mt-0.5 text-xs text-green-600">✓ 已配置（输入新值可覆盖）</p>
+                )}
+              </div>
+            );
+          })}
         </div>
         {saveMsg && (
           <div className={`mx-5 mb-2 rounded px-3 py-1.5 text-xs ${saveMsg.includes('失败') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
@@ -469,7 +568,7 @@ const ChannelConfigDialog: React.FC<{
             className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
             取消
           </button>
-          <button onClick={onSave} disabled={!requiredFilled || saving}
+          <button onClick={handleSaveFiltered} disabled={!requiredFilled || saving}
             className="rounded bg-blue-500 px-3 py-1.5 text-xs text-white hover:bg-blue-600 disabled:opacity-50">
             {saving ? '保存中...' : '保存并连接'}
           </button>

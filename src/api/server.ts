@@ -622,6 +622,18 @@ export class APIServer {
       res.status(200).json({ type: channelType, config: safe });
     });
 
+    // Get channel config (raw / unmasked) — for "reveal" toggle in UI
+    this.app.get('/api/channels/:type/config/raw', (req: Request, res: Response) => {
+      const channelType = req.params.type as string;
+      const channelCfg = (this.appConfig?.channels as any)?.[channelType];
+      if (!channelCfg) {
+        res.status(200).json({ type: channelType, config: {} });
+        return;
+      }
+      // Return as-is (no masking) — UI uses this for the "show password" toggle
+      res.status(200).json({ type: channelType, config: { ...channelCfg } });
+    });
+
     // Save channel config and optionally connect
     this.app.put('/api/channels/:type/config', async (req: Request, res: Response) => {
       const channelType = req.params.type as string;
@@ -638,7 +650,9 @@ export class APIServer {
         return;
       }
       if (!this.appConfig.channels) this.appConfig.channels = {};
-      (this.appConfig.channels as any)[channelType] = { ...channelCfg, enabled: true };
+      // Merge with existing config so omitted fields (user didn't edit masked values) are preserved
+      const existing = (this.appConfig.channels as any)[channelType] ?? {};
+      (this.appConfig.channels as any)[channelType] = { ...existing, ...channelCfg, enabled: true };
 
       // Set env vars for channel tokens so channel constructors can pick them up
       this.applyChannelEnvVars(channelType, channelCfg);

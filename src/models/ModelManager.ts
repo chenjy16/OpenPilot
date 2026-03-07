@@ -297,13 +297,17 @@ export class ModelManager {
   /**
    * Get detected provider info.
    */
-  getProviderStatus(): Array<{ id: string; label: string; detected: boolean; profileCount: number }> {
-    return PROVIDER_REGISTRY.map(p => ({
-      id: p.id,
-      label: p.label,
-      detected: this.detectedProviders.has(p.id),
-      profileCount: this.authProfiles.get(p.id)?.length ?? 0,
-    }));
+  getProviderStatus(): Array<{ id: string; label: string; detected: boolean; profileCount: number; maskedKey?: string }> {
+    return PROVIDER_REGISTRY.map(p => {
+      const key = this.getActiveApiKey(p.id);
+      return {
+        id: p.id,
+        label: p.label,
+        detected: this.detectedProviders.has(p.id),
+        profileCount: this.authProfiles.get(p.id)?.length ?? 0,
+        maskedKey: key ? '••••' + key.slice(-4) : undefined,
+      };
+    });
   }
 
   // -----------------------------------------------------------------------

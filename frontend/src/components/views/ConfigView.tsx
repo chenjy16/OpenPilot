@@ -462,14 +462,32 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
 
   // String
   const isPassword = path.includes('apiKey') || path.includes('token') || path.includes('password') || path.includes('secret');
+  const [showPassword, setShowPassword] = useState(false);
+  const isMaskedVal = typeof value === 'string' && (value as string).startsWith('••••');
   return (
-    <input
-      type={isPassword ? 'password' : 'text'}
-      value={value != null ? String(value) : ''}
-      onChange={e => onChange(e.target.value)}
-      placeholder={isPassword ? '(未设置)' : ''}
-      className="w-full rounded border border-gray-300 px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
-    />
+    <div className="relative">
+      <input
+        type={isPassword && !showPassword ? 'password' : 'text'}
+        value={value != null ? String(value) : ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={isPassword ? '(未设置)' : ''}
+        className={`w-full rounded border px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+          isMaskedVal ? 'border-gray-200 bg-gray-50 text-gray-400' : 'border-gray-300'
+        } ${isPassword ? 'pr-14' : ''}`}
+      />
+      {isPassword && value && (
+        <button
+          type="button"
+          onClick={() => setShowPassword(!showPassword)}
+          className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-xs text-blue-500 hover:bg-blue-50"
+        >
+          {showPassword ? '🙈' : '👁'}
+        </button>
+      )}
+      {isMaskedVal && !showPassword && (
+        <p className="mt-0.5 text-xs text-green-600">✓ 已配置（输入新值可覆盖）</p>
+      )}
+    </div>
   );
 };
 

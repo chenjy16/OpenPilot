@@ -303,6 +303,8 @@ const SkillCard: React.FC<SkillCardProps> = ({
 }) => {
   const hasMissing = skill.missing && (skill.missing.bins.length > 0 || skill.missing.env.length > 0 || skill.missing.config.length > 0);
   const needsApiKey = skill.missing && skill.missing.env.length > 0;
+  const hasConfiguredKey = !needsApiKey && skill.requirements?.env && skill.requirements.env.length > 0;
+  const [showKeyOverride, setShowKeyOverride] = useState(false);
   return (
     <div className={`rounded-lg border px-4 py-3 ${skill.enabled ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50'}`}>
       <div className="flex items-center gap-3">
@@ -334,6 +336,26 @@ const SkillCard: React.FC<SkillCardProps> = ({
             className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
           <button onClick={onSaveApiKey} disabled={busy || !apiKeyEdit}
             className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50">保存</button>
+        </div>
+      )}
+      {hasConfiguredKey && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-green-600">✓ {skill.requirements!.env!.join(', ')} 已配置</span>
+            <button onClick={() => setShowKeyOverride(!showKeyOverride)}
+              className="text-xs text-blue-500 hover:underline">
+              {showKeyOverride ? '收起' : '修改'}
+            </button>
+          </div>
+          {showKeyOverride && (
+            <div className="mt-1 flex items-center gap-2">
+              <input type="password" value={apiKeyEdit} onChange={e => onApiKeyChange(e.target.value)}
+                placeholder={`输入新的 ${skill.requirements!.env![0]} 覆盖...`}
+                className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" />
+              <button onClick={onSaveApiKey} disabled={busy || !apiKeyEdit}
+                className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50">保存</button>
+            </div>
+          )}
         </div>
       )}
       {message && <p className={`mt-1 text-xs ${message.ok ? 'text-green-600' : 'text-red-500'}`}>{message.text}</p>}
