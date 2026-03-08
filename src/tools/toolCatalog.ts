@@ -75,6 +75,9 @@ const CATALOG: ToolCatalogEntry[] = [
   // Screen
   { id: 'screen_capture', label: 'screen_capture', section: 'Screen', description: '系统截图', emoji: '📸', verb: 'Capturing screen', profiles: ['coding', 'full'] },
   { id: 'screen_record', label: 'screen_record', section: 'Screen', description: '屏幕录制', emoji: '🎬', verb: 'Recording screen', profiles: ['coding', 'full'] },
+  // Polymarket (PolyOracle)
+  { id: 'polymarket_trending', label: 'polymarket_trending', section: 'Polymarket', description: '扫描热门预测市场', emoji: '📡', verb: 'Scanning markets', profiles: ['full'], ownerOnly: true },
+  { id: 'polymarket_market_detail', label: 'polymarket_market_detail', section: 'Polymarket', description: '获取市场详情与概率', emoji: '📊', verb: 'Fetching market', profiles: ['full'], ownerOnly: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -124,6 +127,7 @@ const SECTION_TO_GROUP: Record<string, string> = {
   Agents: 'agents',
   Media: 'media',
   Screen: 'screen',
+  Polymarket: 'polymarket',
 };
 
 /** Expand tool group references (e.g. "group:fs" → ["read","write","edit","apply_patch"]) */
@@ -183,6 +187,8 @@ const CATALOG_TO_EXECUTOR: Record<string, string> = {
   sessions_spawn: 'spawnSubAgent',
   screen_capture: 'screenCapture',
   screen_record: 'screenRecord',
+  polymarket_trending: 'polymarket_trending',
+  polymarket_market_detail: 'polymarket_market_detail',
 };
 
 /** Resolve a catalog ID to the actual ToolExecutor tool name */

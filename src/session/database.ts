@@ -61,6 +61,35 @@ export function initializeDatabase(dbPath: string): Database.Database {
     ON messages(session_id, timestamp)
   `);
 
+  // Create market_signals table (PolyOracle)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS market_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      market_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      market_probability REAL NOT NULL,
+      ai_probability REAL,
+      edge REAL,
+      confidence TEXT,
+      reasoning TEXT,
+      volume REAL,
+      liquidity REAL,
+      end_date TEXT,
+      tags TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_market_signals_created
+    ON market_signals(created_at DESC)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_market_signals_edge
+    ON market_signals(edge DESC)
+  `);
+
   return db;
 }
 

@@ -1692,6 +1692,201 @@ export class APIServer {
       // Resolve the pending approval (in a real implementation, this would resolve a Promise)
       res.status(200).json({ ok: true, decision, approval });
     });
+
+    // ----- PolyOracle / Polymarket endpoints -----
+    this.app.get('/api/polymarket/markets', async (_req: Request, res: Response) => {
+      try {
+        const polyConfig = this.appConfig?.polymarket;
+        const limit = polyConfig?.scanLimit ?? 10;
+        const minVolume = polyConfig?.minVolume ?? 50000;
+        const gammaUrl = polyConfig?.gammaApiUrl ?? 'https://gamma-api.polymarket.com';
+
+        const url = new URL('/markets', gammaUrl);
+        url.searchParams.set('limit', String(limit));
+        url.searchParams.set('order', 'volume24hr');
+        url.searchParams.set('ascending', 'false');
+        url.searchParams.set('active', 'true');
+        url.searchParams.set('closed', 'false');
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
+        try {
+          const resp = await fetch(url.toString(), { signal: controller.signal, headers: { Accept: 'application/json' } });
+          if (!resp.ok) throw new Error(`Gamma API ${resp.status}`);
+          const data = await resp.json();
+          const markets = (Array.isArray(data) ? data : [])
+            .filter((m: any) => (m.volume ?? m.volumeNum ?? 0) >= minVolume)
+            .map((m: any) => {
+              let yesPrice = 0, noPrice = 0;
+              if (m.outcomePrices) {
+                const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+                yesPrice = Number(prices[0]) || 0;
+                noPrice = Number(prices[1]) || 0;
+              }
+              return {
+                id: m.id ?? m.conditionId,
+                conditionId: m.conditionId,
+                question: m.question,
+                slug: m.slug,
+                yesPrice,
+                noPrice,
+                probability: yesPrice,
+                volume: m.volume ?? m.volumeNum ?? 0,
+                volume24hr: m.volume24hr ?? 0,
+                liquidity: m.liquidity ?? m.liquidityNum ?? 0,
+                endDate: m.endDate ?? m.endDateIso,
+                tags: m.tags ?? [],
+                active: m.active ?? !m.closed,
+              };
+            });
+          res.status(200).json({ count: markets.length, markets });
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (err: any) {
+        res.status(502).json({ error: `Polymarket API error: ${err.message}` });
+      }
+    });
+
+    this.app.get('/api/polymarket/market/:id', async (req: Request, res: Response) => {
+      try {
+        const marketId = req.params.id as string;
+        const gammaUrl = this.appConfig?.polymarket?.gammaApiUrl ?? 'https://gamma-api.polymarket.com';
+        const url = `${gammaUrl}/markets/${encodeURIComponent(marketId)}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
+        try {
+          const resp = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+          if (!resp.ok) throw new Error(`Gamma API ${resp.status}`);
+          const m: any = await resp.json();
+          let yesPrice = 0, noPrice = 0;
+          if (m.outcomePrices) {
+            const prices = typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : m.outcomePrices;
+            yesPrice = Number(prices[0]) || 0;
+            noPrice = Number(prices[1]) || 0;
+          }
+          res.status(200).json({
+            id: m.id ?? m.conditionId,
+            conditionId: m.conditionId,
+            question: m.question,
+            description: m.description,
+            slug: m.slug,
+            yesPrice, noPrice,
+            probability: yesPrice,
+            volume: m.volume ?? m.volumeNum ?? 0,
+            volume24hr: m.volume24hr ?? 0,
+            liquidity: m.liquidity ?? m.liquidityNum ?? 0,
+            endDate: m.endDate ?? m.endDateIso,
+            tags: m.tags ?? [],
+            active: m.active ?? !m.closed,
+            resolved: m.resolved ?? false,
+          });
+        } finally {
+          clearTimeout(timeout);
+        }
+      } catch (err: any) {
+        res.status(502).json({ error: `Polymarket API error: ${err.message}` });
+      }
+    });
+
+    this.app.get('/api/polymarket/signals', (_req: Request, res: Response) => {
+      try {
+        const db = (this.sessionManager as any).db;
+        const rows = db.prepare(`
+          SELECT * FROM market_signals ORDER BY created_at DESC LIMIT 100
+        `).all();
+        res.status(200).json(rows);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    this.app.post('/api/polymarket/analyze', async (req: Request, res: Response) => {
+      try {
+        const { marketId, question, probability, context } = req.body;
+        if (!question) {
+          res.status(400).json({ error: 'question is required' });
+          return;
+        }
+
+        // Use AI to analyze the market
+        const modelManager = this.aiRuntime.getModelManager();
+        const configured = modelManager.getConfiguredModels();
+        // Prefer reasoning model, fallback to any configured
+        const reasoningModel = configured.find(m => m.includes('deepseek-reasoner') || m.includes('o3')) || configured[0];
+        if (!reasoningModel) {
+          res.status(400).json({ error: 'No AI model configured' });
+          return;
+        }
+
+        const prompt = [
+          'You are a quantitative analyst evaluating a prediction market.',
+          'Analyze the following market and provide your probability estimate.',
+          '',
+          `Market Question: ${question}`,
+          `Current Market Probability (YES): ${(probability * 100).toFixed(1)}%`,
+          context ? `\nRelevant Context:\n${context}` : '',
+          '',
+          'Respond in this exact JSON format:',
+          '{',
+          '  "aiProbability": <your estimated probability 0-1>,',
+          '  "confidence": "high" | "medium" | "low",',
+          '  "reasoning": "<your analysis in 2-3 sentences>"',
+          '}',
+        ].join('\n');
+
+        const result = await this.aiRuntime.execute({
+          sessionId: `polyoracle-analyze-${Date.now()}`,
+          message: prompt,
+          model: reasoningModel,
+        });
+
+        // Parse AI response
+        let analysis: any = {};
+        try {
+          const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            analysis = JSON.parse(jsonMatch[0]);
+          }
+        } catch { /* parse failure — use raw text */ }
+
+        const aiProb = Number(analysis.aiProbability) || 0;
+        const edge = aiProb - (probability || 0);
+        const threshold = this.appConfig?.polymarket?.signalThreshold ?? 0.05;
+
+        // Save signal to database
+        const db = (this.sessionManager as any).db;
+        db.prepare(`
+          INSERT INTO market_signals (market_id, question, market_probability, ai_probability, edge, confidence, reasoning, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          marketId || 'unknown',
+          question,
+          probability || 0,
+          aiProb,
+          edge,
+          analysis.confidence || 'unknown',
+          analysis.reasoning || result.text,
+          Math.floor(Date.now() / 1000),
+        );
+
+        const signal = {
+          marketId,
+          question,
+          marketProbability: probability,
+          aiProbability: aiProb,
+          edge,
+          confidence: analysis.confidence || 'unknown',
+          reasoning: analysis.reasoning || result.text,
+          isOpportunity: Math.abs(edge) >= threshold,
+          threshold,
+        };
+
+        res.status(200).json(signal);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
   }
 
   // -----------------------------------------------------------------------

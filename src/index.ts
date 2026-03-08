@@ -31,6 +31,7 @@ import { registerPatchTools } from './tools/patchTools';
 import { registerMemoryTools } from './tools/memoryTools';
 import { registerSubAgentTools, SubAgentContext } from './tools/subAgentTools';
 import { registerScreenTools } from './tools/screenTools';
+import { registerPolymarketTools } from './tools/polymarketTools';
 import { closeBrowser } from './tools/browserTools';
 import { createSandbox } from './runtime/sandbox';
 import { AIRuntime } from './runtime/AIRuntime';
@@ -240,6 +241,7 @@ async function main(): Promise<void> {
   registerPatchTools(toolExecutor);
   registerMemoryTools(toolExecutor, db);
   registerScreenTools(toolExecutor);
+  registerPolymarketTools(toolExecutor);
   console.log(`[${new Date().toISOString()}] Tools registered: ${toolExecutor.getRegisteredToolNames().join(', ')}`);
   console.log(`[${new Date().toISOString()}] Policy: requireApproval=[${policyEngine.getEffectivePolicy().requireApproval.join(', ')}]`);
 

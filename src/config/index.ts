@@ -518,6 +518,21 @@ export interface MetaConfig {
   lastTouchedAt?: string;
 }
 
+/** Polymarket / PolyOracle configuration */
+export interface PolymarketConfig {
+  enabled?: boolean;
+  gammaApiUrl?: string;
+  scanLimit?: number;
+  minVolume?: number;
+  /** Minimum edge (AI prob - market prob) to flag as signal */
+  signalThreshold?: number;
+  /** Telegram notification settings */
+  notify?: {
+    enabled?: boolean;
+    minEdge?: number;
+  };
+}
+
 export interface AppConfig {
   /** Runtime environment */
   nodeEnv: 'development' | 'production' | 'test';
@@ -585,6 +600,8 @@ export interface AppConfig {
   discovery?: DiscoveryConfig;
   /** Talk (real-time voice) */
   talk?: TalkConfig;
+  /** Polymarket / PolyOracle */
+  polymarket?: PolymarketConfig;
   /** UI appearance */
   ui?: UIConfig;
   /** CLI configuration */
