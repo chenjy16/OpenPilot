@@ -266,8 +266,9 @@ describe('ChannelManager', () => {
       consoleSpy.mockRestore();
       logSpy.mockRestore();
 
-      // No response sent on error
-      expect(ch.sentMessages).toHaveLength(0);
+      // Error feedback sent to user
+      expect(ch.sentMessages).toHaveLength(1);
+      expect(ch.sentMessages[0].text).toContain('处理消息时出错');
     });
   });
 

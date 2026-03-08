@@ -827,6 +827,17 @@ export class ChannelManager {
       }
     } catch (err: any) {
       console.error(`[ChannelManager] Error processing message from ${channelType}: ${err.message}`);
+      // Send error feedback to the user so they know something went wrong
+      try {
+        const channel = this.channels.get(channelType);
+        if (channel) {
+          await channel.sendMessage({
+            chatId: message.chatId,
+            text: `⚠️ 处理消息时出错: ${err.message}`,
+            replyTo: message.id,
+          });
+        }
+      } catch { /* ignore send failure */ }
     }
   }
 

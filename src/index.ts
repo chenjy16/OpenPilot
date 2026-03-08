@@ -335,17 +335,16 @@ async function main(): Promise<void> {
         threadId: msg.threadId,
       });
 
-      // Resolve model: agent-specific model > global preference > fallback
+      // Resolve model: agent-specific model > config default > first configured
       let channelModel: string;
       const agentConfig = await agentManager.getAgent(route.agentId);
       if (agentConfig?.model?.primary) {
         channelModel = agentConfig.model.primary;
+      } else if (appConfig.agents?.defaults?.model?.primary) {
+        channelModel = appConfig.agents.defaults.model.primary;
       } else {
         const configured = modelManager.getConfiguredModels();
-        channelModel = configured.find(m => m === 'google/gemini-2.0-flash')
-          ?? configured.find(m => m === 'google/gemini-1.5-flash')
-          ?? configured.find(m => m.startsWith('google/'))
-          ?? configured[0] ?? 'google/gemini-2.0-flash';
+        channelModel = configured[0] ?? 'google/gemini-2.0-flash';
       }
 
       const result = await aiRuntime.execute({
