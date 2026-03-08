@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { get, post, del } from '../services/apiClient';
+import { useChatStore } from './chatStore';
 import type { SessionSummary } from '../types';
 
 interface SessionState {
@@ -39,6 +40,9 @@ export const useSessionStore = create<SessionState>((set, getState) => ({
         activeSessionId: session.id,
         loading: false,
       }));
+      // Clear chat messages and error for the new empty session
+      useChatStore.getState().setMessages([]);
+      useChatStore.setState({ error: null });
     } catch (err) {
       set({ error: (err as Error).message, loading: false });
     }

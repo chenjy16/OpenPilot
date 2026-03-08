@@ -38,9 +38,13 @@ const ModelSelector: React.FC = () => {
     ]).then(([data, config]) => {
       setModels(data);
       setLoaded(true);
+      // Sync with config default: if config has a different primary model and it's available, use it
+      const configDefault = config?.agents?.defaults?.model?.primary;
+      if (configDefault && data.some((m: any) => m.ref === configDefault) && configDefault !== selectedModel) {
+        setModel(configDefault);
+      }
       // If current selection is a legacy/unavailable model, switch to config default or first configured
-      if (data.length > 0 && !data.some(m => m.ref === selectedModel)) {
-        const configDefault = config?.agents?.defaults?.model?.primary;
+      else if (data.length > 0 && !data.some(m => m.ref === selectedModel)) {
         const best = (configDefault && data.some((m: any) => m.ref === configDefault))
           ? configDefault
           : data[0].ref;

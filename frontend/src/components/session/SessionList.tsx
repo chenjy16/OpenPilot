@@ -24,8 +24,16 @@ const SessionList: React.FC = () => {
     fetchSessions();
   }, [fetchSessions]);
 
+  // Auto-select first session if none is active
+  useEffect(() => {
+    if (!activeSessionId && sessions.length > 0 && !loading) {
+      handleSelect(sessions[0].id);
+    }
+  }, [sessions, activeSessionId, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSelect = async (id: string) => {
     if (id === activeSessionId) return;
+    useChatStore.setState({ error: null });
     await setActiveSession(id);
     try {
       const session = await get<{ messages: Message[] }>(`/sessions/${id}`);
