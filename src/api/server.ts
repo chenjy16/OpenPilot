@@ -161,6 +161,12 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
   talk: {
     icon: '🎙️', label: '实时语音', description: 'Talk 实时语音模式提供商',
   },
+  imageGeneration: {
+    icon: '🖼️', label: '图片生成', description: '图片生成 Provider 配置（Qwen/Stability/OpenAI/本地SD）',
+    fields: {
+      provider: { type: 'select', label: '默认 Provider', options: ['qwen', 'stability', 'openai', 'local_sd'], description: '默认图片生成引擎' },
+    },
+  },
   ui: {
     icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称',
   },

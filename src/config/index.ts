@@ -523,6 +523,17 @@ export interface MetaConfig {
   lastTouchedAt?: string;
 }
 
+/** Image generation configuration */
+export interface ImageGenerationConfig {
+  provider?: string;
+  providers?: Record<string, {
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    endpoint?: string;
+  }>;
+}
+
 /** Polymarket / PolyOracle configuration */
 export interface PolymarketConfig {
   enabled?: boolean;
@@ -610,6 +621,8 @@ export interface AppConfig {
   discovery?: DiscoveryConfig;
   /** Talk (real-time voice) */
   talk?: TalkConfig;
+  /** Image generation */
+  imageGeneration?: ImageGenerationConfig;
   /** Polymarket / PolyOracle */
   polymarket?: PolymarketConfig;
   /** UI appearance */

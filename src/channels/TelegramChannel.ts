@@ -485,6 +485,48 @@ export class TelegramChannel implements ChannelPlugin {
     });
   }
 
+  /**
+   * Send a document/file to a Telegram chat.
+   */
+  async sendDocument(chatId: string, file: Buffer, filename: string, caption?: string, replyTo?: string): Promise<void> {
+    if (!this.bot) throw new Error('Telegram bot is not connected');
+
+    let InputFile: any;
+    try {
+      const grammy = require('grammy');
+      InputFile = grammy.InputFile;
+    } catch {
+      InputFile = null;
+    }
+
+    const doc = InputFile ? new InputFile(file, filename) : file;
+    await this.bot.api.sendDocument(chatId, doc, {
+      caption: caption?.slice(0, 1024),
+      reply_to_message_id: replyTo ? parseInt(replyTo, 10) : undefined,
+    });
+  }
+
+  /**
+   * Send a photo to a Telegram chat.
+   */
+  async sendPhoto(chatId: string, photo: Buffer, caption?: string, replyTo?: string): Promise<void> {
+    if (!this.bot) throw new Error('Telegram bot is not connected');
+
+    let InputFile: any;
+    try {
+      const grammy = require('grammy');
+      InputFile = grammy.InputFile;
+    } catch {
+      InputFile = null;
+    }
+
+    const img = InputFile ? new InputFile(photo, 'image.png') : photo;
+    await this.bot.api.sendPhoto(chatId, img, {
+      caption: caption?.slice(0, 1024),
+      reply_to_message_id: replyTo ? parseInt(replyTo, 10) : undefined,
+    });
+  }
+
   getStatus(): ChannelInfo {
     return {
       type: this.type,

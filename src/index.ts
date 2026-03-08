@@ -32,6 +32,9 @@ import { registerMemoryTools } from './tools/memoryTools';
 import { registerSubAgentTools, SubAgentContext } from './tools/subAgentTools';
 import { registerScreenTools } from './tools/screenTools';
 import { registerPolymarketTools } from './tools/polymarketTools';
+import { registerImageTools, setImageRouter, setImagePendingFiles } from './tools/imageTools';
+import { registerDocumentTools, getPendingFilesRef } from './tools/documentTools';
+import { ImageRouter } from './services/ImageRouter';
 import { closeBrowser } from './tools/browserTools';
 import { createSandbox } from './runtime/sandbox';
 import { AIRuntime } from './runtime/AIRuntime';
@@ -246,7 +249,16 @@ async function main(): Promise<void> {
   registerMemoryTools(toolExecutor, db);
   registerScreenTools(toolExecutor);
   registerPolymarketTools(toolExecutor);
+
+  // Image & Document generation tools
+  const imageRouter = new ImageRouter(appConfig);
+  setImageRouter(imageRouter);
+  setImagePendingFiles(getPendingFilesRef());
+  registerImageTools(toolExecutor);
+  registerDocumentTools(toolExecutor);
+
   console.log(`[${new Date().toISOString()}] Tools registered: ${toolExecutor.getRegisteredToolNames().join(', ')}`);
+  console.log(`[${new Date().toISOString()}] Image generation: ${imageRouter.isConfigured() ? '✓ configured' : '✗ not configured (set imageGeneration in config.json5)'}`);
   console.log(`[${new Date().toISOString()}] Policy: requireApproval=[${policyEngine.getEffectivePolicy().requireApproval.join(', ')}]`);
 
   // 9. Initialize AgentManager

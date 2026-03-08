@@ -34,6 +34,8 @@ import {
 } from './PairingStore';
 import { InboundDebouncer, DebouncerConfig } from './InboundDebouncer';
 import { enqueueCommandInLane } from './CommandLane';
+import { drainPendingFiles } from '../tools/documentTools';
+import { readFile as fsReadFile } from 'fs/promises';
 import { VoiceService } from '../services/VoiceService';
 
 // ---------------------------------------------------------------------------
@@ -882,6 +884,9 @@ export class ChannelManager {
             replyTo: message.id,
           });
         }
+
+        // ── File delivery: send any pending generated files ──
+        await this.deliverPendingFiles(channel, message);
       }
     } catch (err: any) {
       console.error(`[ChannelManager] Error processing message from ${channelType}: ${err.message}`);
@@ -896,6 +901,52 @@ export class ChannelManager {
           });
         }
       } catch { /* ignore send failure */ }
+    }
+  }
+
+  /**
+   * Deliver any pending generated files (PPT, PDF, images) as documents.
+   */
+  private async deliverPendingFiles(channel: ChannelPlugin, message: ChannelMessage): Promise<void> {
+    const files = drainPendingFiles();
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      try {
+        const buffer = await fsReadFile(file.filePath);
+        const caption = `📎 ${file.title}.${file.format} (${file.sizeKB} KB)`;
+
+        // Use channel-specific file sending methods
+        const channelAny = channel as any;
+
+        if (message.channelType === 'telegram') {
+          // Images → sendPhoto, documents → sendDocument
+          if (['png', 'jpg', 'jpeg', 'webp'].includes(file.format)) {
+            if (typeof channelAny.sendPhoto === 'function') {
+              await channelAny.sendPhoto(message.chatId, buffer, caption, message.id);
+            } else {
+              await channelAny.sendDocument(message.chatId, buffer, file.filename, caption, message.id);
+            }
+          } else if (typeof channelAny.sendDocument === 'function') {
+            await channelAny.sendDocument(message.chatId, buffer, file.filename, caption, message.id);
+          }
+        } else if (message.channelType === 'discord') {
+          if (typeof channelAny.sendFile === 'function') {
+            await channelAny.sendFile(message.chatId, buffer, file.filename, caption);
+          }
+        } else {
+          // Generic fallback: try sendDocument, then sendFile
+          if (typeof channelAny.sendDocument === 'function') {
+            await channelAny.sendDocument(message.chatId, buffer, file.filename, caption);
+          } else if (typeof channelAny.sendFile === 'function') {
+            await channelAny.sendFile(message.chatId, buffer, file.filename, caption);
+          }
+        }
+
+        console.log(`[ChannelManager] Delivered file: ${file.filename} (${file.sizeKB} KB) to ${message.channelType}:${message.chatId}`);
+      } catch (err: any) {
+        console.error(`[ChannelManager] Failed to deliver file ${file.filename}: ${err.message}`);
+      }
     }
   }
 

@@ -357,6 +357,25 @@ export class DiscordChannel implements ChannelPlugin {
     }
   }
 
+  /**
+   * Send a file attachment to a Discord channel.
+   */
+  async sendFile(chatId: string, file: Buffer, filename: string, caption?: string): Promise<void> {
+    if (!this.client) throw new Error('Discord bot is not connected');
+
+    const channel = await this.client.channels.fetch(chatId);
+    if (!channel || !channel.isTextBased()) {
+      throw new Error(`Cannot send to channel ${chatId}: not a text channel`);
+    }
+
+    const textChannel = channel as TextChannel | DMChannel | ThreadChannel;
+    const attachment = new AttachmentBuilder(file, { name: filename });
+    await textChannel.send({
+      content: caption ?? undefined,
+      files: [attachment],
+    });
+  }
+
   getStatus(): ChannelInfo {
     return {
       type: this.type,
