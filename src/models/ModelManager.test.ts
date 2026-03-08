@@ -52,19 +52,19 @@ describe('ModelManager', () => {
   });
 
   describe('getConfig', () => {
-    it('should return configuration for gpt-3.5-turbo (legacy name)', () => {
+    it('should return configuration for gpt-3.5-turbo (legacy name → gpt-4.1-nano)', () => {
       const config = modelManager.getConfig('gpt-3.5-turbo');
       expect(config.provider).toBe('openai');
-      expect(config.model).toBe('gpt-3.5-turbo');
+      expect(config.model).toBe('gpt-4.1-nano');
       expect(config.apiKey).toBe('test-openai-key');
-      expect(config.maxTokens).toBe(2000);
+      expect(config.maxTokens).toBe(8192);
       expect(config.temperature).toBe(0.7);
     });
 
-    it('should return configuration for openai/gpt-4 (new ref format)', () => {
-      const config = modelManager.getConfig('openai/gpt-4');
+    it('should return configuration for openai/gpt-4o (new ref format)', () => {
+      const config = modelManager.getConfig('openai/gpt-4o');
       expect(config.provider).toBe('openai');
-      expect(config.model).toBe('gpt-4');
+      expect(config.model).toBe('gpt-4o');
       expect(config.apiKey).toBe('test-openai-key');
     });
 
@@ -225,8 +225,8 @@ describe('ModelManager', () => {
     });
 
     it('should switch to a valid configured model (ref format)', () => {
-      modelManager.switchModel('openai/gpt-4');
-      expect(modelManager.getCurrentModel()).toBe('openai/gpt-4');
+      modelManager.switchModel('openai/gpt-4o');
+      expect(modelManager.getCurrentModel()).toBe('openai/gpt-4o');
     });
 
     it('should throw ValidationError for unconfigured model', () => {
@@ -246,8 +246,8 @@ describe('ModelManager', () => {
     });
 
     it('should return current model after switching', () => {
-      modelManager.switchModel('gpt-4');
-      expect(modelManager.getCurrentModel()).toBe('gpt-4');
+      modelManager.switchModel('gpt-4o');
+      expect(modelManager.getCurrentModel()).toBe('gpt-4o');
     });
   });
 
@@ -270,9 +270,9 @@ describe('ModelManager', () => {
   describe('getSupportedModels', () => {
     it('should return all known model refs in provider/model format', () => {
       const supported = modelManager.getSupportedModels();
-      expect(supported).toContain('openai/gpt-3.5-turbo');
-      expect(supported).toContain('openai/gpt-4');
       expect(supported).toContain('openai/gpt-4o');
+      expect(supported).toContain('openai/gpt-5');
+      expect(supported).toContain('openai/gpt-4.1');
       expect(supported).toContain('anthropic/claude-sonnet-4-20250514');
       expect(supported).toContain('google/gemini-1.5-pro');
       expect(supported.length).toBeGreaterThan(6);
@@ -348,7 +348,7 @@ describe('ModelManager', () => {
     it('should resolve legacy model names', () => {
       const ref = modelManager.resolveModelRef('claude-3-sonnet');
       expect(ref.provider).toBe('anthropic');
-      expect(ref.modelId).toBe('claude-3-sonnet-20240229');
+      expect(ref.modelId).toBe('claude-sonnet-4-20250514');
     });
 
     it('should resolve provider/model format', () => {
@@ -429,21 +429,22 @@ describe('ModelManager', () => {
 
   describe('Fallback chain', () => {
     it('should build a default fallback chain from configured models', () => {
-      const candidates = modelManager.getFallbackCandidates('openai/gpt-3.5-turbo');
+      const candidates = modelManager.getFallbackCandidates('openai/gpt-4o');
       expect(candidates.length).toBeGreaterThan(0);
-      expect(candidates).not.toContain('openai/gpt-3.5-turbo');
+      expect(candidates).not.toContain('openai/gpt-4o');
     });
 
     it('should filter out unconfigured models from fallback chain', () => {
-      modelManager.setFallbackChain(['anthropic/claude-3-haiku-20240307', 'nonexistent/model', 'openai/gpt-4']);
-      const candidates = modelManager.getFallbackCandidates('openai/gpt-3.5-turbo');
+      modelManager.setFallbackChain(['anthropic/claude-3-haiku-20240307', 'nonexistent/model', 'openai/gpt-4o']);
+      const candidates = modelManager.getFallbackCandidates('openai/gpt-5');
       expect(candidates).not.toContain('nonexistent/model');
     });
   });
 
   describe('Context window', () => {
     it('should return correct context window for legacy model name', () => {
-      expect(modelManager.getContextWindowTokens('gpt-3.5-turbo')).toBe(16_385);
+      // gpt-3.5-turbo now maps to gpt-4.1-nano (1M context)
+      expect(modelManager.getContextWindowTokens('gpt-3.5-turbo')).toBe(1_000_000);
     });
 
     it('should return correct context window for ref format', () => {

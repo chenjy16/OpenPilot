@@ -85,40 +85,80 @@ const PROVIDER_REGISTRY: ProviderMeta[] = [
  * Models from providers with detected API keys are auto-configured.
  */
 const MODEL_REGISTRY: ModelMeta[] = [
-  // --- OpenAI ---
+  // --- OpenAI --- (verified March 2026)
+  // GPT-5.x family (400K context)
+  { provider: 'openai', modelId: 'gpt-5.2', name: 'GPT-5.2', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 400_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 1.75, output: 14, cacheRead: 0.875, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'gpt-5.1', name: 'GPT-5.1', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 400_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 1.25, output: 10, cacheRead: 0.625, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'gpt-5', name: 'GPT-5', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 400_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 1.25, output: 10, cacheRead: 0.625, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'gpt-5-mini', name: 'GPT-5 Mini', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 400_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.25, output: 2, cacheRead: 0.125, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'gpt-5-nano', name: 'GPT-5 Nano', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 400_000, defaultMaxTokens: 4096, defaultTemperature: 0.7, cost: { input: 0.05, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
+  // GPT-4.1 family (1M+ context)
+  { provider: 'openai', modelId: 'gpt-4.1', name: 'GPT-4.1', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 32768, defaultTemperature: 0.7, cost: { input: 2, output: 8, cacheRead: 0.5, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 0.4, output: 1.6, cacheRead: 0.1, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
+  // GPT-4o (legacy, still available)
   { provider: 'openai', modelId: 'gpt-4o', name: 'GPT-4o', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 128_000, defaultMaxTokens: 4096, defaultTemperature: 0.7, cost: { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 0 } },
   { provider: 'openai', modelId: 'gpt-4o-mini', name: 'GPT-4o Mini', api: 'openai-completions', reasoning: false, input: ['text', 'image'], contextWindow: 128_000, defaultMaxTokens: 4096, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.075, cacheWrite: 0 } },
-  { provider: 'openai', modelId: 'gpt-4', name: 'GPT-4', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 8_192, defaultMaxTokens: 2000, defaultTemperature: 0.7, cost: { input: 30, output: 60, cacheRead: 0, cacheWrite: 0 } },
-  { provider: 'openai', modelId: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 16_385, defaultMaxTokens: 2000, defaultTemperature: 0.7, cost: { input: 0.5, output: 1.5, cacheRead: 0, cacheWrite: 0 } },
+  // o-series (reasoning)
+  { provider: 'openai', modelId: 'o3', name: 'o3', api: 'openai-completions', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 100_000, defaultTemperature: 1, cost: { input: 2, output: 8, cacheRead: 1, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'o3-mini', name: 'o3 Mini', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 200_000, defaultMaxTokens: 100_000, defaultTemperature: 1, cost: { input: 0.5, output: 2, cacheRead: 0.25, cacheWrite: 0 } },
+  { provider: 'openai', modelId: 'o4-mini', name: 'o4 Mini', api: 'openai-completions', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 100_000, defaultTemperature: 1, cost: { input: 1.1, output: 4.4, cacheRead: 0.55, cacheWrite: 0 } },
   { provider: 'openai', modelId: 'o1', name: 'o1', api: 'openai-completions', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 100_000, defaultTemperature: 1, cost: { input: 15, output: 60, cacheRead: 7.5, cacheWrite: 0 } },
-  { provider: 'openai', modelId: 'o1-mini', name: 'o1 Mini', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 128_000, defaultMaxTokens: 65_536, defaultTemperature: 1, cost: { input: 3, output: 12, cacheRead: 1.5, cacheWrite: 0 } },
-  { provider: 'openai', modelId: 'o3-mini', name: 'o3 Mini', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 200_000, defaultMaxTokens: 100_000, defaultTemperature: 1, cost: { input: 1.1, output: 4.4, cacheRead: 0.55, cacheWrite: 0 } },
-  // --- Anthropic ---
+  { provider: 'openai', modelId: 'o1-mini', name: 'o1 Mini', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 128_000, defaultMaxTokens: 65_536, defaultTemperature: 1, cost: { input: 1.1, output: 4.4, cacheRead: 0.55, cacheWrite: 0 } },
+  // --- Anthropic --- (verified March 2026)
+  // Claude 4.6 (latest flagship)
+  { provider: 'anthropic', modelId: 'claude-opus-4-6', name: 'Claude Opus 4.6', api: 'anthropic-messages', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 16384, defaultTemperature: 0.5, cost: { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 } },
+  // Claude 4.5
+  { provider: 'anthropic', modelId: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5', api: 'anthropic-messages', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 16384, defaultTemperature: 0.5, cost: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 } },
+  { provider: 'anthropic', modelId: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5', api: 'anthropic-messages', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 16384, defaultTemperature: 0.5, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } },
+  { provider: 'anthropic', modelId: 'claude-haiku-4-5-20251001', name: 'Claude Haiku 4.5', api: 'anthropic-messages', reasoning: false, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 8192, defaultTemperature: 0.5, cost: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 } },
+  // Claude 4.1
+  { provider: 'anthropic', modelId: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', api: 'anthropic-messages', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 16384, defaultTemperature: 0.5, cost: { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 } },
+  // Claude 4
   { provider: 'anthropic', modelId: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4', api: 'anthropic-messages', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 8192, defaultTemperature: 0.5, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } },
   { provider: 'anthropic', modelId: 'claude-opus-4-20250514', name: 'Claude Opus 4', api: 'anthropic-messages', reasoning: true, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 8192, defaultTemperature: 0.5, cost: { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 } },
-  { provider: 'anthropic', modelId: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', api: 'anthropic-messages', reasoning: false, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 8192, defaultTemperature: 0.5, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } },
-  { provider: 'anthropic', modelId: 'claude-3-opus-20240229', name: 'Claude 3 Opus', api: 'anthropic-messages', reasoning: false, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 4096, defaultTemperature: 0.5, cost: { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 } },
-  { provider: 'anthropic', modelId: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', api: 'anthropic-messages', reasoning: false, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 4096, defaultTemperature: 0.5, cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } },
+  // Claude 3 (legacy, still active)
   { provider: 'anthropic', modelId: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', api: 'anthropic-messages', reasoning: false, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 4096, defaultTemperature: 0.5, cost: { input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.3 } },
-  // --- Google ---
+  // --- Google --- (verified March 2026)
+  // Gemini 3 (preview)
+  { provider: 'google', modelId: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview)', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 2.5, output: 15, cacheRead: 0.625, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-3-flash-preview', name: 'Gemini 3 Flash (Preview)', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.0375, cacheWrite: 0 } },
+  // Gemini 2.5
   { provider: 'google', modelId: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 1.25, output: 10, cacheRead: 0.315, cacheWrite: 0 } },
   { provider: 'google', modelId: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.0375, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
+  // Gemini 2.0
   { provider: 'google', modelId: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
+  // Gemini 1.5 (legacy)
   { provider: 'google', modelId: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 4000, defaultTemperature: 0.7, cost: { input: 1.25, output: 5, cacheRead: 0.315, cacheWrite: 0 } },
   { provider: 'google', modelId: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 4000, defaultTemperature: 0.7, cost: { input: 0.075, output: 0.3, cacheRead: 0.01875, cacheWrite: 0 } },
-  // --- DeepSeek ---
-  { provider: 'deepseek', modelId: 'deepseek-chat', name: 'DeepSeek V3', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 64_000, defaultMaxTokens: 4096, defaultTemperature: 0.7, cost: { input: 0.27, output: 1.1, cacheRead: 0.07, cacheWrite: 0 } },
-  { provider: 'deepseek', modelId: 'deepseek-reasoner', name: 'DeepSeek R1', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 64_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.55, output: 2.19, cacheRead: 0.14, cacheWrite: 0 } },
+  // --- DeepSeek --- (V3.1, verified March 2026)
+  { provider: 'deepseek', modelId: 'deepseek-chat', name: 'DeepSeek V3.1', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 128_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.27, output: 1.1, cacheRead: 0.07, cacheWrite: 0 } },
+  { provider: 'deepseek', modelId: 'deepseek-reasoner', name: 'DeepSeek R1 (V3.1 Think)', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 128_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.55, output: 2.19, cacheRead: 0.14, cacheWrite: 0 } },
 ];
 
 // Legacy model name → new ref mapping (backward compatibility)
 const LEGACY_MODEL_MAP: Record<string, string> = {
-  'gpt-3.5-turbo': 'openai/gpt-3.5-turbo',
-  'gpt-4': 'openai/gpt-4',
-  'claude-3-sonnet': 'anthropic/claude-3-sonnet-20240229',
-  'claude-3-opus': 'anthropic/claude-3-opus-20240229',
+  // Retired OpenAI models → best current equivalent
+  'gpt-3.5-turbo': 'openai/gpt-4.1-nano',
+  'gpt-4': 'openai/gpt-4o',
+  'gpt-4-turbo': 'openai/gpt-4o',
+  'gpt-4-turbo-preview': 'openai/gpt-4o',
+  // Retired Anthropic models → best current equivalent
+  'claude-3-sonnet': 'anthropic/claude-sonnet-4-20250514',
+  'claude-3-sonnet-20240229': 'anthropic/claude-sonnet-4-20250514',
+  'claude-3-opus': 'anthropic/claude-opus-4-20250514',
+  'claude-3-opus-20240229': 'anthropic/claude-opus-4-20250514',
+  'claude-3-5-sonnet': 'anthropic/claude-sonnet-4-5-20250929',
+  'claude-3-5-sonnet-20241022': 'anthropic/claude-sonnet-4-5-20250929',
+  'claude-3-5-sonnet-20240620': 'anthropic/claude-sonnet-4-5-20250929',
+  // Google shorthand aliases
+  'gemini-pro': 'google/gemini-1.5-pro',
   'gemini-1.5-pro': 'google/gemini-1.5-pro',
   'gemini-1.5-flash': 'google/gemini-1.5-flash',
+  // DeepSeek aliases
+  'deepseek-v3': 'deepseek/deepseek-chat',
+  'deepseek-r1': 'deepseek/deepseek-reasoner',
 };
 
 const COOLDOWN_DURATION_MS: Record<string, number> = {
