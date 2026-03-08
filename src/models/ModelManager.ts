@@ -45,7 +45,7 @@ export interface ModelMeta {
   name: string;
   api: ModelApi;
   reasoning: boolean;
-  input: Array<'text' | 'image'>;
+  input: Array<'text' | 'image' | 'audio'>;
   contextWindow: number;
   defaultMaxTokens: number;
   defaultTemperature: number;
@@ -121,17 +121,17 @@ const MODEL_REGISTRY: ModelMeta[] = [
   { provider: 'anthropic', modelId: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', api: 'anthropic-messages', reasoning: false, input: ['text', 'image'], contextWindow: 200_000, defaultMaxTokens: 4096, defaultTemperature: 0.5, cost: { input: 0.25, output: 1.25, cacheRead: 0.03, cacheWrite: 0.3 } },
   // --- Google --- (verified March 2026)
   // Gemini 3 (preview)
-  { provider: 'google', modelId: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview)', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 2.5, output: 15, cacheRead: 0.625, cacheWrite: 0 } },
-  { provider: 'google', modelId: 'gemini-3-flash-preview', name: 'Gemini 3 Flash (Preview)', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.0375, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-3-pro-preview', name: 'Gemini 3 Pro (Preview)', api: 'google-generative-ai', reasoning: true, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 16384, defaultTemperature: 0.7, cost: { input: 2.5, output: 15, cacheRead: 0.625, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-3-flash-preview', name: 'Gemini 3 Flash (Preview)', api: 'google-generative-ai', reasoning: true, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.0375, cacheWrite: 0 } },
   // Gemini 2.5
-  { provider: 'google', modelId: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 1.25, output: 10, cacheRead: 0.315, cacheWrite: 0 } },
-  { provider: 'google', modelId: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', api: 'google-generative-ai', reasoning: true, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.0375, cacheWrite: 0 } },
-  { provider: 'google', modelId: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', api: 'google-generative-ai', reasoning: true, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 1.25, output: 10, cacheRead: 0.315, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', api: 'google-generative-ai', reasoning: true, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.15, output: 0.6, cacheRead: 0.0375, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', api: 'google-generative-ai', reasoning: false, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
   // Gemini 2.0
-  { provider: 'google', modelId: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', api: 'google-generative-ai', reasoning: false, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.1, output: 0.4, cacheRead: 0.025, cacheWrite: 0 } },
   // Gemini 1.5 (legacy)
-  { provider: 'google', modelId: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 4000, defaultTemperature: 0.7, cost: { input: 1.25, output: 5, cacheRead: 0.315, cacheWrite: 0 } },
-  { provider: 'google', modelId: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', api: 'google-generative-ai', reasoning: false, input: ['text', 'image'], contextWindow: 1_000_000, defaultMaxTokens: 4000, defaultTemperature: 0.7, cost: { input: 0.075, output: 0.3, cacheRead: 0.01875, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', api: 'google-generative-ai', reasoning: false, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 4000, defaultTemperature: 0.7, cost: { input: 1.25, output: 5, cacheRead: 0.315, cacheWrite: 0 } },
+  { provider: 'google', modelId: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', api: 'google-generative-ai', reasoning: false, input: ['text', 'image', 'audio'], contextWindow: 1_000_000, defaultMaxTokens: 4000, defaultTemperature: 0.7, cost: { input: 0.075, output: 0.3, cacheRead: 0.01875, cacheWrite: 0 } },
   // --- DeepSeek --- (V3.1, verified March 2026)
   { provider: 'deepseek', modelId: 'deepseek-chat', name: 'DeepSeek V3.1', api: 'openai-completions', reasoning: false, input: ['text'], contextWindow: 128_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.27, output: 1.1, cacheRead: 0.07, cacheWrite: 0 } },
   { provider: 'deepseek', modelId: 'deepseek-reasoner', name: 'DeepSeek R1 (V3.1 Think)', api: 'openai-completions', reasoning: true, input: ['text'], contextWindow: 128_000, defaultMaxTokens: 8192, defaultTemperature: 0.7, cost: { input: 0.55, output: 2.19, cacheRead: 0.14, cacheWrite: 0 } },
@@ -493,6 +493,18 @@ export class ModelManager {
     const resolved = this.modelIndex.get(refStr);
     return resolved?.contextWindow ?? 128_000;
   }
+  /**
+   * Check if a model supports audio input (STT capability).
+   */
+  hasAudioInput(model: string): boolean {
+    const meta = this.modelIndex.get(model);
+    if (meta) return meta.input.includes('audio');
+    const ref = this.resolveModelRef(model);
+    const refStr = formatModelRef(ref);
+    const resolved = this.modelIndex.get(refStr);
+    return resolved?.input.includes('audio') ?? false;
+  }
+
 
   // -----------------------------------------------------------------------
   // Backward-compatible API

@@ -165,7 +165,7 @@ export interface ModelCatalogEntry {
   name: string;
   api: ModelApi;
   reasoning: boolean;
-  input: Array<'text' | 'image'>;
+  input: Array<'text' | 'image' | 'audio'>;
   contextWindow: number;
   maxTokens: number;
   cost: { input: number; output: number; cacheRead: number; cacheWrite: number };

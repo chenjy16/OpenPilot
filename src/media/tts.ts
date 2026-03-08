@@ -1,16 +1,16 @@
 /**
  * Text-to-Speech (TTS) Module
  *
- * OpenPilot equivalent: src/tts/
- * Provides text-to-speech synthesis for voice channels.
- *
  * Supported engines:
- *   - edge-tts (Microsoft Edge TTS, free)
- *   - openai (OpenAI TTS API)
- *
- * This is a foundation stub — full implementation requires
- * node-edge-tts or OpenAI API integration.
+ *   - edge-tts (Microsoft Edge TTS, free, via node-edge-tts)
+ *   - openai (OpenAI TTS API, paid)
+ *   - gemini (Google Gemini, via multimodal — future)
  */
+
+import { execFile } from 'child_process';
+import { readFile, unlink, mkdtemp } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 export interface TTSOptions {
   /** TTS engine to use */
@@ -42,25 +42,79 @@ export async function synthesize(text: string, options: TTSOptions = { engine: '
   return synthesizeEdge(text, options);
 }
 
+/**
+ * Edge TTS via edge-tts CLI (Python) or node-edge-tts package.
+ * Tries node-edge-tts first, falls back to Python edge-tts CLI.
+ */
 async function synthesizeEdge(text: string, options: TTSOptions): Promise<TTSResult> {
+  // Try Python edge-tts CLI first (more reliable)
   try {
-    const edgeTts = require('node-edge-tts');
-    const tts = new edgeTts.MsEdgeTTS();
-    await tts.setMetadata(options.voice || 'en-US-AriaNeural', edgeTts.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    const readable = tts.toStream(text);
+    return await synthesizeEdgeCLI(text, options);
+  } catch {
+    // Fall back to node-edge-tts package
+  }
 
-    const chunks: Buffer[] = [];
-    for await (const chunk of readable) {
-      chunks.push(Buffer.from(chunk));
+  try {
+    return await synthesizeEdgeNode(text, options);
+  } catch (err: any) {
+    throw new Error(
+      `Edge TTS failed. Install either:\n` +
+      `  - Python: pip install edge-tts\n` +
+      `  - Node: npm install node-edge-tts\n` +
+      `Original error: ${err.message}`
+    );
+  }
+}
+
+/**
+ * Edge TTS via Python CLI: edge-tts --voice "..." --text "..." --write-media out.mp3
+ */
+async function synthesizeEdgeCLI(text: string, options: TTSOptions): Promise<TTSResult> {
+  const tmpDir = await mkdtemp(join(tmpdir(), 'tts-'));
+  const outFile = join(tmpDir, 'output.mp3');
+  const voice = options.voice || 'zh-CN-XiaoxiaoNeural';
+
+  return new Promise<TTSResult>((resolve, reject) => {
+    const args = ['--voice', voice, '--text', text, '--write-media', outFile];
+    if (options.rate && options.rate !== 1) {
+      const pct = Math.round((options.rate - 1) * 100);
+      args.push('--rate', `${pct >= 0 ? '+' : ''}${pct}%`);
     }
 
-    return {
-      audio: Buffer.concat(chunks),
-      mimeType: 'audio/mpeg',
-    };
-  } catch {
-    throw new Error('TTS engine "edge" requires node-edge-tts package. Run: npm install node-edge-tts');
-  }
+    execFile('edge-tts', args, { timeout: 30_000 }, async (err) => {
+      try {
+        if (err) { reject(err); return; }
+        const audio = await readFile(outFile);
+        await unlink(outFile).catch(() => {});
+        resolve({ audio, mimeType: 'audio/mpeg' });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
+/**
+ * Edge TTS via node-edge-tts package.
+ */
+async function synthesizeEdgeNode(text: string, options: TTSOptions): Promise<TTSResult> {
+  const { EdgeTTS } = require('node-edge-tts');
+  const tts = new EdgeTTS();
+  const voice = options.voice || 'zh-CN-XiaoxiaoNeural';
+
+  const tmpDir = await mkdtemp(join(tmpdir(), 'tts-'));
+  const outFile = join(tmpDir, 'output.mp3');
+
+  await tts.ttsPromise(text, {
+    voice,
+    outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+    saveSubtitles: false,
+    filePath: outFile,
+  });
+
+  const audio = await readFile(outFile);
+  await unlink(outFile).catch(() => {});
+  return { audio, mimeType: 'audio/mpeg' };
 }
 
 async function synthesizeOpenAI(text: string, options: TTSOptions): Promise<TTSResult> {
@@ -82,14 +136,12 @@ async function synthesizeOpenAI(text: string, options: TTSOptions): Promise<TTSR
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI TTS failed: ${response.status} ${response.statusText}`);
+    const errText = await response.text().catch(() => '');
+    throw new Error(`OpenAI TTS failed: ${response.status} ${response.statusText} ${errText}`);
   }
 
   const buffer = Buffer.from(await response.arrayBuffer());
-  return {
-    audio: buffer,
-    mimeType: 'audio/mpeg',
-  };
+  return { audio: buffer, mimeType: 'audio/mpeg' };
 }
 
 /**
@@ -99,10 +151,10 @@ export function getAvailableVoices(engine: 'edge' | 'openai'): string[] {
   if (engine === 'openai') {
     return ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
   }
-  // Edge TTS has many voices — return common ones
   return [
+    'zh-CN-XiaoxiaoNeural', 'zh-CN-YunxiNeural', 'zh-CN-YunjianNeural',
     'en-US-AriaNeural', 'en-US-GuyNeural', 'en-US-JennyNeural',
-    'en-GB-SoniaNeural', 'zh-CN-XiaoxiaoNeural', 'zh-CN-YunxiNeural',
-    'ja-JP-NanamiNeural', 'de-DE-KatjaNeural', 'fr-FR-DeniseNeural',
+    'en-GB-SoniaNeural', 'ja-JP-NanamiNeural', 'de-DE-KatjaNeural',
+    'fr-FR-DeniseNeural', 'ko-KR-SunHiNeural',
   ];
 }

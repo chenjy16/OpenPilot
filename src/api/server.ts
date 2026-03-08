@@ -1949,6 +1949,59 @@ export class APIServer {
         res.status(400).json({ error: err.message });
       }
     });
+
+    // -----------------------------------------------------------------------
+    // Voice / TTS / STT routes
+    // -----------------------------------------------------------------------
+
+    this.app.get('/api/voice/config', (_req: Request, res: Response) => {
+      const ttsConfig = this.appConfig?.messages?.tts ?? {};
+      const audioConfig = this.appConfig?.tools?.media?.audio ?? {};
+      const defaultModel = this.appConfig?.agents?.defaults?.model?.primary;
+      const modelManager = this.aiRuntime.getModelManager();
+      const supportsAudio = defaultModel ? modelManager.hasAudioInput(defaultModel) : false;
+      res.json({
+        tts: {
+          auto: ttsConfig.auto ?? 'inbound',
+          provider: ttsConfig.provider ?? 'edge',
+          maxTextLength: ttsConfig.maxTextLength ?? 2000,
+        },
+        stt: {
+          enabled: supportsAudio,
+          defaultModel: defaultModel ?? null,
+          language: audioConfig.language ?? 'zh',
+        },
+        voices: {
+          edge: [
+            'zh-CN-XiaoxiaoNeural', 'zh-CN-YunxiNeural',
+            'en-US-AriaNeural', 'en-US-GuyNeural', 'en-US-JennyNeural',
+            'en-GB-SoniaNeural', 'ja-JP-NanamiNeural',
+          ],
+          openai: ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
+        },
+      });
+    });
+
+    this.app.post('/api/voice/tts', async (req: Request, res: Response) => {
+      try {
+        const { text, engine, voice } = req.body;
+        if (!text || typeof text !== 'string') {
+          res.status(400).json({ error: 'text is required' });
+          return;
+        }
+        const { synthesize: synth } = require('../media/tts');
+        const result = await synth(text, {
+          engine: engine ?? 'edge',
+          voice: voice ?? 'zh-CN-XiaoxiaoNeural',
+          format: 'mp3',
+        });
+        res.set('Content-Type', result.mimeType);
+        res.set('Content-Length', String(result.audio.length));
+        res.send(result.audio);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
   }
 
   // -----------------------------------------------------------------------

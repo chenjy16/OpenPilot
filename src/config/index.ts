@@ -135,7 +135,12 @@ export interface ToolsConfig {
   media?: {
     concurrency?: number;
     image?: { enabled?: boolean; maxBytes?: number; prompt?: string };
-    audio?: { enabled?: boolean; maxBytes?: number; language?: string; echoTranscript?: boolean };
+    audio?: {
+      enabled?: boolean;
+      maxBytes?: number;
+      language?: string;
+      echoTranscript?: boolean;
+    };
     video?: { enabled?: boolean; maxBytes?: number };
   };
   message?: {

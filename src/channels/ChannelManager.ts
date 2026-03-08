@@ -34,6 +34,7 @@ import {
 } from './PairingStore';
 import { InboundDebouncer, DebouncerConfig } from './InboundDebouncer';
 import { enqueueCommandInLane } from './CommandLane';
+import { VoiceService } from '../services/VoiceService';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,6 +62,8 @@ export interface ChannelManagerConfig {
   debouncer?: DebouncerConfig;
   /** DM session scope (default: per-channel-peer) */
   dmScope?: 'main' | 'per-peer' | 'per-channel-peer' | 'per-account-channel-peer';
+  /** Voice service for STT/TTS */
+  voiceService?: VoiceService;
 }
 
 interface AccountRuntime {
@@ -782,6 +785,37 @@ export class ChannelManager {
     const key = `${channelType}:${accountId}`;
     const runtime = this.accountRuntimes.get(key);
 
+    // ── STT: transcribe voice messages ──
+    const voiceService = this.config.voiceService;
+    const audioAttachment = message.attachments?.find(a => a.type === 'audio');
+    let isVoiceInbound = false;
+
+    if (audioAttachment?.url && voiceService) {
+      isVoiceInbound = true;
+      try {
+        console.log(`[ChannelManager] Transcribing voice message from ${message.senderName}...`);
+        const audioBuffer = await voiceService.downloadAudio(audioAttachment.url);
+        const sttResult = await voiceService.transcribe(audioBuffer);
+        if (sttResult.text) {
+          // Replace content with transcribed text, keep original as prefix
+          message.content = sttResult.text;
+          console.log(`[ChannelManager] STT: "${sttResult.text.slice(0, 80)}..." (${sttResult.durationSec ?? '?'}s)`);
+        }
+      } catch (err: any) {
+        console.error(`[ChannelManager] STT failed: ${err.message}`);
+        // Send error directly to user, do NOT pass [Voice] to AI
+        const channel = this.channels.get(channelType);
+        if (channel) {
+          await channel.sendMessage({
+            chatId: message.chatId,
+            text: err.message,
+            replyTo: message.id,
+          });
+        }
+        return; // Stop processing — don't send [Voice] to AI
+      }
+    }
+
     try {
       // Execute through CommandLane for concurrency control
       const response = await enqueueCommandInLane('main', async () => {
@@ -801,7 +835,31 @@ export class ChannelManager {
       // Send response back through the same channel
       const channel = this.channels.get(channelType);
       if (channel && response) {
-        // Chunked delivery based on outbound adapter limits
+        // ── TTS: synthesize voice reply if applicable ──
+        if (voiceService && voiceService.shouldAutoTTS(isVoiceInbound)) {
+          try {
+            const ttsResult = await voiceService.synthesize(response);
+            if (ttsResult) {
+              console.log(`[ChannelManager] TTS: synthesized ${ttsResult.audio.length} bytes`);
+              await channel.sendMessage({
+                chatId: message.chatId,
+                text: response,
+                replyTo: message.id,
+                attachments: [{
+                  type: 'audio',
+                  data: ttsResult.audio.toString('base64'),
+                  mimeType: ttsResult.mimeType,
+                  filename: 'voice.mp3',
+                }],
+              });
+              return; // Voice reply sent, skip text-only reply
+            }
+          } catch (err: any) {
+            console.error(`[ChannelManager] TTS failed, falling back to text: ${err.message}`);
+          }
+        }
+
+        // Chunked text delivery based on outbound adapter limits
         const outbound = channel.outbound;
         const limit = outbound?.textChunkLimit ?? 4096;
 

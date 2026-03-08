@@ -53,6 +53,7 @@ import {
 import { CronScheduler } from './cron/CronScheduler';
 import { PolymarketScanner } from './services/PolymarketScanner';
 import { NotificationService } from './services/NotificationService';
+import { VoiceService } from './services/VoiceService';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -328,6 +329,18 @@ async function main(): Promise<void> {
   //     Merge agent-level bindings into a flat list for the ChannelManager
   const allBindings = await buildMergedBindings(agentManager, appConfig.bindings as any);
 
+  // Initialize VoiceService for STT/TTS
+  const ttsConfig = appConfig.messages?.tts;
+  const defaultModel = appConfig.agents?.defaults?.model?.primary ?? 'none';
+  const supportsAudio = defaultModel !== 'none' && modelManager.hasAudioInput(defaultModel);
+  const voiceService = new VoiceService({
+    ttsAuto: ttsConfig?.auto ?? 'inbound',
+    ttsProvider: (ttsConfig?.provider === 'openai' ? 'openai' : 'edge') as 'edge' | 'openai',
+    sttLanguage: appConfig.tools?.media?.audio?.language ?? 'zh',
+    maxTtsLength: ttsConfig?.maxTextLength ?? 2000,
+  }, modelManager, appConfig);
+  console.log(`[${new Date().toISOString()}] VoiceService initialized (TTS: ${ttsConfig?.auto ?? 'inbound'}, STT: default model '${defaultModel}' ${supportsAudio ? '✓ supports audio' : '✗ no audio input'})`);
+
   const channelManager = new ChannelManager({
     onMessage: async (msg) => {
       // Route channel messages to Agent via binding resolution
@@ -366,6 +379,7 @@ async function main(): Promise<void> {
     defaultAgentId: 'main',
     appConfig,
     dmScope: appConfig.session?.dmScope ?? 'per-channel-peer',
+    voiceService,
   });
 
   // Register available channels

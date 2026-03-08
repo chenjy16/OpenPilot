@@ -171,6 +171,56 @@ export class TelegramChannel implements ChannelPlugin {
         await ctx.onMessage(message);
       });
 
+      // Handle voice messages
+      bot.on('message:voice', async (tgCtx: any) => {
+        const chatId = String(tgCtx.chat.id);
+        if (allowedChatIds.length && !allowedChatIds.includes(chatId)) return;
+
+        const voice = tgCtx.message.voice;
+        const file = await tgCtx.api.getFile(voice.file_id);
+        const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+
+        const message: ChannelMessage = {
+          id: String(tgCtx.message.message_id),
+          senderId: String(tgCtx.from?.id ?? 'unknown'),
+          senderName: tgCtx.from?.first_name ?? tgCtx.from?.username ?? 'Unknown',
+          channelType: 'telegram',
+          chatId,
+          content: tgCtx.message.caption ?? '[Voice]',
+          timestamp: new Date(tgCtx.message.date * 1000),
+          accountId: ctx.accountId,
+          chatType: chatId.startsWith('-') ? 'group' : 'direct',
+          attachments: [{ type: 'audio', url: fileUrl, mimeType: voice.mime_type ?? 'audio/ogg' }],
+        };
+        this.messageCount++;
+        await ctx.onMessage(message);
+      });
+
+      // Handle audio file messages
+      bot.on('message:audio', async (tgCtx: any) => {
+        const chatId = String(tgCtx.chat.id);
+        if (allowedChatIds.length && !allowedChatIds.includes(chatId)) return;
+
+        const audio = tgCtx.message.audio;
+        const file = await tgCtx.api.getFile(audio.file_id);
+        const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
+
+        const message: ChannelMessage = {
+          id: String(tgCtx.message.message_id),
+          senderId: String(tgCtx.from?.id ?? 'unknown'),
+          senderName: tgCtx.from?.first_name ?? tgCtx.from?.username ?? 'Unknown',
+          channelType: 'telegram',
+          chatId,
+          content: tgCtx.message.caption ?? `[Audio: ${audio.title ?? audio.file_name ?? 'untitled'}]`,
+          timestamp: new Date(tgCtx.message.date * 1000),
+          accountId: ctx.accountId,
+          chatType: chatId.startsWith('-') ? 'group' : 'direct',
+          attachments: [{ type: 'audio', url: fileUrl, mimeType: audio.mime_type ?? 'audio/mpeg' }],
+        };
+        this.messageCount++;
+        await ctx.onMessage(message);
+      });
+
       bot.catch((err: any) => {
         ctx.log.error(`Bot error: ${err.message}`);
         ctx.setStatus({ lastError: err.message });
@@ -293,6 +343,52 @@ export class TelegramChannel implements ChannelPlugin {
       await onMessage(message);
     });
 
+    // Handle voice messages
+    this.bot.on('message:voice', async (ctx: any) => {
+      const chatId = String(ctx.chat.id);
+      if (this.config.allowedChatIds?.length && !this.config.allowedChatIds.includes(chatId)) return;
+
+      const voice = ctx.message.voice;
+      const file = await ctx.api.getFile(voice.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${this.config.token}/${file.file_path}`;
+
+      const message: ChannelMessage = {
+        id: String(ctx.message.message_id),
+        senderId: String(ctx.from?.id ?? 'unknown'),
+        senderName: ctx.from?.first_name ?? ctx.from?.username ?? 'Unknown',
+        channelType: 'telegram',
+        chatId,
+        content: ctx.message.caption ?? '[Voice]',
+        timestamp: new Date(ctx.message.date * 1000),
+        attachments: [{ type: 'audio', url: fileUrl, mimeType: voice.mime_type ?? 'audio/ogg' }],
+      };
+      this.messageCount++;
+      await onMessage(message);
+    });
+
+    // Handle audio file messages
+    this.bot.on('message:audio', async (ctx: any) => {
+      const chatId = String(ctx.chat.id);
+      if (this.config.allowedChatIds?.length && !this.config.allowedChatIds.includes(chatId)) return;
+
+      const audio = ctx.message.audio;
+      const file = await ctx.api.getFile(audio.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${this.config.token}/${file.file_path}`;
+
+      const message: ChannelMessage = {
+        id: String(ctx.message.message_id),
+        senderId: String(ctx.from?.id ?? 'unknown'),
+        senderName: ctx.from?.first_name ?? ctx.from?.username ?? 'Unknown',
+        channelType: 'telegram',
+        chatId,
+        content: ctx.message.caption ?? `[Audio: ${audio.title ?? audio.file_name ?? 'untitled'}]`,
+        timestamp: new Date(ctx.message.date * 1000),
+        attachments: [{ type: 'audio', url: fileUrl, mimeType: audio.mime_type ?? 'audio/mpeg' }],
+      };
+      this.messageCount++;
+      await onMessage(message);
+    });
+
     // Error handling
     this.bot.catch((err: any) => {
       console.error(`[TelegramChannel] Bot error: ${err.message}`);
@@ -334,6 +430,19 @@ export class TelegramChannel implements ChannelPlugin {
       throw new Error('Telegram bot is not connected');
     }
 
+    // If message has audio attachment, send as voice note
+    const audioAttachment = message.attachments?.find(a => a.type === 'audio');
+    if (audioAttachment?.data) {
+      await this.sendVoice(message.chatId, Buffer.from(audioAttachment.data, 'base64'), message.replyTo);
+      // Also send text if present and non-trivial
+      if (message.text && message.text.length > 0 && message.text !== '[Voice]') {
+        await this.bot.api.sendMessage(message.chatId, message.text, {
+          reply_to_message_id: message.replyTo ? parseInt(message.replyTo, 10) : undefined,
+        });
+      }
+      return;
+    }
+
     const text = message.text;
 
     // Chunk long messages (Telegram limit: 4096 chars)
@@ -353,6 +462,27 @@ export class TelegramChannel implements ChannelPlugin {
         });
       }
     }
+  }
+
+  /**
+   * Send a voice note to a Telegram chat.
+   */
+  async sendVoice(chatId: string, audio: Buffer, replyTo?: string): Promise<void> {
+    if (!this.bot) throw new Error('Telegram bot is not connected');
+
+    let InputFile: any;
+    try {
+      const grammy = require('grammy');
+      InputFile = grammy.InputFile;
+    } catch {
+      // Fallback: send as raw buffer
+      InputFile = null;
+    }
+
+    const voice = InputFile ? new InputFile(audio, 'voice.ogg') : audio;
+    await this.bot.api.sendVoice(chatId, voice, {
+      reply_to_message_id: replyTo ? parseInt(replyTo, 10) : undefined,
+    });
   }
 
   getStatus(): ChannelInfo {

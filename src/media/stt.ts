@@ -1,65 +1,90 @@
 /**
- * Speech-to-Text (STT) Module
+ * Speech-to-Text (STT) Module — low-level utilities.
  *
- * OpenPilot equivalent: media pipeline audio transcription.
- * Provides audio transcription using OpenAI Whisper API.
+ * Primary STT is handled by VoiceService which uses the user's
+ * configured default model. This module provides standalone helpers
+ * for direct API calls when needed.
  */
 
 export interface STTOptions {
-  /** STT engine */
-  engine: 'openai';
-  /** Language hint (ISO 639-1) */
+  engine: 'openai' | 'gemini';
   language?: string;
-  /** Model to use */
   model?: string;
+  apiKey?: string;
+  baseUrl?: string;
 }
 
 export interface STTResult {
-  /** Transcribed text */
   text: string;
-  /** Detected language */
   language?: string;
-  /** Duration of audio in seconds */
   durationSec?: number;
 }
 
 /**
- * Transcribe audio to text.
+ * Transcribe audio to text using specified engine.
  */
-export async function transcribe(audio: Buffer, options: STTOptions = { engine: 'openai' }): Promise<STTResult> {
-  if (options.engine === 'openai') {
-    return transcribeOpenAI(audio, options);
+export async function transcribe(audio: Buffer, options: STTOptions): Promise<STTResult> {
+  if (options.engine === 'gemini') {
+    return transcribeGemini(audio, options);
   }
-  throw new Error(`Unsupported STT engine: ${options.engine}`);
+  return transcribeWhisper(audio, options);
 }
 
-async function transcribeOpenAI(audio: Buffer, options: STTOptions): Promise<STTResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY required for OpenAI STT');
+async function transcribeWhisper(audio: Buffer, options: STTOptions): Promise<STTResult> {
+  const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('API key required for Whisper STT');
 
-  const FormData = (globalThis as any).FormData ?? (await import('node:buffer')).File;
-
-  // Use native fetch with FormData
+  const baseUrl = options.baseUrl ?? 'https://api.openai.com';
   const formData = new FormData();
-  const blob = new Blob([audio], { type: 'audio/mpeg' });
-  formData.append('file', blob, 'audio.mp3');
+  const blob = new Blob([audio], { type: 'audio/ogg' });
+  formData.append('file', blob, 'audio.ogg');
   formData.append('model', options.model || 'whisper-1');
   if (options.language) formData.append('language', options.language);
 
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const response = await fetch(`${baseUrl}/v1/audio/transcriptions`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}` },
     body: formData,
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI STT failed: ${response.status} ${response.statusText}`);
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Whisper STT failed: ${response.status} ${errText.slice(0, 200)}`);
   }
 
   const result = await response.json() as any;
-  return {
-    text: result.text,
-    language: result.language,
-    durationSec: result.duration,
-  };
+  return { text: result.text, language: result.language, durationSec: result.duration };
+}
+
+async function transcribeGemini(audio: Buffer, options: STTOptions): Promise<STTResult> {
+  const apiKey = options.apiKey ?? process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) throw new Error('Google API key required for Gemini STT');
+
+  const model = options.model || 'gemini-2.0-flash';
+  const base64Audio = audio.toString('base64');
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: `Transcribe the following audio to text. Output ONLY the transcribed text, nothing else.${options.language ? ` The audio is in ${options.language}.` : ''}` },
+            { inlineData: { mimeType: 'audio/ogg', data: base64Audio } },
+          ],
+        }],
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Gemini STT failed: ${response.status} ${errText.slice(0, 200)}`);
+  }
+
+  const result = await response.json() as any;
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  return { text: text.trim() };
 }
