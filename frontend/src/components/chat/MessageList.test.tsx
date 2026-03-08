@@ -49,8 +49,8 @@ describe('MessageList', () => {
   it('renders an empty list when there are no messages', () => {
     render(<MessageList />);
     const list = screen.getByTestId('message-list');
-    // Only the bottom sentinel div should be present
-    expect(list.children.length).toBe(1);
+    // Empty state message + bottom sentinel div
+    expect(list.textContent).toContain('发送消息开始对话');
   });
 
   it('renders user and assistant messages', () => {
@@ -63,8 +63,10 @@ describe('MessageList', () => {
   it('renders ToolCallMessage when message has toolCalls', () => {
     useChatStore.setState({ messages: [messageWithToolCalls] });
     render(<MessageList />);
+    // Tool name visible in collapsed state
     expect(screen.getByText('search_files')).toBeDefined();
-    expect(screen.getByText('Found 3 files')).toBeDefined();
+    // Result badge visible in collapsed state
+    expect(screen.getByText('完成')).toBeDefined();
   });
 
   it('does not render ToolCallMessage when message has no toolCalls', () => {

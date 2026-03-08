@@ -716,13 +716,41 @@ const DEFAULT_CONFIG: AppConfig = {
  * then delegates to JSON.parse. Good enough for config files.
  */
 function parseJSON5(text: string): any {
-  // Remove single-line comments (but not inside strings)
-  let cleaned = text.replace(/\/\/.*$/gm, '');
-  // Remove multi-line comments
-  cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
+  // Strip comments while respecting string literals
+  let result = '';
+  let i = 0;
+  while (i < text.length) {
+    // String literal — copy verbatim until closing quote
+    if (text[i] === '"') {
+      let j = i + 1;
+      while (j < text.length) {
+        if (text[j] === '\\') { j += 2; continue; }
+        if (text[j] === '"') { j++; break; }
+        j++;
+      }
+      result += text.slice(i, j);
+      i = j;
+    }
+    // Single-line comment
+    else if (text[i] === '/' && text[i + 1] === '/') {
+      // Skip until end of line
+      while (i < text.length && text[i] !== '\n') i++;
+    }
+    // Multi-line comment
+    else if (text[i] === '/' && text[i + 1] === '*') {
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++;
+      i += 2; // skip */
+    }
+    // Normal character
+    else {
+      result += text[i];
+      i++;
+    }
+  }
   // Remove trailing commas before } or ]
-  cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
-  return JSON.parse(cleaned);
+  result = result.replace(/,\s*([\]}])/g, '$1');
+  return JSON.parse(result);
 }
 
 // ---------------------------------------------------------------------------

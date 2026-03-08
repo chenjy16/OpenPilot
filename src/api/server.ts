@@ -1546,6 +1546,25 @@ export class APIServer {
         }
         safe.apiKeys = masked;
       }
+      // Mask model provider apiKeys
+      if (safe.models?.providers) {
+        for (const prov of Object.values(safe.models.providers) as any[]) {
+          if (prov?.apiKey && typeof prov.apiKey === 'string') {
+            prov.apiKey = '••••' + prov.apiKey.slice(-4);
+          }
+        }
+      }
+      // Mask channel tokens
+      if (safe.channels) {
+        for (const [key, ch] of Object.entries(safe.channels) as [string, any][]) {
+          if (key === 'defaults' || !ch || typeof ch !== 'object') continue;
+          for (const sensitive of ['token', 'signingSecret', 'appToken']) {
+            if (ch[sensitive] && typeof ch[sensitive] === 'string') {
+              ch[sensitive] = '••••' + ch[sensitive].slice(-4);
+            }
+          }
+        }
+      }
       res.status(200).json(safe);
     });
 
@@ -1598,6 +1617,23 @@ export class APIServer {
             masked[k] = v ? '••••' + v.slice(-4) : '';
           }
           safeCopy.apiKeys = masked;
+        }
+        if (safeCopy.models?.providers) {
+          for (const prov of Object.values(safeCopy.models.providers) as any[]) {
+            if (prov?.apiKey && typeof prov.apiKey === 'string') {
+              prov.apiKey = '••••' + prov.apiKey.slice(-4);
+            }
+          }
+        }
+        if (safeCopy.channels) {
+          for (const [key, ch] of Object.entries(safeCopy.channels) as [string, any][]) {
+            if (key === 'defaults' || !ch || typeof ch !== 'object') continue;
+            for (const sensitive of ['token', 'signingSecret', 'appToken']) {
+              if (ch[sensitive] && typeof ch[sensitive] === 'string') {
+                ch[sensitive] = '••••' + ch[sensitive].slice(-4);
+              }
+            }
+          }
         }
         res.status(200).json({ ok: true, config: safeCopy, savedTo: savedPath, needsRestart: !!(incoming.gateway?.port || incoming.gateway?.host) });
       } catch (err: any) {
