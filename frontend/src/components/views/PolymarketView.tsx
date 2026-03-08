@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { get, post } from '../../services/apiClient';
+import { get, post, put } from '../../services/apiClient';
 
 interface Market {
   id: string;
@@ -29,7 +29,7 @@ interface Signal {
   created_at: number;
 }
 
-type Tab = 'markets' | 'signals';
+type Tab = 'markets' | 'signals' | 'cron';
 
 const PolymarketView: React.FC = () => {
   const [tab, setTab] = useState<Tab>('markets');
@@ -38,6 +38,8 @@ const PolymarketView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [lastScan, setLastScan] = useState<string | null>(null);
 
   const fetchMarkets = useCallback(async () => {
     try {
@@ -82,6 +84,25 @@ const PolymarketView: React.FC = () => {
 
   const opportunities = signals.filter(s => Math.abs(s.edge) >= 0.05);
 
+  const handleFullScan = async () => {
+    setScanning(true);
+    setError(null);
+    try {
+      const result = await post<{ markets: any[]; signals: any[]; opportunities: any[]; errors: string[]; durationMs: number }>('/polymarket/scan', {});
+      setLastScan(`${result.signals.length} 信号, ${result.opportunities.length} 机会 (${(result.durationMs / 1000).toFixed(0)}s)`);
+      if (result.errors.length > 0) {
+        setError(`扫描完成，但有 ${result.errors.length} 个错误`);
+      }
+      // Refresh data
+      await fetchMarkets();
+      await fetchSignals();
+    } catch (err) {
+      setError(`扫描失败: ${(err as Error).message}`);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
@@ -92,8 +113,18 @@ const PolymarketView: React.FC = () => {
           <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
             AI 预测市场分析
           </span>
+          {lastScan && (
+            <span className="text-xs text-gray-400">上次扫描: {lastScan}</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleFullScan}
+            disabled={scanning}
+            className="rounded-md bg-purple-500 px-3 py-1.5 text-xs text-white hover:bg-purple-600 disabled:opacity-50"
+          >
+            {scanning ? '⏳ 扫描中...' : '🔍 全量扫描'}
+          </button>
           <button
             onClick={() => { fetchMarkets(); fetchSignals(); }}
             className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200"
@@ -121,7 +152,7 @@ const PolymarketView: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 px-6">
-        {([['markets', '📡 热门市场'], ['signals', '📊 AI 信号']] as [Tab, string][]).map(([id, label]) => (
+        {([['markets', '📡 热门市场'], ['signals', '📊 AI 信号'], ['cron', '⏰ 定时任务']] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -152,6 +183,10 @@ const PolymarketView: React.FC = () => {
 
         {tab === 'signals' && (
           <SignalsPanel signals={signals} />
+        )}
+
+        {tab === 'cron' && (
+          <CronPanel />
         )}
       </div>
     </div>
@@ -320,6 +355,116 @@ const SignalsPanel: React.FC<{ signals: Signal[] }> = ({ signals }) => {
           </div>
         );
       })}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Cron Panel
+// ---------------------------------------------------------------------------
+interface CronJob {
+  id: string;
+  name: string;
+  schedule: string;
+  handler: string;
+  enabled: boolean;
+  lastRunAt?: number;
+  lastStatus?: string;
+  lastError?: string;
+  createdAt: number;
+}
+
+const CronPanel: React.FC = () => {
+  const [jobs, setJobs] = useState<CronJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState<string | null>(null);
+
+  const fetchJobs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await get<CronJob[]>('/cron/scheduler/jobs');
+      setJobs(data);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+
+  const handleTrigger = async (jobId: string) => {
+    setTriggering(jobId);
+    try {
+      await post(`/cron/scheduler/jobs/${jobId}/trigger`, {});
+      await fetchJobs();
+    } catch { /* ignore */ }
+    finally { setTriggering(null); }
+  };
+
+  const handleToggle = async (job: CronJob) => {
+    try {
+      await put(`/cron/scheduler/jobs/${job.id}`, { enabled: !job.enabled });
+      await fetchJobs();
+    } catch { /* ignore */ }
+  };
+
+  if (loading) {
+    return <div className="flex h-32 items-center justify-center text-sm text-gray-400">加载定时任务...</div>;
+  }
+
+  if (jobs.length === 0) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
+        <div className="mb-3 text-4xl">⏰</div>
+        <p className="text-sm text-gray-500">暂无定时任务</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {jobs.map(job => (
+        <div key={job.id} className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-gray-800">{job.name}</h3>
+              <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
+                <span>📅 {job.schedule}</span>
+                <span>🔧 {job.handler}</span>
+                <span className={`rounded px-1.5 py-0.5 ${job.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {job.enabled ? '已启用' : '已禁用'}
+                </span>
+              </div>
+              {job.lastRunAt && (
+                <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+                  <span>上次运行: {new Date(job.lastRunAt * 1000).toLocaleString()}</span>
+                  <span className={`rounded px-1.5 py-0.5 ${
+                    job.lastStatus === 'success' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
+                  }`}>
+                    {job.lastStatus}
+                  </span>
+                </div>
+              )}
+              {job.lastError && (
+                <div className="mt-1 text-xs text-red-500">{job.lastError}</div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleToggle(job)}
+                className="rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-600 hover:bg-gray-200"
+              >
+                {job.enabled ? '禁用' : '启用'}
+              </button>
+              <button
+                onClick={() => handleTrigger(job.id)}
+                disabled={triggering === job.id}
+                className="rounded-md bg-purple-500 px-3 py-1 text-xs text-white hover:bg-purple-600 disabled:opacity-50"
+              >
+                {triggering === job.id ? '运行中...' : '▶ 立即运行'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

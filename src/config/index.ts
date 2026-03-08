@@ -526,10 +526,15 @@ export interface PolymarketConfig {
   minVolume?: number;
   /** Minimum edge (AI prob - market prob) to flag as signal */
   signalThreshold?: number;
+  /** Override model for AI analysis */
+  model?: string;
   /** Telegram notification settings */
   notify?: {
     enabled?: boolean;
+    telegram?: { chatId: string };
+    discord?: { channelId: string };
     minEdge?: number;
+    dedupHours?: number;
   };
 }
 

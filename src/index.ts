@@ -50,6 +50,9 @@ import {
   completeSubagentRun,
   setSubagentLimits,
 } from './agents/SubagentRegistry';
+import { CronScheduler } from './cron/CronScheduler';
+import { PolymarketScanner } from './services/PolymarketScanner';
+import { NotificationService } from './services/NotificationService';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -408,9 +411,75 @@ async function main(): Promise<void> {
   });
   console.log(`[${new Date().toISOString()}] Plugin system initialized`);
 
+  // 13. Initialize PolyOracle services (Scanner + Notifications + Cron)
+  const polyConfig = appConfig.polymarket;
+  const notificationService = new NotificationService(db, channelManager, polyConfig?.notify);
+  const polymarketScanner = new PolymarketScanner(db, aiRuntime, {
+    gammaApiUrl: polyConfig?.gammaApiUrl,
+    scanLimit: polyConfig?.scanLimit,
+    minVolume: polyConfig?.minVolume,
+    signalThreshold: polyConfig?.signalThreshold,
+    model: polyConfig?.model,
+  });
+
+  const cronScheduler = new CronScheduler(db, {
+    maxConcurrent: appConfig.cron?.maxConcurrentRuns ?? 2,
+  });
+
+  // Register the polymarket-scan handler
+  cronScheduler.registerHandler('polymarket-scan', async (_job) => {
+    const result = await polymarketScanner.runFullScan();
+
+    // Send notifications for +EV opportunities
+    if (result.opportunities.length > 0) {
+      await notificationService.notifySignals(result.opportunities);
+    }
+
+    // Send scan summary if there are notable results
+    await notificationService.sendScanSummary({
+      marketsScanned: result.markets.length,
+      signalsGenerated: result.signals.length,
+      opportunities: result.opportunities.length,
+      errors: result.errors.length,
+      durationMs: result.durationMs,
+    });
+
+    // Send error alerts
+    if (result.errors.length > 0) {
+      await notificationService.sendSystemAlert(
+        `扫描出现 ${result.errors.length} 个错误:\n${result.errors.slice(0, 3).join('\n')}`,
+      );
+    }
+  });
+
+  // Seed default polymarket-scan job if none exists and polymarket is enabled
+  if (polyConfig?.enabled !== false) {
+    const existingJobs = cronScheduler.listJobs();
+    if (!existingJobs.find(j => j.handler === 'polymarket-scan')) {
+      cronScheduler.createJob({
+        id: 'polymarket-scan-default',
+        name: 'PolyOracle 市场扫描',
+        schedule: '0 */4 * * *',
+        handler: 'polymarket-scan',
+        enabled: true,
+      });
+    }
+  }
+
+  // Start the cron scheduler
+  cronScheduler.start();
+  console.log(`[${new Date().toISOString()}] CronScheduler started (${cronScheduler.listJobs().length} jobs)`);
+
   // 14. Create and start Gateway server (single-process deployment)
   //     Serves: WebSocket RPC + HTTP API + Control UI static assets
   const server = new APIServer(aiRuntime, sessionManager, auditLogger, channelManager, pluginManager, agentManager, appConfig, policyEngine);
+
+  // Inject PolyOracle services into API server
+  server.setPolyOracleServices({
+    scanner: polymarketScanner,
+    notificationService,
+    cronScheduler,
+  });
 
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';
@@ -430,6 +499,7 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string): void => {
     console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down gracefully...`);
+    cronScheduler.stop();
     server.stop();
     channelManager.disconnectAll().catch(() => {});
     pluginManager.deactivateAll().catch(() => {});

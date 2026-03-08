@@ -247,6 +247,12 @@ export class APIServer {
   private controlUiRoot: string | null = null;
   /** Policy engine for tool access control */
   private policyEngine?: PolicyEngine;
+  /** PolymarketScanner for manual scan triggers */
+  private polymarketScanner?: any;
+  /** NotificationService for sending alerts */
+  private notificationService?: any;
+  /** CronScheduler for job management */
+  private cronScheduler?: any;
 
   constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
@@ -1702,7 +1708,8 @@ export class APIServer {
         const gammaUrl = polyConfig?.gammaApiUrl ?? 'https://gamma-api.polymarket.com';
 
         const url = new URL('/markets', gammaUrl);
-        url.searchParams.set('limit', String(limit));
+        // Request more than needed to account for minVolume filtering
+        url.searchParams.set('limit', String(Math.min(limit * 3, 100)));
         url.searchParams.set('order', 'volume24hr');
         url.searchParams.set('ascending', 'false');
         url.searchParams.set('active', 'true');
@@ -1715,7 +1722,8 @@ export class APIServer {
           if (!resp.ok) throw new Error(`Gamma API ${resp.status}`);
           const data = await resp.json();
           const markets = (Array.isArray(data) ? data : [])
-            .filter((m: any) => (m.volume ?? m.volumeNum ?? 0) >= minVolume)
+            .filter((m: any) => Number(m.volumeNum ?? m.volume ?? 0) >= minVolume)
+            .slice(0, limit)
             .map((m: any) => {
               let yesPrice = 0, noPrice = 0;
               if (m.outcomePrices) {
@@ -1731,9 +1739,9 @@ export class APIServer {
                 yesPrice,
                 noPrice,
                 probability: yesPrice,
-                volume: m.volume ?? m.volumeNum ?? 0,
-                volume24hr: m.volume24hr ?? 0,
-                liquidity: m.liquidity ?? m.liquidityNum ?? 0,
+                volume: Number(m.volumeNum ?? m.volume ?? 0),
+                volume24hr: Number(m.volume24hr ?? 0),
+                liquidity: Number(m.liquidityNum ?? m.liquidity ?? 0),
                 endDate: m.endDate ?? m.endDateIso,
                 tags: m.tags ?? [],
                 active: m.active ?? !m.closed,
@@ -1773,9 +1781,9 @@ export class APIServer {
             slug: m.slug,
             yesPrice, noPrice,
             probability: yesPrice,
-            volume: m.volume ?? m.volumeNum ?? 0,
-            volume24hr: m.volume24hr ?? 0,
-            liquidity: m.liquidity ?? m.liquidityNum ?? 0,
+            volume: Number(m.volumeNum ?? m.volume ?? 0),
+            volume24hr: Number(m.volume24hr ?? 0),
+            liquidity: Number(m.liquidityNum ?? m.liquidity ?? 0),
             endDate: m.endDate ?? m.endDateIso,
             tags: m.tags ?? [],
             active: m.active ?? !m.closed,
@@ -1885,6 +1893,60 @@ export class APIServer {
         res.status(200).json(signal);
       } catch (err: any) {
         res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Manual full scan trigger
+    this.app.post('/api/polymarket/scan', async (_req: Request, res: Response) => {
+      if (!this.polymarketScanner) {
+        res.status(503).json({ error: 'PolymarketScanner not initialized' });
+        return;
+      }
+      try {
+        const result = await this.polymarketScanner.runFullScan();
+        // Send notifications for opportunities
+        if (this.notificationService && result.opportunities.length > 0) {
+          await this.notificationService.notifySignals(result.opportunities);
+        }
+        res.status(200).json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // ----- Cron DB-backed endpoints -----
+    this.app.get('/api/cron/scheduler/jobs', (_req: Request, res: Response) => {
+      if (!this.cronScheduler) {
+        res.status(200).json([]);
+        return;
+      }
+      res.status(200).json(this.cronScheduler.listJobs());
+    });
+
+    this.app.post('/api/cron/scheduler/jobs/:id/trigger', async (req: Request, res: Response) => {
+      if (!this.cronScheduler) {
+        res.status(503).json({ error: 'CronScheduler not initialized' });
+        return;
+      }
+      try {
+        await this.cronScheduler.triggerJob(req.params.id);
+        res.status(200).json({ ok: true, id: req.params.id });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    this.app.put('/api/cron/scheduler/jobs/:id', (req: Request, res: Response) => {
+      if (!this.cronScheduler) {
+        res.status(503).json({ error: 'CronScheduler not initialized' });
+        return;
+      }
+      try {
+        const updated = this.cronScheduler.updateJob(req.params.id, req.body);
+        if (!updated) { res.status(404).json({ error: 'Job not found' }); return; }
+        res.status(200).json(updated);
+      } catch (err: any) {
+        res.status(400).json({ error: err.message });
       }
     });
   }
@@ -2191,6 +2253,20 @@ export class APIServer {
       }
       res.status(500).json({ error: 'Internal server error' });
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // PolyOracle service injection
+  // -----------------------------------------------------------------------
+
+  setPolyOracleServices(services: {
+    scanner?: any;
+    notificationService?: any;
+    cronScheduler?: any;
+  }): void {
+    this.polymarketScanner = services.scanner;
+    this.notificationService = services.notificationService;
+    this.cronScheduler = services.cronScheduler;
   }
 
   // -----------------------------------------------------------------------

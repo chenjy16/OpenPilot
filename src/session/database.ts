@@ -72,13 +72,15 @@ export function initializeDatabase(dbPath: string): Database.Database {
       edge REAL,
       confidence TEXT,
       reasoning TEXT,
-      volume REAL,
-      liquidity REAL,
-      end_date TEXT,
-      tags TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      notified_at INTEGER
     )
   `);
+
+  // Migration: add notified_at if missing (existing DBs)
+  try {
+    db.exec(`ALTER TABLE market_signals ADD COLUMN notified_at INTEGER`);
+  } catch { /* column already exists */ }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_market_signals_created
@@ -88,6 +90,23 @@ export function initializeDatabase(dbPath: string): Database.Database {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_market_signals_edge
     ON market_signals(edge DESC)
+  `);
+
+  // Create cron_jobs table (persistent cron storage)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cron_jobs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      schedule TEXT NOT NULL,
+      handler TEXT NOT NULL,
+      config TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      last_run_at INTEGER,
+      last_status TEXT,
+      last_error TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
   `);
 
   return db;
