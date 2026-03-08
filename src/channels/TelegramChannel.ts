@@ -87,9 +87,13 @@ export class TelegramChannel implements ChannelPlugin {
     },
     resolveAccount: (cfg: any, accountId?: string): any => {
       const tg = cfg?.channels?.telegram ?? cfg?.telegram;
-      if (!tg) return undefined;
+      if (!tg) return { token: this.config.token, allowedChatIds: this.config.allowedChatIds, enabled: !!this.config.token };
       if (tg.token) return tg; // flat config
-      return tg[accountId ?? 'default'];
+      const account = tg[accountId ?? 'default'];
+      if (account && !account.token && this.config.token) {
+        return { ...account, token: this.config.token };
+      }
+      return account;
     },
     isEnabled: (account: any, _cfg?: any): boolean => {
       if (!account) return false;

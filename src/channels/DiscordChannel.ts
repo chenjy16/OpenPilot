@@ -157,9 +157,15 @@ export class DiscordChannel implements ChannelPlugin {
     },
     resolveAccount: (cfg: any, accountId?: string): any => {
       const dc = cfg?.channels?.discord ?? cfg?.discord;
-      if (!dc) return undefined;
+      // Fall back to constructor config (env-based token) when appConfig has no discord section
+      if (!dc) return { token: this.config.token, allowedGuildIds: this.config.allowedGuildIds, enabled: !!this.config.token };
       if (dc.token) return dc;
-      return dc[accountId ?? 'default'];
+      const account = dc[accountId ?? 'default'];
+      // If account exists but has no token, inject from constructor config
+      if (account && !account.token && this.config.token) {
+        return { ...account, token: this.config.token };
+      }
+      return account;
     },
     isEnabled: (account: any): boolean => {
       if (!account) return false;
