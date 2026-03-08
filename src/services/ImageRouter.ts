@@ -209,36 +209,35 @@ const PROVIDER_MAP: Record<string, (req: ImageGenerationRequest, cfg: ProviderCo
 };
 
 export class ImageRouter {
-  private defaultProvider: string;
-  private providers: Record<string, ProviderConfig>;
+  private configRef: AppConfig | null;
 
   constructor(config?: AppConfig) {
-    const imgCfg = (config as any)?.imageGeneration;
-    this.defaultProvider = imgCfg?.provider ?? '';
-    this.providers = imgCfg?.providers ?? {};
+    this.configRef = config ?? null;
   }
 
-  /** Update config at runtime (e.g. after config reload). */
+  /** Update config reference at runtime. */
   updateConfig(config: AppConfig): void {
-    const imgCfg = (config as any)?.imageGeneration;
-    this.defaultProvider = imgCfg?.provider ?? '';
-    this.providers = imgCfg?.providers ?? {};
+    this.configRef = config;
+  }
+
+  private get imgCfg() {
+    return (this.configRef as any)?.imageGeneration as { provider?: string; providers?: Record<string, ProviderConfig> } | undefined;
   }
 
   /** Check if image generation is configured. */
   isConfigured(): boolean {
-    const provider = this.defaultProvider;
+    const provider = this.imgCfg?.provider;
     if (!provider) return false;
-    const cfg = this.providers[provider];
+    const cfg = this.imgCfg?.providers?.[provider];
     if (!cfg) return false;
-    // local_sd only needs endpoint
     if (provider === 'local_sd') return Boolean(cfg.endpoint);
     return Boolean(cfg.apiKey);
   }
 
   /** Generate images. Fail-Fast if not configured. */
   async generate(req: ImageGenerationRequest): Promise<ImageGenerationResult> {
-    const providerName = req.provider ?? this.defaultProvider;
+    const providerName = req.provider ?? this.imgCfg?.provider ?? '';
+    const providers = this.imgCfg?.providers ?? {};
 
     if (!providerName) {
       throw new Error(
@@ -248,7 +247,7 @@ export class ImageRouter {
       );
     }
 
-    const cfg = this.providers[providerName];
+    const cfg = providers[providerName];
     if (!cfg) {
       throw new Error(
         `🖼️ 图片生成 Provider "${providerName}" 未配置。\n` +

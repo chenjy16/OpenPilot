@@ -523,6 +523,25 @@ export interface MetaConfig {
   lastTouchedAt?: string;
 }
 
+/** Document generation (PDF/PPT) configuration */
+export interface DocumentGenerationConfig {
+  outputDir?: string;
+  pdf?: {
+    enabled?: boolean;
+    renderer?: 'html' | 'puppeteer';
+    defaultPageSize?: string;
+    defaultFontFamily?: string;
+  };
+  ppt?: {
+    enabled?: boolean;
+    defaultTheme?: {
+      primaryColor?: string;
+      backgroundColor?: string;
+      fontFace?: string;
+    };
+  };
+}
+
 /** Image generation configuration */
 export interface ImageGenerationConfig {
   provider?: string;
@@ -623,6 +642,8 @@ export interface AppConfig {
   talk?: TalkConfig;
   /** Image generation */
   imageGeneration?: ImageGenerationConfig;
+  /** Document generation (PDF/PPT) */
+  documentGeneration?: DocumentGenerationConfig;
   /** Polymarket / PolyOracle */
   polymarket?: PolymarketConfig;
   /** UI appearance */

@@ -20,6 +20,8 @@ import { join } from 'path';
 import { Tool } from '../types';
 import { ToolExecutor } from './ToolExecutor';
 
+import type { AppConfig } from '../config/index';
+
 // ---------------------------------------------------------------------------
 // Pending files queue — ChannelManager reads this after tool execution
 // ---------------------------------------------------------------------------
@@ -45,13 +47,24 @@ export function getPendingFilesRef(): PendingFile[] {
   return pendingFiles;
 }
 
+// Config reference — injected from index.ts
+let _appConfig: AppConfig | null = null;
+
+/** Set the live appConfig reference for reading documentGeneration settings. */
+export function setDocumentConfig(config: AppConfig): void {
+  _appConfig = config;
+}
+
 /** Get the output directory for generated files. */
 async function getOutputDir(): Promise<string> {
-  const dir = join(homedir(), '.openpilot', 'generated');
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
+  const configured = _appConfig?.documentGeneration?.outputDir;
+  const resolved = configured
+    ? configured.replace(/^~/, homedir())
+    : join(homedir(), '.openpilot', 'generated');
+  if (!existsSync(resolved)) {
+    await mkdir(resolved, { recursive: true });
   }
-  return dir;
+  return resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +206,9 @@ export const pptGenerationTool: Tool = {
     pptx.author = author;
     pptx.layout = 'LAYOUT_WIDE';
 
-    const primaryColor = theme.primaryColor ?? '2563EB';
-    const bgColor = theme.backgroundColor ?? 'FFFFFF';
-    const fontFace = theme.fontFace ?? 'Microsoft YaHei';
+    const primaryColor = theme.primaryColor ?? _appConfig?.documentGeneration?.ppt?.defaultTheme?.primaryColor ?? '2563EB';
+    const bgColor = theme.backgroundColor ?? _appConfig?.documentGeneration?.ppt?.defaultTheme?.backgroundColor ?? 'FFFFFF';
+    const fontFace = theme.fontFace ?? _appConfig?.documentGeneration?.ppt?.defaultTheme?.fontFace ?? 'Microsoft YaHei';
 
     for (let i = 0; i < slides.length; i++) {
       const slideData = slides[i];
@@ -308,8 +321,8 @@ function markdownToHtml(md: string, style: Record<string, any>, title: string): 
   html = html.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
 
   const fontSize = style.fontSize ?? '14px';
-  const fontFamily = style.fontFamily ?? "'Microsoft YaHei', 'Noto Sans SC', sans-serif";
-  const pageSize = style.pageSize ?? 'A4';
+  const fontFamily = style.fontFamily ?? _appConfig?.documentGeneration?.pdf?.defaultFontFamily ?? "'Microsoft YaHei', 'Noto Sans SC', sans-serif";
+  const pageSize = style.pageSize ?? _appConfig?.documentGeneration?.pdf?.defaultPageSize ?? 'A4';
   const margin = style.margin ?? '2cm';
 
   return `<!DOCTYPE html>

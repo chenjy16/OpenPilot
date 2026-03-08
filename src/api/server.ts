@@ -167,6 +167,21 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
       provider: { type: 'select', label: '默认 Provider', options: ['qwen', 'stability', 'openai', 'local_sd'], description: '默认图片生成引擎' },
     },
   },
+  polymarket: {
+    icon: '📈', label: 'PolyOracle', description: 'Polymarket 预测市场扫描、信号阈值、通知配置',
+    fields: {
+      enabled: { type: 'boolean', label: '启用 PolyOracle' },
+      scanLimit: { type: 'number', label: '扫描市场数量', description: '每次扫描的最大市场数' },
+      minVolume: { type: 'number', label: '最小交易量', description: '过滤低交易量市场' },
+      signalThreshold: { type: 'number', label: '信号阈值', description: 'AI概率与市场概率的最小差值' },
+    },
+  },
+  documentGeneration: {
+    icon: '📄', label: '文档生成', description: 'PDF / PPT 生成配置：输出目录、渲染器、默认样式',
+    fields: {
+      outputDir: { type: 'string', label: '输出目录', description: '生成文件保存路径' },
+    },
+  },
   ui: {
     icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称',
   },
@@ -387,6 +402,12 @@ export class APIServer {
     // 6. Gateway port/host changes require restart — warn user
     if (incoming.gateway?.port || incoming.gateway?.host) {
       console.log('[Config] Gateway port/host changed — restart required to take effect');
+    }
+
+    // 7. ImageGeneration config — update ImageRouter at runtime
+    if (incoming.imageGeneration) {
+      // ImageRouter reads from appConfig directly, so the merged value is already effective
+      console.log(`[Config] Image generation config updated (provider: ${this.appConfig.imageGeneration?.provider ?? 'none'})`);
     }
   }
 
@@ -1574,6 +1595,46 @@ export class APIServer {
             if (ch[sensitive] && typeof ch[sensitive] === 'string') {
               ch[sensitive] = '••••' + ch[sensitive].slice(-4);
             }
+          }
+        }
+      }
+      // Ensure imageGeneration has full provider templates for UI editing
+      if (!safe.imageGeneration) {
+        safe.imageGeneration = { provider: '', providers: {} };
+      }
+      const imgProviders = safe.imageGeneration.providers ?? {};
+      if (!imgProviders.qwen) imgProviders.qwen = { model: 'wanx-v1', apiKey: '', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1' };
+      if (!imgProviders.openai) imgProviders.openai = { model: 'dall-e-3', apiKey: '', baseUrl: 'https://api.openai.com/v1' };
+      if (!imgProviders.stability) imgProviders.stability = { model: 'stable-diffusion-xl-1024-v1-0', apiKey: '', baseUrl: 'https://api.stability.ai' };
+      if (!imgProviders.local_sd) imgProviders.local_sd = { endpoint: 'http://127.0.0.1:7860' };
+      safe.imageGeneration.providers = imgProviders;
+
+      // Ensure documentGeneration has default structure for UI editing
+      if (!safe.documentGeneration) {
+        safe.documentGeneration = {
+          outputDir: '~/.openpilot/generated',
+          pdf: {
+            enabled: true,
+            renderer: 'html',
+            defaultPageSize: 'A4',
+            defaultFontFamily: 'Microsoft YaHei',
+          },
+          ppt: {
+            enabled: true,
+            defaultTheme: {
+              primaryColor: '2563EB',
+              backgroundColor: 'FFFFFF',
+              fontFace: 'Microsoft YaHei',
+            },
+          },
+        };
+      }
+
+      // Mask imageGeneration provider apiKeys
+      if (safe.imageGeneration?.providers) {
+        for (const prov of Object.values(safe.imageGeneration.providers) as any[]) {
+          if (prov?.apiKey && typeof prov.apiKey === 'string') {
+            prov.apiKey = '••••' + prov.apiKey.slice(-4);
           }
         }
       }

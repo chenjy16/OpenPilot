@@ -33,7 +33,7 @@ import { registerSubAgentTools, SubAgentContext } from './tools/subAgentTools';
 import { registerScreenTools } from './tools/screenTools';
 import { registerPolymarketTools } from './tools/polymarketTools';
 import { registerImageTools, setImageRouter, setImagePendingFiles } from './tools/imageTools';
-import { registerDocumentTools, getPendingFilesRef } from './tools/documentTools';
+import { registerDocumentTools, getPendingFilesRef, setDocumentConfig } from './tools/documentTools';
 import { ImageRouter } from './services/ImageRouter';
 import { closeBrowser } from './tools/browserTools';
 import { createSandbox } from './runtime/sandbox';
@@ -254,6 +254,7 @@ async function main(): Promise<void> {
   const imageRouter = new ImageRouter(appConfig);
   setImageRouter(imageRouter);
   setImagePendingFiles(getPendingFilesRef());
+  setDocumentConfig(appConfig);
   registerImageTools(toolExecutor);
   registerDocumentTools(toolExecutor);
 
