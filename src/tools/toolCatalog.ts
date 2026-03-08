@@ -72,6 +72,9 @@ const CATALOG: ToolCatalogEntry[] = [
   // Media
   { id: 'image', label: 'image', section: 'Media', description: '图像理解', emoji: '🖼️', verb: 'Analyzing image', profiles: ['coding'], openclawGroup: true },
   { id: 'tts', label: 'tts', section: 'Media', description: '文本转语音', emoji: '🔊', verb: 'Generating speech', profiles: [], openclawGroup: true },
+  // Screen
+  { id: 'screen_capture', label: 'screen_capture', section: 'Screen', description: '系统截图', emoji: '📸', verb: 'Capturing screen', profiles: ['coding', 'full'] },
+  { id: 'screen_record', label: 'screen_record', section: 'Screen', description: '屏幕录制', emoji: '🎬', verb: 'Recording screen', profiles: ['coding', 'full'] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -120,6 +123,7 @@ const SECTION_TO_GROUP: Record<string, string> = {
   Nodes: 'nodes',
   Agents: 'agents',
   Media: 'media',
+  Screen: 'screen',
 };
 
 /** Expand tool group references (e.g. "group:fs" → ["read","write","edit","apply_patch"]) */
@@ -177,6 +181,8 @@ const CATALOG_TO_EXECUTOR: Record<string, string> = {
   browser: 'browserNavigate',
   subagents: 'spawnSubAgent',
   sessions_spawn: 'spawnSubAgent',
+  screen_capture: 'screenCapture',
+  screen_record: 'screenRecord',
 };
 
 /** Resolve a catalog ID to the actual ToolExecutor tool name */
