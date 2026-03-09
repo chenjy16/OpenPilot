@@ -1,127 +1,137 @@
-# OpenPilot — AI 个人电脑助理 & 智能体运行平台
+# OpenPilot — AI Personal Computer Assistant & Agent Runtime Platform
 
-OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持多模型、多频道、多智能体协同工作。提供完整的 HTTP/WebSocket API 网关和 Web 控制面板。可作为个人电脑助理，覆盖日常生活和工作中的多种事务。
-
----
-
-## 🎯 能做什么：生活与工作事务清单
-
-### 📁 文件与文档处理
-- [x] **读写本地文件** — 读取、创建、编辑电脑上的任意文本文件（代码、配置、笔记等）
-- [x] **代码补丁** — 对代码文件进行精确的 Patch 修改，支持 OpenAI 格式补丁
-- [x] **批量文件操作** — 通过 Shell 工具批量重命名、移动、整理文件
-
-### 💻 Shell 命令与系统操作
-- [x] **执行终端命令** — 在电脑上运行任意 Shell 命令（安装软件、编译项目、管理进程等）
-- [x] **后台进程管理** — 启动、监控、停止后台服务
-- [x] **系统信息查询** — 查看磁盘空间、内存使用、网络状态等
-
-### 🌐 网络与信息获取
-- [x] **HTTP 请求** — 调用任意 API、获取网页内容、下载数据
-- [x] **网页浏览** — 自动化浏览器操作（打开网页、截图、点击、执行 JS）
-- [x] **信息搜索** — 通过网络工具搜索和获取实时信息
-
-### 🖥️ 屏幕与截图
-- [x] **桌面截图** — 一键截取当前屏幕画面（macOS 原生 screencapture）
-- [x] **屏幕录制** — 录制屏幕视频片段（macOS）
-
-### 🧠 记忆与知识管理
-- [x] **长期记忆** — 通过 USER.md 持久化存储个人偏好、常用信息、工作习惯
-- [x] **会话搜索** — 全文检索历史对话记录（SQLite FTS5），快速找到之前讨论过的内容
-- [x] **会话管理** — 创建、切换、压缩、删除对话会话，保持上下文整洁
-
-### 💬 多渠道消息通信
-- [x] **Telegram 机器人** — 通过 Telegram 随时随地与 AI 助理对话（支持私聊和群组）
-- [x] **Discord 机器人** — 在 Discord 服务器中使用 AI 助理（支持 DM、频道、线程）
-- [x] **Web 聊天界面** — 浏览器内置聊天面板，支持流式输出和工具调用展示
-- [x] **跨渠道会话隔离** — 不同渠道的对话互不干扰，隐私安全
-
-### 🤖 多智能体协同
-- [x] **多智能体管理** — 创建不同角色的 AI 智能体（编程助手、写作助手、分析师等）
-- [x] **智能体路由** — 根据渠道、用户、群组自动分配对应的智能体
-- [x] **子智能体** — 主智能体可以生成子智能体处理复杂任务（深度限制、并发控制）
-- [x] **智能体身份** — 每个智能体有独立的名称、头像、系统提示词
-
-### 🔮 PolyOracle — AI 预测市场分析
-- [x] **实时市场数据** — 接入 Polymarket Gamma API，获取热门预测市场行情
-- [x] **AI 概率分析** — AI 独立评估事件概率，与市场价格对比发现 +EV 机会
-- [x] **信号记录** — 所有分析结果持久化存储到数据库，可追溯历史判断
-- [x] **定时自动扫描** — Cron 定时任务每 4 小时自动扫描市场（可配置）
-- [x] **推送通知** — +EV 机会自动推送到 Telegram/Discord（24h 去重）
-- [x] **可视化仪表盘** — 市场行情、AI 信号、Cron 状态、通知设置一站式管理
-
-### ⏰ 定时任务调度
-- [x] **Cron 调度器** — 基于 node-cron 的持久化定时任务系统
-- [x] **数据库存储** — 任务定义存储在 SQLite，支持 UI 管理
-- [x] **手动触发** — 支持通过 API 或 UI 手动触发任务执行
-- [x] **并发控制** — 防止同一任务重复执行
-
-### 🔧 系统配置与管理
-- [x] **Web 控制面板** — 完整的管理界面，涵盖聊天、会话、模型、频道、智能体、技能、配置、Cron、用量、审计等
-- [x] **动态配置** — 通过 UI 或 API 实时修改系统配置，无需手动编辑文件
-- [x] **多模型切换** — 支持 11+ AI 供应商、30+ 模型，运行时自由切换
-- [x] **API Key 轮换** — 同一供应商多 Key 自动切换 + 冷却机制
-- [x] **失败转移** — 主模型失败自动切换备选模型，保证服务可用
-- [x] **审计日志** — 所有工具调用记录可追溯
-
-### 🖼️ 图片生成
-- [x] **多引擎支持** — 支持 Qwen（通义万相）、Stability AI、OpenAI DALL·E、本地 Stable Diffusion
-- [x] **自然语言生图** — 描述想要的画面，AI 自动生成图片
-- [x] **自动发送** — 生成的图片通过 PendingFiles 机制自动发送到 Telegram/Discord
-
-### 📄 文档生成
-- [x] **PDF 生成** — Markdown 内容自动转换为 PDF（支持中文、代码高亮、表格）
-- [x] **PPT 生成** — JSON 幻灯片数据自动生成 PowerPoint 文件（支持主题配置）
-- [x] **自动发送** — 生成的文档自动发送给用户
-
-### 🎤 语音交互 (STT/TTS)
-- [x] **语音转文字 (STT)** — 支持 Google Gemini、OpenAI Whisper、DashScope Qwen Omni 等多引擎
-- [x] **文字转语音 (TTS)** — 支持 Edge TTS（免费）和 OpenAI TTS
-- [x] **语音消息闭环** — 语音消息自动转文字 → AI 处理 → 语音回复（inbound 模式）
-- [x] **文字消息不混淆** — 文字指令只回文字，语音指令才回语音
-
-### 🎬 视频编辑 (Phase 1 MVP)
-- [x] **视频探测** — 通过 ffprobe 提取视频元数据（时长、分辨率、编码、帧率、比特率）
-- [x] **视频裁剪** — 指定时间范围裁剪视频片段
-- [x] **视频变速** — 支持 0.25x ~ 4.0x 变速（视频 + 音频同步）
-- [x] **Timeline JSON** — LLM 输出结构化编辑指令，工具做确定性 FFmpeg 渲染
-- [x] **Fail-Fast** — FFmpeg 不可用时立即返回清晰错误
-- [x] **自动发送** — 渲染后的视频通过 PendingFiles 自动发送给用户
-
-### 🧩 技能扩展
-- [x] **社区技能市场** — 搜索和安装社区贡献的技能（ClawHub + SkillsMP 双源）
-- [x] **一键安装** — 从社区市场一键安装新技能
-- [x] **技能管理** — 启用/禁用已安装技能
-
-### 🔒 安全与审批
-- [x] **策略引擎** — 工具级别的允许/拒绝/需审批策略
-- [x] **执行审批** — 生产模式下危险操作（Shell、文件写入）需人工审批
-- [x] **DM 安全策略** — 支持 open/allowlist/pairing/disabled 四种模式
-- [x] **API Key 掩码** — 配置中的敏感信息自动脱敏
+OpenPilot is a single-process, all-in-one AI agent runtime platform supporting multi-model, multi-channel, and multi-agent collaboration. It provides a complete HTTP/WebSocket API gateway and a Web control panel. Designed as a personal computer assistant, it covers a wide range of daily life and work tasks.
 
 ---
 
-## 📋 典型使用场景
+## 🎯 What It Can Do: Life & Work Task Checklist
 
-| 场景 | 如何实现 |
-|------|----------|
-| 每天早上获取预测市场机会 | Cron 定时扫描 → AI 分析 → Telegram 推送 |
-| 在手机上远程操作电脑 | Telegram/Discord 发消息 → AI 执行 Shell 命令 |
-| 整理项目文件 | 对话中描述需求 → AI 读写文件 + 执行命令 |
-| 监控网站变化 | 定时任务 + 浏览器截图 + 通知推送 |
-| 代码审查与修改 | 聊天中讨论 → AI 读取代码 → 生成补丁 |
-| 查询实时信息 | AI 调用 HTTP 工具获取 API 数据 |
-| 管理多个 AI 角色 | 创建不同智能体，绑定到不同渠道/群组 |
-| 记住个人偏好 | AI 自动写入 USER.md，下次对话自动加载 |
-| 生成宣传图片 | 描述画面 → AI 调用图片生成 → 自动发送到聊天 |
-| 生成 PDF 报告 | 提供内容 → AI 生成 Markdown → 自动转 PDF 发送 |
-| 制作 PPT 演示文稿 | 描述大纲 → AI 生成幻灯片 JSON → 自动生成 .pptx |
-| 语音发消息给 AI | Telegram 发语音 → STT 转文字 → AI 处理 → 语音回复 |
-| 剪辑视频片段 | 发送视频 + "剪出 1:20-1:40" → AI 生成 Timeline → FFmpeg 渲染 |
+### 📁 File & Document Processing
+- [x] **Read/Write Local Files** — Read, create, and edit any text file on your computer (code, config, notes, etc.)
+- [x] **Code Patching** — Apply precise patches to code files, supporting OpenAI-format patches
+- [x] **Batch File Operations** — Bulk rename, move, and organize files via Shell tools
+
+### 💻 Shell Commands & System Operations
+- [x] **Execute Terminal Commands** — Run any Shell command on your computer (install software, compile projects, manage processes, etc.)
+- [x] **Background Process Management** — Start, monitor, and stop background services
+- [x] **System Info Queries** — Check disk space, memory usage, network status, etc.
+
+### 🌐 Network & Information Retrieval
+- [x] **HTTP Requests** — Call any API, fetch web content, download data
+- [x] **Web Browsing** — Automated browser operations (open pages, take screenshots, click, execute JS)
+- [x] **Information Search** — Search and retrieve real-time information via web tools
+
+### 🖥️ Screen & Screenshots
+- [x] **Desktop Screenshots** — One-click screen capture (macOS native screencapture)
+- [x] **Screen Recording** — Record screen video clips (macOS)
+
+### 🧠 Memory & Knowledge Management
+- [x] **Long-term Memory** — Persistently store personal preferences, frequently used info, and work habits via USER.md
+- [x] **Session Search** — Full-text search of conversation history (SQLite FTS5) to quickly find past discussions
+- [x] **Session Management** — Create, switch, compact, and delete conversation sessions to keep context clean
+
+### 💬 Multi-Channel Messaging
+- [x] **Telegram Bot** — Chat with your AI assistant anytime, anywhere via Telegram (supports DM and groups)
+- [x] **Discord Bot** — Use the AI assistant in Discord servers (supports DM, channels, threads)
+- [x] **Web Chat Interface** — Built-in browser chat panel with streaming output and tool call display
+- [x] **Cross-Channel Session Isolation** — Conversations across different channels are isolated for privacy
+
+### 🤖 Multi-Agent Collaboration
+- [x] **Multi-Agent Management** — Create AI agents with different roles (coding assistant, writing assistant, analyst, etc.)
+- [x] **Agent Routing** — Automatically assign agents based on channel, user, or group
+- [x] **Sub-Agents** — Main agents can spawn sub-agents for complex tasks (depth limits, concurrency control)
+- [x] **Agent Identity** — Each agent has its own name, avatar, and system prompt
+
+### 🔮 PolyOracle — AI Prediction Market Analysis
+- [x] **Real-time Market Data** — Connects to Polymarket Gamma API for live prediction market quotes
+- [x] **AI Probability Analysis** — AI independently evaluates event probabilities and compares with market prices to find +EV opportunities
+- [x] **Signal Recording** — All analysis results are persisted to the database for historical tracking
+- [x] **Scheduled Auto-Scanning** — Cron job scans markets every 4 hours (configurable)
+- [x] **Push Notifications** — +EV opportunities are automatically pushed to Telegram/Discord (24h dedup)
+- [x] **Visual Dashboard** — Market quotes, AI signals, Cron status, and notification settings in one place
+
+### 📊 Quant Copilot — AI-Powered Stock Analysis
+- [x] **Technical Analysis** — Automated technical indicator calculation (SMA, RSI, MACD, Bollinger Bands) via Python/pandas
+- [x] **AI-Driven Insights** — LLM analyzes technical data and generates buy/sell/hold signals with confidence scores
+- [x] **Finnhub News Integration** — Fetches latest market news for sentiment-aware analysis
+- [x] **Configurable Watchlist** — Set your stock watchlist and signal threshold via the Web UI
+- [x] **Auto Python Environment** — Python venv and dependencies are automatically installed on startup
+- [x] **Agent Model Routing** — Uses the model configured for the `quant-analyst` agent, with fallback chain support
+
+### ⏰ Scheduled Task Scheduling
+- [x] **Cron Scheduler** — Persistent scheduled task system based on node-cron
+- [x] **Database Storage** — Task definitions stored in SQLite, manageable via UI
+- [x] **Manual Trigger** — Support manual task execution via API or UI
+- [x] **Concurrency Control** — Prevents duplicate execution of the same task
+
+### 🔧 System Configuration & Management
+- [x] **Web Control Panel** — Full management interface covering chat, sessions, models, channels, agents, skills, config, cron, usage, audit, etc.
+- [x] **Dynamic Configuration** — Modify system config in real-time via UI or API, no manual file editing needed
+- [x] **Field-Level Descriptions** — Config UI fetches schema metadata to display labels and help text for each field
+- [x] **Multi-Model Switching** — Supports 11+ AI providers, 30+ models, freely switchable at runtime
+- [x] **API Key Rotation** — Multiple keys per provider with automatic switching + cooldown mechanism
+- [x] **Failover** — Automatic fallback to alternative models when the primary model fails
+- [x] **Audit Logging** — All tool invocations are traceable
+
+### 🖼️ Image Generation
+- [x] **Multi-Engine Support** — Supports Qwen (Tongyi Wanxiang), Stability AI, OpenAI DALL·E, local Stable Diffusion
+- [x] **Natural Language to Image** — Describe the desired image, AI generates it automatically
+- [x] **Auto-Send** — Generated images are automatically sent to Telegram/Discord via PendingFiles
+
+### 📄 Document Generation
+- [x] **PDF Generation** — Markdown content auto-converted to PDF (supports CJK, code highlighting, tables)
+- [x] **PPT Generation** — JSON slide data auto-generated into PowerPoint files (theme configurable)
+- [x] **Auto-Send** — Generated documents are automatically sent to the user
+
+### 🎤 Voice Interaction (STT/TTS)
+- [x] **Speech-to-Text (STT)** — Supports Google Gemini, OpenAI Whisper, DashScope Qwen Omni, and more
+- [x] **Text-to-Speech (TTS)** — Supports Edge TTS (free) and OpenAI TTS
+- [x] **Voice Message Loop** — Voice messages auto-transcribed → AI processes → voice reply (inbound mode)
+- [x] **No Text Confusion** — Text commands get text replies; voice commands get voice replies
+
+### 🎬 Video Editing (Phase 1 MVP)
+- [x] **Video Probing** — Extract video metadata via ffprobe (duration, resolution, codec, frame rate, bitrate)
+- [x] **Video Trimming** — Trim video clips by specifying time ranges
+- [x] **Video Speed Change** — Supports 0.25x to 4.0x speed (video + audio sync)
+- [x] **Timeline JSON** — LLM outputs structured editing instructions; tools perform deterministic FFmpeg rendering
+- [x] **Fail-Fast** — Returns clear error immediately when FFmpeg is unavailable
+- [x] **Auto-Send** — Rendered videos are automatically sent to the user via PendingFiles
+
+### 🧩 Skill Extensions
+- [x] **Community Skill Market** — Search and install community-contributed skills (ClawHub + SkillsMP dual source)
+- [x] **One-Click Install** — Install new skills from the community market with one click
+- [x] **Skill Management** — Enable/disable installed skills
+
+### 🔒 Security & Approvals
+- [x] **Policy Engine** — Tool-level allow/deny/require-approval policies
+- [x] **Execution Approval** — Dangerous operations (Shell, file writes) require human approval in production mode
+- [x] **DM Security Policy** — Supports open/allowlist/pairing/disabled modes
+- [x] **API Key Masking** — Sensitive information in config is automatically redacted
 
 ---
 
-## 技术架构
+## 📋 Typical Use Cases
+
+| Scenario | How It Works |
+|----------|-------------|
+| Get prediction market opportunities every morning | Cron scheduled scan → AI analysis → Telegram push |
+| Analyze stock technical indicators | Quant Copilot → Python technical analysis → AI signal generation |
+| Remotely operate your computer from phone | Send message via Telegram/Discord → AI executes Shell commands |
+| Organize project files | Describe needs in chat → AI reads/writes files + executes commands |
+| Monitor website changes | Scheduled task + browser screenshot + push notification |
+| Code review & modification | Discuss in chat → AI reads code → generates patches |
+| Query real-time information | AI calls HTTP tools to fetch API data |
+| Manage multiple AI roles | Create different agents, bind to different channels/groups |
+| Remember personal preferences | AI auto-writes to USER.md, auto-loads in next conversation |
+| Generate promotional images | Describe the scene → AI calls image generation → auto-sends to chat |
+| Generate PDF reports | Provide content → AI generates Markdown → auto-converts to PDF |
+| Create PPT presentations | Describe outline → AI generates slide JSON → auto-generates .pptx |
+| Send voice messages to AI | Send voice on Telegram → STT transcription → AI processes → voice reply |
+| Edit video clips | Send video + "trim 1:20-1:40" → AI generates Timeline → FFmpeg renders |
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -145,9 +155,10 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 │ DeepSeek │           │ Browser   │                       │
 │ Ollama   │           │ Patch     │ CommandLane           │
 │ Qwen     │           │ Memory    │ InboundDebouncer      │
-│ 11+ 供商 │           │ Screen    │ PairingStore          │
+│ 11+ prov │           │ Screen    │ PairingStore          │
 │          │           │ SubAgent  │                       │
 │          │           │ Polymarket│                       │
+│          │           │ Stock     │                       │
 │          │           │ Image     │                       │
 │          │           │ Document  │                       │
 │          │           │ Voice     │                       │
@@ -155,326 +166,353 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 ├──────────┴───────────┴───────────┴───────────────────────┤
 │  AgentManager · SubagentRegistry · PolicyEngine · Audit  │
 ├──────────────────────────────────────────────────────────┤
-│  CronScheduler · PolymarketScanner · NotificationService │
-│  VoiceService · ImageRouter                              │
+│  CronScheduler · PolymarketScanner · StockScanner        │
+│  NotificationService · VoiceService · ImageRouter        │
 ├──────────────────────────────────────────────────────────┤
 │              Sandbox · PluginManager · Skills             │
 └──────────────────────────────────────────────────────────┘
 ```
 
-## 技术栈
+## Tech Stack
 
-| 层级 | 技术 |
-|------|------|
-| 后端运行时 | Node.js + TypeScript |
-| HTTP 框架 | Express 5 |
+| Layer | Technology |
+|-------|-----------|
+| Backend Runtime | Node.js + TypeScript |
+| HTTP Framework | Express 5 |
 | WebSocket | ws |
-| 数据库 | SQLite (better-sqlite3) + JSONL 审计日志 |
-| 前端框架 | React 19 + Vite 7 |
-| 样式 | TailwindCSS 4 |
-| 状态管理 | Zustand 5 |
-| 代码编辑器 | Monaco Editor |
-| 图表 | Recharts |
+| Database | SQLite (better-sqlite3) + JSONL audit logs |
+| Frontend Framework | React 19 + Vite 7 |
+| Styling | TailwindCSS 4 |
+| State Management | Zustand 5 |
+| Code Editor | Monaco Editor |
+| Charts | Recharts |
 | Telegram | grammy |
 | Discord | discord.js v14 |
 | AI SDK | openai · @anthropic-ai/sdk · @google/generative-ai |
-| 定时任务 | node-cron |
-| 语音合成 | edge-tts (Python) |
-| 视频处理 | FFmpeg / FFprobe |
-| 后端测试 | Jest + ts-jest |
-| 前端测试 | Vitest + Testing Library |
-| 构建 | tsc (后端) + Vite (前端) |
+| Scheduled Tasks | node-cron |
+| Voice Synthesis | edge-tts (Python) |
+| Stock Analysis | yfinance + pandas (Python) |
+| Video Processing | FFmpeg / FFprobe |
+| Backend Testing | Jest + ts-jest |
+| Frontend Testing | Vitest + Testing Library |
+| Build | tsc (backend) + Vite (frontend) |
 
-## 功能完成情况
+## Feature Completion Status
 
-### 核心运行时
-- [x] Pi Agent ReAct 循环（多轮工具调用 + 自动重试 + 失败转移）
-- [x] 多模型支持：11+ 供应商、30+ 模型，运行时自动发现
-- [x] Auth Profile 轮换（同一供应商多 Key 自动切换 + 冷却机制）
-- [x] 失败转移链（主模型失败自动切换备选模型）
-- [x] 上下文窗口守卫（超限自动压缩会话）
-- [x] 并发限制器（防止过载）
+### Core Runtime
+- [x] Pi Agent ReAct loop (multi-turn tool calls + auto-retry + failover)
+- [x] Multi-model support: 11+ providers, 30+ models, auto-discovered at runtime
+- [x] Auth Profile rotation (multiple keys per provider with auto-switch + cooldown)
+- [x] Failover chain (automatic fallback to alternative models on failure)
+- [x] Context window guard (auto-compacts session when limit exceeded)
+- [x] Concurrency limiter (overload protection)
 
-### 会话管理
-- [x] SQLite 持久化 + LRU 内存缓存
-- [x] JSONL 并行写入审计日志
-- [x] 会话 CRUD（创建、加载、保存、删除）
-- [x] 会话压缩（Compaction）
-- [x] 每日 Token 限额
+### Session Management
+- [x] SQLite persistence + LRU memory cache
+- [x] JSONL parallel audit log writing
+- [x] Session CRUD (create, load, save, delete)
+- [x] Session compaction
+- [x] Daily token quota
 
-### 工具系统
-- [x] 13 类内置工具：文件、网络、Shell、浏览器、Patch、Memory、SubAgent、Screen、Polymarket、图片生成、文档生成、语音、视频编辑
-- [x] PolicyEngine 策略引擎（允许/拒绝/需审批）
-- [x] AuditLogger 审计日志
-- [x] 工具目录（37 工具，15 分类，按 Profile 分组）
-- [x] 执行审批队列（生产模式人工审批）
+### Tool System
+- [x] 14 built-in tool categories: File, Network, Shell, Browser, Patch, Memory, SubAgent, Screen, Polymarket, Stock, Image, Document, Voice, Video
+- [x] PolicyEngine (allow/deny/require-approval)
+- [x] AuditLogger audit logging
+- [x] Tool catalog (38+ tools, 16 categories, grouped by Profile)
+- [x] Execution approval queue (human approval in production mode)
 
-### 多智能体
-- [x] AgentManager：智能体 CRUD + 文件管理（SOUL.md / IDENTITY.md 等）
-- [x] 智能体级别模型 + 系统提示词覆盖
-- [x] SubagentRegistry：子智能体生命周期管理（深度限制、并发控制）
-- [x] 智能体路由绑定（7 级优先级：peer > peer.parent > guild+roles > guild > team > account > channel > default）
+### Multi-Agent
+- [x] AgentManager: agent CRUD + file management (SOUL.md / IDENTITY.md, etc.)
+- [x] Agent-level model + system prompt overrides
+- [x] SubagentRegistry: sub-agent lifecycle management (depth limits, concurrency control)
+- [x] Agent routing bindings (7-level priority: peer > peer.parent > guild+roles > guild > team > account > channel > default)
 
-### 多频道
-- [x] ChannelManager 统一频道管理（注册、连接、断开、重连、健康检查）
-- [x] Telegram 完整实现（grammy，DM/群组/超级群组，Bot 命令）
-- [x] Discord 完整实现（discord.js v14，DM/频道/线程，附件，消息分块）
-- [x] Slack 框架实现
-- [x] Gateway 适配器路径（从 config.json5 读取多账号配置）
-- [x] InboundDebouncer 入站消息去抖
-- [x] PairingStore 设备配对
-- [x] SecurityGate DM 安全策略（open/allowlist/pairing/disabled）
-- [x] 出站消息分块投递
+### Multi-Channel
+- [x] ChannelManager unified channel management (register, connect, disconnect, reconnect, health check)
+- [x] Telegram full implementation (grammy, DM/group/supergroup, Bot commands)
+- [x] Discord full implementation (discord.js v14, DM/channel/thread, attachments, message chunking)
+- [x] Slack framework implementation
+- [x] Gateway adapter path (reads multi-account config from config.json5)
+- [x] InboundDebouncer inbound message debouncing
+- [x] PairingStore device pairing
+- [x] SecurityGate DM security policy (open/allowlist/pairing/disabled)
+- [x] Outbound message chunked delivery
 
-### PolyOracle — AI 预测市场分析
-- [x] Gamma API 实时市场数据接入
-- [x] AI 概率分析（单 Analyst 架构，支持 qwen/gemini/deepseek 等模型）
-- [x] 信号存储（market_signals 表）
-- [x] +EV 机会识别（edge ≥ 5% 阈值可配置）
-- [x] 定时自动扫描（CronScheduler + PolymarketScanner）
-- [x] Telegram/Discord 推送通知（24h 去重）
-- [x] 可视化仪表盘（5 个 Tab：关于、市场、信号、Cron、通知设置）
-- [x] 指标说明 Tooltip + 使用引导
+### PolyOracle — AI Prediction Market Analysis
+- [x] Gamma API real-time market data integration
+- [x] AI probability analysis (single Analyst architecture, supports qwen/gemini/deepseek, etc.)
+- [x] Signal storage (market_signals table)
+- [x] +EV opportunity identification (edge ≥ 5% threshold, configurable)
+- [x] Scheduled auto-scanning (CronScheduler + PolymarketScanner)
+- [x] Telegram/Discord push notifications (24h dedup)
+- [x] Visual dashboard (5 tabs: About, Markets, Signals, Cron, Notification Settings)
+- [x] Metric tooltip explanations + usage guide
 
-### 定时任务系统
-- [x] CronScheduler（node-cron + SQLite 持久化）
-- [x] 任务 CRUD（创建、更新、删除、启用/禁用）
-- [x] 手动触发执行
-- [x] 并发守卫（防止同一任务重复运行）
-- [x] Handler 注册机制（可扩展新任务类型）
+### Quant Copilot — AI Stock Analysis
+- [x] StockScanner service with Python-based technical analysis (SMA, RSI, MACD, Bollinger Bands)
+- [x] AI-driven signal generation (buy/sell/hold with confidence scores)
+- [x] Finnhub API integration for market news and sentiment
+- [x] Configurable watchlist and signal threshold via Web UI
+- [x] Auto Python venv setup and dependency installation on startup
+- [x] Agent-level model routing (quant-analyst agent config → fallback chain → auto-detect)
+- [x] Stock analysis tools registered in tool catalog
+- [x] Unit tests and property-based tests
 
-### 通知服务
-- [x] NotificationService（Telegram/Discord 推送）
-- [x] 信号通知（+EV 机会推送）
-- [x] 扫描摘要通知
-- [x] 系统告警通知
-- [x] 24h 去重（notified_at 字段）
+### Scheduled Task System
+- [x] CronScheduler (node-cron + SQLite persistence)
+- [x] Task CRUD (create, update, delete, enable/disable)
+- [x] Manual trigger execution
+- [x] Concurrency guard (prevents duplicate task runs)
+- [x] Handler registration mechanism (extensible for new task types)
 
-### 图片生成
-- [x] ImageRouter 多引擎路由（Qwen/Stability/OpenAI/本地SD）
-- [x] 自动保存到 ~/.openpilot/generated/
-- [x] PendingFiles 机制自动发送到 Channel
+### Notification Service
+- [x] NotificationService (Telegram/Discord push)
+- [x] Signal notifications (+EV opportunity push)
+- [x] Scan summary notifications
+- [x] System alert notifications
+- [x] 24h dedup (notified_at field)
 
-### 文档生成
-- [x] PDF 生成（Markdown → HTML → PDF，支持 Puppeteer 渲染）
-- [x] PPT 生成（JSON slides → .pptx，支持主题配置）
-- [x] PendingFiles 机制自动发送到 Channel
+### Image Generation
+- [x] ImageRouter multi-engine routing (Qwen/Stability/OpenAI/local SD)
+- [x] Auto-save to ~/.openpilot/generated/
+- [x] PendingFiles mechanism for auto-sending to Channel
 
-### 语音交互 (STT/TTS)
-- [x] VoiceService 统一语音服务
-- [x] STT 多引擎：Google Gemini、OpenAI Whisper、DashScope Qwen Omni
-- [x] TTS 多引擎：Edge TTS（免费）、OpenAI TTS
-- [x] 语音消息闭环（inbound 模式：语音进 → 语音出）
-- [x] OGG/Opus → MP3 自动转码（ffmpeg）
-- [x] DashScope SSE 流式响应解析
+### Document Generation
+- [x] PDF generation (Markdown → HTML → PDF, supports Puppeteer rendering)
+- [x] PPT generation (JSON slides → .pptx, theme configurable)
+- [x] PendingFiles mechanism for auto-sending to Channel
 
-### 视频编辑 (Phase 1 MVP)
-- [x] FFmpeg Guardian（Fail-Fast 依赖校验）
-- [x] video_probe_tool（ffprobe 元数据探测）
-- [x] video_edit_tool（Timeline JSON → FFmpeg 确定性渲染）
-- [x] Timeline JSON 校验器（格式、时间范围、变速范围）
-- [x] FFmpeg 命令构建器（trim、speed_up、add_subtitle）
-- [x] PendingFiles 机制自动发送到 Channel
-- [x] VideoConfig 配置集成（ffmpegPath、outputDir、renderTimeout）
+### Voice Interaction (STT/TTS)
+- [x] VoiceService unified voice service
+- [x] STT multi-engine: Google Gemini, OpenAI Whisper, DashScope Qwen Omni
+- [x] TTS multi-engine: Edge TTS (free), OpenAI TTS
+- [x] Voice message loop (inbound mode: voice in → voice out)
+- [x] OGG/Opus → MP3 auto-transcoding (ffmpeg)
+- [x] DashScope SSE streaming response parsing
 
-### 多频道多智能体协同
-- [x] CommandLane 并发控制（按 lane 限流）
-- [x] 7 级路由优先级绑定
-- [x] dmScope 会话隔离（per-channel-peer / per-peer）
-- [x] 跨频道会话隔离
-- [x] 动态绑定更新
-- [x] Discord 线程会话键后缀
-- [x] Telegram group/supergroup 兼容匹配
-- [x] 通配符 accountId 绑定
+### Video Editing (Phase 1 MVP)
+- [x] FFmpeg Guardian (Fail-Fast dependency check)
+- [x] video_probe_tool (ffprobe metadata probing)
+- [x] video_edit_tool (Timeline JSON → FFmpeg deterministic rendering)
+- [x] Timeline JSON validator (format, time range, speed range)
+- [x] FFmpeg command builder (trim, speed_up, add_subtitle)
+- [x] PendingFiles mechanism for auto-sending to Channel
+- [x] VideoConfig integration (ffmpegPath, outputDir, renderTimeout)
 
-### API 网关
-- [x] REST API：50+ 端点（会话、聊天、模型、智能体、频道、配置、技能、Cron、Polymarket 等）
-- [x] WebSocket 流式对话（stream_start → stream_chunk → tool_call_start → tool_call_result → stream_end）
-- [x] 并发请求守卫（同一会话不允许并行请求）
-- [x] 请求速率限制 + 输入验证 + 安全中间件（Helmet）
-- [x] 容器健康探针（/healthz, /readyz）
-- [x] 静态资源服务（Control UI SPA）
+### Multi-Channel Multi-Agent Collaboration
+- [x] CommandLane concurrency control (per-lane throttling)
+- [x] 7-level routing priority bindings
+- [x] dmScope session isolation (per-channel-peer / per-peer)
+- [x] Cross-channel session isolation
+- [x] Dynamic binding updates
+- [x] Discord thread session key suffix
+- [x] Telegram group/supergroup compatible matching
+- [x] Wildcard accountId binding
 
-### Control UI 控制面板
-- [x] 聊天界面（消息列表、输入框、流式显示、工具调用展示）
-- [x] 会话管理（列表、创建、删除、压缩）
-- [x] 模型选择器
-- [x] 频道管理（状态、配置、连接/断开）
-- [x] 智能体管理（CRUD、绑定配置、文件编辑）
-- [x] 技能管理（启用/禁用、社区技能搜索安装）
-- [x] 系统配置（33 个配置区段、38 个枚举字段）
-- [x] Cron 定时任务管理
-- [x] PolyOracle 仪表盘（市场、信号、Cron、通知设置、关于）
-- [x] 用量统计
-- [x] 审计日志查看
-- [x] 系统状态总览
+### API Gateway
+- [x] REST API: 50+ endpoints (sessions, chat, models, agents, channels, config, skills, cron, polymarket, stocks, etc.)
+- [x] WebSocket streaming chat (stream_start → stream_chunk → tool_call_start → tool_call_result → stream_end)
+- [x] Concurrent request guard (no parallel requests for the same session)
+- [x] Request rate limiting + input validation + security middleware (Helmet)
+- [x] Container health probes (/healthz, /readyz)
+- [x] Static asset serving (Control UI SPA)
 
-### 配置系统
-- [x] JSON5 配置文件（~/.openpilot/config.json5）
-- [x] 环境变量覆盖
-- [x] API 动态读写 + 持久化
-- [x] API Key 掩码保护
-- [x] 深度合并更新
+### Control UI Panel
+- [x] Chat interface (message list, input, streaming display, tool call display)
+- [x] Session management (list, create, delete, compact)
+- [x] Model selector
+- [x] Channel management (status, config, connect/disconnect)
+- [x] Agent management (CRUD, binding config, file editing)
+- [x] Skill management (enable/disable, community skill search & install)
+- [x] System configuration (33+ config sections, 38+ enum fields, field-level descriptions from schema)
+- [x] Cron scheduled task management
+- [x] PolyOracle dashboard (markets, signals, cron, notification settings, about)
+- [x] Quant Copilot dashboard (stock analysis, technical indicators, AI signals)
+- [x] Usage statistics
+- [x] Audit log viewer
+- [x] System status overview
+- [x] Scenario Navigators menu group (PolyOracle + Quant Copilot)
 
-### 技能系统
-- [x] 内置技能状态报告
-- [x] 社区技能双源（ClawHub + SkillsMP）
-- [x] 关键词搜索 + AI 语义搜索
-- [x] 一键安装
+### Configuration System
+- [x] JSON5 config file (~/.openpilot/config.json5)
+- [x] Environment variable overrides
+- [x] API dynamic read/write + persistence
+- [x] API Key masking protection
+- [x] Deep merge updates
+- [x] Schema-driven field labels and descriptions in UI
 
-### 测试覆盖
-- [x] 后端：27 个测试套件，484+ 测试用例通过
-- [x] 前端：20 个测试套件，136 测试用例通过
-- [x] 多智能体协同测试（单频道 21 用例 + 跨频道 20 用例）
-- [x] Discord 集成测试（43 用例）
-- [x] E2E 生产就绪性测试
+### Skill System
+- [x] Built-in skill status reports
+- [x] Community skill dual source (ClawHub + SkillsMP)
+- [x] Keyword search + AI semantic search
+- [x] One-click install
 
-## 项目结构
+### Test Coverage
+- [x] Backend: 27+ test suites, 484+ test cases passing
+- [x] Frontend: 20 test suites, 136 test cases passing
+- [x] Multi-agent collaboration tests (single-channel 21 cases + cross-channel 20 cases)
+- [x] Discord integration tests (43 cases)
+- [x] E2E production readiness tests
+- [x] StockScanner unit tests + property-based tests
+- [x] Stock tools unit tests + property-based tests
+- [x] Tool catalog tests
+
+## Project Structure
 
 ```
 openpilot/
-├── src/                        # 后端源码
-│   ├── index.ts                # 入口，Bootstrap 全流程
-│   ├── api/                    # Express API 网关 + WebSocket
-│   │   ├── server.ts           # 50+ REST 端点 + WS 流式
-│   │   └── middleware.ts       # 速率限制、输入验证、安全
-│   ├── runtime/                # AI 运行时
-│   │   ├── AIRuntime.ts        # 核心执行引擎（重试、失败转移、并发）
-│   │   └── sandbox.ts          # 沙箱隔离
-│   ├── pi-agent/               # Pi Agent ReAct 循环
-│   │   ├── PiAgent.ts          # ReAct 主循环
-│   │   └── PiSession.ts        # 会话 Transcript 管理
-│   ├── models/                 # 模型供应商
-│   │   ├── ModelManager.ts     # 模型发现、配置、轮换、失败转移
-│   │   ├── OpenAIProvider.ts   # OpenAI / 兼容 API
+├── src/                        # Backend source code
+│   ├── index.ts                # Entry point, full bootstrap flow
+│   ├── api/                    # Express API gateway + WebSocket
+│   │   ├── server.ts           # 50+ REST endpoints + WS streaming
+│   │   └── middleware.ts       # Rate limiting, input validation, security
+│   ├── runtime/                # AI runtime
+│   │   ├── AIRuntime.ts        # Core execution engine (retry, failover, concurrency)
+│   │   └── sandbox.ts          # Sandbox isolation
+│   ├── pi-agent/               # Pi Agent ReAct loop
+│   │   ├── PiAgent.ts          # ReAct main loop
+│   │   └── PiSession.ts        # Session transcript management
+│   ├── models/                 # Model providers
+│   │   ├── ModelManager.ts     # Model discovery, config, rotation, failover
+│   │   ├── OpenAIProvider.ts   # OpenAI / compatible APIs
 │   │   ├── AnthropicProvider.ts
 │   │   └── GeminiProvider.ts   # Google Generative AI
-│   ├── session/                # 会话持久化
+│   ├── session/                # Session persistence
 │   │   ├── SessionManager.ts   # SQLite + LRU Cache + JSONL
-│   │   └── database.ts         # Schema 初始化
-│   ├── channels/               # 多频道系统
-│   │   ├── types.ts            # 频道插件抽象层
-│   │   ├── ChannelManager.ts   # 统一管理 + 路由 + 健康检查
+│   │   └── database.ts         # Schema initialization
+│   ├── channels/               # Multi-channel system
+│   │   ├── types.ts            # Channel plugin abstraction layer
+│   │   ├── ChannelManager.ts   # Unified management + routing + health check
 │   │   ├── TelegramChannel.ts  # Telegram (grammy)
 │   │   ├── DiscordChannel.ts   # Discord (discord.js v14)
 │   │   ├── SlackChannel.ts     # Slack
-│   │   ├── CommandLane.ts      # 并发控制 Lane
-│   │   ├── InboundDebouncer.ts # 入站去抖
-│   │   └── PairingStore.ts     # 设备配对
-│   ├── agents/                 # 智能体管理
-│   │   ├── AgentManager.ts     # CRUD + 文件 + 身份
-│   │   ├── SubagentRegistry.ts # 子智能体生命周期
-│   │   └── types.ts            # AgentInfo 类型
-│   ├── tools/                  # 工具系统
-│   │   ├── ToolExecutor.ts     # 执行器 + Hook 链
-│   │   ├── PolicyEngine.ts     # 策略引擎
-│   │   ├── auditHook.ts        # 审计日志
-│   │   ├── toolCatalog.ts      # 工具目录（37 工具，15 分类）
-│   │   ├── fileTools.ts        # 文件操作
-│   │   ├── networkTools.ts     # HTTP 请求
-│   │   ├── shellTools.ts       # Shell 命令
-│   │   ├── browserTools.ts     # 浏览器自动化
-│   │   ├── patchTools.ts       # 代码 Patch
-│   │   ├── memoryTools.ts      # 持久记忆
-│   │   ├── screenTools.ts      # 屏幕截图/录制
-│   │   ├── polymarketTools.ts  # Polymarket 市场工具
-│   │   ├── imageTools.ts       # 图片生成（多引擎）
-│   │   ├── documentTools.ts    # 文档生成（PDF/PPT）
-│   │   ├── voiceTools.ts       # 语音工具（STT/TTS/状态）
-│   │   ├── videoTools.ts       # 视频编辑（探测/渲染）
-│   │   └── subAgentTools.ts    # 子智能体调用
-│   ├── cron/                   # 定时任务
-│   │   └── CronScheduler.ts    # Cron 调度器（SQLite 持久化）
-│   ├── services/               # 业务服务
-│   │   ├── PolymarketScanner.ts # 市场扫描 + AI 分析
-│   │   ├── NotificationService.ts # 通知推送（Telegram/Discord）
-│   │   ├── VoiceService.ts     # 语音服务（STT/TTS 多引擎）
-│   │   └── ImageRouter.ts      # 图片生成路由（多引擎）
-│   ├── skills/                 # 技能系统
-│   │   ├── community.ts        # 社区技能（ClawHub + SkillsMP）
+│   │   ├── CommandLane.ts      # Concurrency control lane
+│   │   ├── InboundDebouncer.ts # Inbound debouncing
+│   │   └── PairingStore.ts     # Device pairing
+│   ├── agents/                 # Agent management
+│   │   ├── AgentManager.ts     # CRUD + files + identity
+│   │   ├── SubagentRegistry.ts # Sub-agent lifecycle
+│   │   └── types.ts            # AgentInfo types
+│   ├── tools/                  # Tool system
+│   │   ├── ToolExecutor.ts     # Executor + hook chain
+│   │   ├── PolicyEngine.ts     # Policy engine
+│   │   ├── auditHook.ts        # Audit logging
+│   │   ├── toolCatalog.ts      # Tool catalog (38+ tools, 16 categories)
+│   │   ├── fileTools.ts        # File operations
+│   │   ├── networkTools.ts     # HTTP requests
+│   │   ├── shellTools.ts       # Shell commands
+│   │   ├── browserTools.ts     # Browser automation
+│   │   ├── patchTools.ts       # Code patching
+│   │   ├── memoryTools.ts      # Persistent memory
+│   │   ├── screenTools.ts      # Screen capture/recording
+│   │   ├── polymarketTools.ts  # Polymarket market tools
+│   │   ├── stockTools.ts       # Stock analysis tools
+│   │   ├── imageTools.ts       # Image generation (multi-engine)
+│   │   ├── documentTools.ts    # Document generation (PDF/PPT)
+│   │   ├── voiceTools.ts       # Voice tools (STT/TTS/status)
+│   │   ├── videoTools.ts       # Video editing (probe/render)
+│   │   └── subAgentTools.ts    # Sub-agent invocation
+│   ├── cron/                   # Scheduled tasks
+│   │   └── CronScheduler.ts    # Cron scheduler (SQLite persistence)
+│   ├── services/               # Business services
+│   │   ├── PolymarketScanner.ts # Market scanning + AI analysis
+│   │   ├── StockScanner.ts     # Stock technical analysis + AI signals
+│   │   ├── NotificationService.ts # Push notifications (Telegram/Discord)
+│   │   ├── VoiceService.ts     # Voice service (STT/TTS multi-engine)
+│   │   └── ImageRouter.ts      # Image generation routing (multi-engine)
+│   ├── skills/                 # Skill system
+│   │   ├── community.ts        # Community skills (ClawHub + SkillsMP)
 │   │   └── types.ts
-│   ├── config/                 # 配置系统
-│   │   └── index.ts            # JSON5 加载 + 环境变量覆盖 + 持久化
-│   ├── plugins/                # 插件系统
+│   ├── config/                 # Configuration system
+│   │   └── index.ts            # JSON5 loading + env var overrides + persistence
+│   ├── plugins/                # Plugin system
 │   │   └── PluginManager.ts
-│   ├── types/                  # 核心类型定义
+│   ├── types/                  # Core type definitions
 │   │   └── index.ts
-│   └── logger.ts               # 结构化日志
-├── frontend/                   # 前端 Control UI
+│   └── logger.ts               # Structured logging
+├── scripts/                    # Python scripts
+│   ├── stock_analysis.py       # Technical indicator calculation (SMA, RSI, MACD, BB)
+│   └── requirements.txt        # Python dependencies (yfinance, pandas)
+├── frontend/                   # Frontend Control UI
 │   ├── src/
-│   │   ├── App.tsx             # 主应用 + 路由
+│   │   ├── App.tsx             # Main app + routing
 │   │   ├── components/
-│   │   │   ├── chat/           # 聊天组件（消息列表、输入、工具调用）
-│   │   │   ├── session/        # 会话列表
-│   │   │   ├── model/          # 模型选择器
-│   │   │   ├── common/         # 通用组件（确认框、错误横幅、进度条）
-│   │   │   ├── layout/         # 布局（侧边栏、顶栏）
-│   │   │   ├── views/          # 页面视图（15 个）
-│   │   │   └── tools/          # 审计日志组件
-│   │   ├── stores/             # Zustand 状态管理
-│   │   ├── services/           # API 客户端
-│   │   ├── hooks/              # 自定义 Hooks
-│   │   └── types/              # 前端类型
+│   │   │   ├── chat/           # Chat components (message list, input, tool calls)
+│   │   │   ├── session/        # Session list
+│   │   │   ├── model/          # Model selector
+│   │   │   ├── common/         # Common components (confirm dialog, error banner, progress bar)
+│   │   │   ├── layout/         # Layout (sidebar, topbar)
+│   │   │   ├── views/          # Page views (16+)
+│   │   │   └── tools/          # Audit log component
+│   │   ├── stores/             # Zustand state management
+│   │   ├── services/           # API client
+│   │   ├── hooks/              # Custom hooks
+│   │   └── types/              # Frontend types
 │   └── index.html
-├── data/                       # 数据目录
-│   ├── sessions.db             # SQLite 数据库
-│   └── sessions-jsonl/         # JSONL 审计日志
-├── dist/                       # 后端编译输出
-└── frontend/dist/              # 前端构建输出 → dist/control-ui/
+├── data/                       # Data directory
+│   ├── sessions.db             # SQLite database
+│   └── sessions-jsonl/         # JSONL audit logs
+├── dist/                       # Backend compiled output
+└── frontend/dist/              # Frontend build output → dist/control-ui/
 ```
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Requirements
 
 - Node.js >= 20
 - npm >= 9
+- Python >= 3.10 (for stock analysis and voice features; auto-configured on startup)
 
-### 安装
+### Installation
 
 ```bash
-# 克隆项目
+# Clone the project
 git clone https://github.com/chenjy16/OpenPilot.git
 cd openpilot
 
-# 安装后端依赖
+# Install backend dependencies
 npm install
 
-# 安装前端依赖
+# Install frontend dependencies
 cd frontend && npm install && cd ..
 ```
 
-### 配置
+### Configuration
 
 ```bash
-# 复制环境变量模板
+# Copy the environment variable template
 cp .env.example .env
 
-# 编辑 .env，至少配置一个 AI 供应商的 API Key：
+# Edit .env, configure at least one AI provider API Key:
 #   OPENAI_API_KEY=sk-...
 #   ANTHROPIC_API_KEY=sk-ant-...
 #   GOOGLE_AI_API_KEY=AIza...
 
-# （可选）配置频道 Bot Token：
+# (Optional) Configure channel Bot tokens:
 #   TELEGRAM_BOT_TOKEN=...
 #   DISCORD_BOT_TOKEN=...
+
+# (Optional) Configure Finnhub API Key for stock analysis:
+#   FINNHUB_API_KEY=...
+#   (Can also be set via the Web UI under Quant Copilot config section)
 ```
 
-高级配置使用 JSON5 格式，文件位于 `~/.openpilot/config.json5`：
+Advanced configuration uses JSON5 format, located at `~/.openpilot/config.json5`:
 
 ```json5
 {
-  // 频道配置
+  // Channel configuration
   channels: {
     telegram: { enabled: true, token: "..." },
     discord: { enabled: true, token: "..." },
   },
-  // 网关配置
+  // Gateway configuration
   gateway: {
     port: 3000,
     bind: "loopback",  // loopback | lan | auto | custom
   },
-  // 自定义模型供应商
+  // Custom model providers
   models: {
     providers: {
       qwen: {
@@ -484,7 +522,7 @@ cp .env.example .env
       },
     },
   },
-  // PolyOracle 通知配置
+  // PolyOracle notification config
   polymarket: {
     notify: {
       enabled: true,
@@ -492,12 +530,18 @@ cp .env.example .env
       minEdge: 0.10,
     },
   },
-  // 语音配置
+  // Quant Copilot config
+  stockAnalysis: {
+    finnhubApiKey: "your-finnhub-api-key",
+    watchlist: "AAPL,GOOGL,MSFT,TSLA",
+    signalThreshold: 0.6,
+  },
+  // Voice configuration
   voice: {
     stt: { model: "qwen3-omni-flash/qwen3-omni-flash", language: "zh" },
     tts: { auto: "inbound", model: "edge/default", voice: "zh-CN-XiaoxiaoNeural" },
   },
-  // 视频编辑配置
+  // Video editing configuration
   video: {
     outputDir: "~/.openpilot/generated/video",
     renderTimeout: 120000,
@@ -505,48 +549,48 @@ cp .env.example .env
 }
 ```
 
-### 构建
+### Build
 
 ```bash
-# 构建后端
+# Build backend
 npm run build
 
-# 构建前端（输出到 dist/control-ui/）
+# Build frontend (outputs to dist/control-ui/)
 cd frontend && npx vite build && cd ..
 ```
 
-### 运行
+### Run
 
 ```bash
-# 启动服务（单进程，包含 API + WebSocket + Control UI）
+# Start the service (single process, includes API + WebSocket + Control UI)
 node dist/index.js
 ```
 
-服务启动后：
-- Control UI：`http://127.0.0.1:3000`（浏览器访问）
-- API 网关：`http://127.0.0.1:3000/api/`
-- WebSocket：`ws://127.0.0.1:3000/ws`
-- 健康检查：`http://127.0.0.1:3000/healthz`
+After startup:
+- Control UI: `http://127.0.0.1:3000` (browser access)
+- API Gateway: `http://127.0.0.1:3000/api/`
+- WebSocket: `ws://127.0.0.1:3000/ws`
+- Health Check: `http://127.0.0.1:3000/healthz`
 
-### 测试
+### Testing
 
 ```bash
-# 后端测试
+# Backend tests
 npx jest --testPathIgnorePatterns="database.test" --no-coverage
 
-# 前端测试
+# Frontend tests
 cd frontend && npx vitest --run
 ```
 
-## 部署
+## Deployment
 
-### 单进程部署（推荐）
+### Single Process (Recommended)
 
 ```bash
 NODE_ENV=production node dist/index.js
 ```
 
-### systemd 服务
+### systemd Service
 
 ```ini
 [Unit]
@@ -574,53 +618,56 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --production
 COPY dist/ ./dist/
+COPY scripts/ ./scripts/
 COPY frontend/dist/ ./dist/control-ui/
 EXPOSE 3000
 HEALTHCHECK CMD curl -f http://localhost:3000/healthz || exit 1
 CMD ["node", "dist/index.js"]
 ```
 
-### 网络绑定模式
+### Network Binding Modes
 
-| 模式 | 绑定地址 | 用途 |
-|------|----------|------|
-| `loopback` | 127.0.0.1 | 本地开发（默认） |
-| `lan` | 0.0.0.0 | 局域网访问 |
-| `auto` | 0.0.0.0 | 自动检测 |
-| `custom` | 自定义 | 指定 `gateway.customBindHost` |
+| Mode | Bind Address | Use Case |
+|------|-------------|----------|
+| `loopback` | 127.0.0.1 | Local development (default) |
+| `lan` | 0.0.0.0 | LAN access |
+| `auto` | 0.0.0.0 | Auto-detect |
+| `custom` | Custom | Specify `gateway.customBindHost` |
 
-## API 概览
+## API Overview
 
-| 分类 | 端点 | 说明 |
-|------|------|------|
-| 健康 | `GET /healthz` | 容器存活探针 |
-| 健康 | `GET /readyz` | 就绪探针（含 DB 检查） |
-| 聊天 | `POST /api/chat` | 同步聊天 |
-| 聊天 | `WS /ws` | 流式聊天（WebSocket） |
-| 会话 | `GET/POST/DELETE /api/sessions` | 会话 CRUD |
-| 模型 | `GET /api/models` | 模型目录 |
-| 智能体 | `GET/POST/PUT/DELETE /api/agents` | 智能体 CRUD |
-| 频道 | `GET /api/channels` | 频道状态 |
-| 技能 | `GET /api/skills/community/search` | 社区搜索 |
-| 配置 | `GET/PUT /api/config` | 系统配置读写 |
-| Cron | `GET/POST/PUT/DELETE /api/cron/jobs` | 定时任务 |
-| Polymarket | `GET /api/polymarket/markets` | 市场数据 |
-| Polymarket | `GET /api/polymarket/signals` | AI 信号 |
-| Polymarket | `POST /api/polymarket/scan` | 手动触发扫描 |
-| 用量 | `GET /api/usage` | Token 用量统计 |
-| 审计 | `GET /api/audit-logs` | 工具审计日志 |
+| Category | Endpoint | Description |
+|----------|---------|-------------|
+| Health | `GET /healthz` | Container liveness probe |
+| Health | `GET /readyz` | Readiness probe (includes DB check) |
+| Chat | `POST /api/chat` | Synchronous chat |
+| Chat | `WS /ws` | Streaming chat (WebSocket) |
+| Sessions | `GET/POST/DELETE /api/sessions` | Session CRUD |
+| Models | `GET /api/models` | Model catalog |
+| Agents | `GET/POST/PUT/DELETE /api/agents` | Agent CRUD |
+| Channels | `GET /api/channels` | Channel status |
+| Skills | `GET /api/skills/community/search` | Community search |
+| Config | `GET/PUT /api/config` | System config read/write |
+| Config | `GET /api/config/schema` | Config field metadata (labels, descriptions) |
+| Cron | `GET/POST/PUT/DELETE /api/cron/jobs` | Scheduled tasks |
+| Polymarket | `GET /api/polymarket/markets` | Market data |
+| Polymarket | `GET /api/polymarket/signals` | AI signals |
+| Polymarket | `POST /api/polymarket/scan` | Manual scan trigger |
+| Stocks | `POST /api/stocks/analyze` | Stock technical analysis + AI signal |
+| Usage | `GET /api/usage` | Token usage statistics |
+| Audit | `GET /api/audit-logs` | Tool audit logs |
 
-## 支持的模型
+## Supported Models
 
-| 供应商 | 模型 |
-|--------|------|
-| OpenAI | gpt-5.2, gpt-5.1, gpt-5, gpt-4o, o3, o4-mini 等 |
-| Anthropic | claude-opus-4, claude-sonnet-4, claude-haiku-4.5 等 |
-| Google | gemini-3-pro, gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash 等 |
+| Provider | Models |
+|----------|--------|
+| OpenAI | gpt-5.2, gpt-5.1, gpt-5, gpt-4o, o3, o4-mini, etc. |
+| Anthropic | claude-opus-4, claude-sonnet-4, claude-haiku-4.5, etc. |
+| Google | gemini-3-pro, gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, etc. |
 | DeepSeek | deepseek-chat, deepseek-reasoner |
-| Qwen | qwen3.5-flash（通过 OpenAI 兼容 API） |
-| Ollama | 本地模型（自动发现） |
-| OpenRouter / Together / Moonshot / Doubao / MiniMax | 通过 OpenAI 兼容 API |
+| Qwen | qwen3.5-plus, qwen3.5-flash (via OpenAI-compatible API) |
+| Ollama | Local models (auto-discovered) |
+| OpenRouter / Together / Moonshot / Doubao / MiniMax | Via OpenAI-compatible API |
 
 ## License
 
