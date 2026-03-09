@@ -139,21 +139,25 @@ export class VoiceService {
     const apiKey = modelConfig.apiKey;
     const lang = this.liveSTTLanguage;
 
-    console.log(`[VoiceService] STT via "${chosenModel}" (provider: ${provider})`);
+    // Resolve baseUrl: ModelConfig.baseUrl OR appConfig.models.providers[provider].baseUrl
+    const baseUrl = modelConfig.baseUrl
+      || this.appConfig?.models?.providers?.[provider]?.baseUrl;
+
+    console.log(`[VoiceService] STT via "${chosenModel}" (provider: ${provider}, baseUrl: ${baseUrl ?? 'none'})`);
 
     // ── Dispatch by provider ──
     if (provider === 'google' || provider.startsWith('gemini')) {
       return this.sttGemini(audio, apiKey, modelConfig.model, lang);
     }
 
-    if (provider === 'openai' && !modelConfig.baseUrl) {
+    if (provider === 'openai' && !baseUrl) {
       return this.sttWhisper(audio, apiKey, undefined, lang);
     }
 
     // OpenAI-compatible providers with custom baseUrl (DashScope Qwen Omni, etc.)
     // These use multimodal chat completions with audio in messages
-    if (modelConfig.baseUrl) {
-      return this.sttOpenAICompatible(audio, apiKey, modelConfig.baseUrl, modelConfig.model, lang);
+    if (baseUrl) {
+      return this.sttOpenAICompatible(audio, apiKey, baseUrl, modelConfig.model, lang);
     }
 
     // Provider has audio capability declared but no STT implementation
