@@ -257,7 +257,7 @@ export class VoiceService {
             messages: [{
               role: 'user',
               content: [
-                { type: 'input_audio', input_audio: { data: base64Audio, format: 'mp3' } },
+                { type: 'input_audio', input_audio: { data: `data:audio/mp3;base64,${base64Audio}`, format: 'mp3' } },
                 { type: 'text', text: prompt },
               ],
             }],
