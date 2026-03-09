@@ -225,41 +225,66 @@ export class VoiceService {
    * STT via OpenAI-compatible multimodal chat completions (DashScope Qwen Omni, etc.).
    * Sends audio as base64 input_audio in the messages array.
    */
-  private async sttOpenAICompatible(
-    audio: Buffer, apiKey: string, baseUrl: string, model: string, language?: string,
-  ): Promise<STTResult> {
-    const base64Audio = audio.toString('base64');
-    const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+  /**
+     * STT via OpenAI-compatible multimodal chat completions (DashScope Qwen Omni, etc.).
+     * Sends audio as base64 input_audio in the messages array.
+     * DashScope requires stream=true; supported audio formats: AMR, WAV, MP3, AAC, 3GP.
+     * Telegram voice messages are OGG/Opus — we send as mp3 (DashScope is lenient with Opus-in-OGG).
+     */
+    private async sttOpenAICompatible(
+      audio: Buffer, apiKey: string, baseUrl: string, model: string, language?: string,
+    ): Promise<STTResult> {
+      const base64Audio = audio.toString('base64');
+      const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-    const prompt = `Transcribe the following audio to text. Output ONLY the transcribed text, nothing else.${language ? ` The audio language is ${language}.` : ''}`;
+      const prompt = `请将以下音频转录为文字，只输出转录文本，不要输出任何其他内容。${language ? `音频语言为${language}。` : ''}`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'input_audio', input_audio: { data: base64Audio, format: 'ogg' } },
-            { type: 'text', text: prompt },
-          ],
-        }],
-      }),
-    });
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'input_audio', input_audio: { data: `data:audio/ogg;base64,${base64Audio}`, format: 'mp3' } },
+              { type: 'text', text: prompt },
+            ],
+          }],
+          modalities: ['text'],
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+      });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      throw new Error(`OpenAI-compatible STT failed (${baseUrl}): ${response.status} ${errText.slice(0, 300)}`);
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        throw new Error(`OpenAI-compatible STT failed (${baseUrl}): ${response.status} ${errText.slice(0, 300)}`);
+      }
+
+      // Parse SSE streaming response
+      const body = await response.text();
+      let fullText = '';
+      for (const line of body.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const payload = trimmed.slice(5).trim();
+        if (payload === '[DONE]') break;
+        try {
+          const chunk = JSON.parse(payload);
+          const delta = chunk.choices?.[0]?.delta?.content;
+          if (delta) fullText += delta;
+        } catch {
+          // skip malformed chunks
+        }
+      }
+
+      return { text: fullText.trim() };
     }
 
-    const result = await response.json() as any;
-    const text = result.choices?.[0]?.message?.content ?? '';
-    return { text: text.trim() };
-  }
 
 
   /** Synthesize text to speech. Returns null if text is too long. */
