@@ -168,7 +168,7 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
       'stt.model': { type: 'string', label: 'STT 模型', description: '语音转文字专用模型（如 google/gemini-2.0-flash），留空则使用默认模型' },
       'stt.language': { type: 'select', label: 'STT 语言', options: ['zh', 'en', 'ja', 'ko'], description: '语音识别默认语言' },
       'tts.auto': { type: 'select', label: 'TTS 自动回复', options: ['off', 'always', 'inbound', 'tagged'], description: '何时自动语音回复' },
-      'tts.model': { type: 'string', label: 'TTS 模型', description: 'TTS 引擎（如 edge/default、openai/tts-1），留空则使用 Edge TTS' },
+      'tts.model': { type: 'string', label: 'TTS 模型', description: 'TTS 引擎：留空或 edge/* 使用免费 Edge TTS，openai/tts-1 使用 OpenAI TTS（需 API Key）' },
       'tts.voice': { type: 'string', label: '语音名称', description: '如 zh-CN-XiaoxiaoNeural、alloy' },
       'tts.maxTextLength': { type: 'number', label: '最大文本长度', description: 'TTS 最大字符数（默认 2000）' },
     },

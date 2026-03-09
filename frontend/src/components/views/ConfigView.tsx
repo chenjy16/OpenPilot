@@ -10,7 +10,6 @@ let _modelOptions: ModelOption[] = [];
 const MODEL_FIELD_PATHS = new Set([
   'agents.defaults.model.primary',
   'voice.stt.model',
-  'voice.tts.model',
 ]);
 
 // Paths that should render as model multi-select (arrays)

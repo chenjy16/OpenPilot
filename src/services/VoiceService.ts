@@ -328,26 +328,30 @@ export class VoiceService {
 
 
   /** Synthesize text to speech. Returns null if text is too long. */
-  async synthesize(text: string): Promise<TTSResult | null> {
-    if (!text || text.length > this.liveMaxTtsLength) return null;
+  /** Synthesize text to speech. Returns null if text is too long. */
+    async synthesize(text: string): Promise<TTSResult | null> {
+      if (!text || text.length > this.liveMaxTtsLength) return null;
 
-    // Resolve TTS engine from tts.model config (live)
-    const ttsModel = this.liveTTSModel;
-    let engine: 'edge' | 'openai' = 'edge';
+      // Resolve TTS engine from tts.model config (live)
+      // Supported engines: edge (default, free), openai (requires API key)
+      // If model is set to a non-TTS model (like qwen3-omni-flash), ignore it and use edge
+      const ttsModel = this.liveTTSModel;
+      let engine: 'edge' | 'openai' = 'edge';
 
-    if (ttsModel) {
-      if (ttsModel.startsWith('openai/')) {
-        engine = 'openai';
+      if (ttsModel) {
+        if (ttsModel.startsWith('openai/') || ttsModel.includes('tts')) {
+          engine = 'openai';
+        }
+        // edge/* or any LLM model → use edge-tts (LLM models can't do TTS)
       }
-      // All other models (including edge/* or unknown) default to edge
+
+      return synthesize(text, {
+        engine,
+        voice: this.liveTTSVoice,
+        format: 'mp3',
+      });
     }
 
-    return synthesize(text, {
-      engine,
-      voice: this.liveTTSVoice,
-      format: 'mp3',
-    });
-  }
 
   /** Should we auto-reply with voice for this message? */
   shouldAutoTTS(isVoiceInbound: boolean): boolean {
