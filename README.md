@@ -64,6 +64,30 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 - [x] **失败转移** — 主模型失败自动切换备选模型，保证服务可用
 - [x] **审计日志** — 所有工具调用记录可追溯
 
+### 🖼️ 图片生成
+- [x] **多引擎支持** — 支持 Qwen（通义万相）、Stability AI、OpenAI DALL·E、本地 Stable Diffusion
+- [x] **自然语言生图** — 描述想要的画面，AI 自动生成图片
+- [x] **自动发送** — 生成的图片通过 PendingFiles 机制自动发送到 Telegram/Discord
+
+### 📄 文档生成
+- [x] **PDF 生成** — Markdown 内容自动转换为 PDF（支持中文、代码高亮、表格）
+- [x] **PPT 生成** — JSON 幻灯片数据自动生成 PowerPoint 文件（支持主题配置）
+- [x] **自动发送** — 生成的文档自动发送给用户
+
+### 🎤 语音交互 (STT/TTS)
+- [x] **语音转文字 (STT)** — 支持 Google Gemini、OpenAI Whisper、DashScope Qwen Omni 等多引擎
+- [x] **文字转语音 (TTS)** — 支持 Edge TTS（免费）和 OpenAI TTS
+- [x] **语音消息闭环** — 语音消息自动转文字 → AI 处理 → 语音回复（inbound 模式）
+- [x] **文字消息不混淆** — 文字指令只回文字，语音指令才回语音
+
+### 🎬 视频编辑 (Phase 1 MVP)
+- [x] **视频探测** — 通过 ffprobe 提取视频元数据（时长、分辨率、编码、帧率、比特率）
+- [x] **视频裁剪** — 指定时间范围裁剪视频片段
+- [x] **视频变速** — 支持 0.25x ~ 4.0x 变速（视频 + 音频同步）
+- [x] **Timeline JSON** — LLM 输出结构化编辑指令，工具做确定性 FFmpeg 渲染
+- [x] **Fail-Fast** — FFmpeg 不可用时立即返回清晰错误
+- [x] **自动发送** — 渲染后的视频通过 PendingFiles 自动发送给用户
+
 ### 🧩 技能扩展
 - [x] **社区技能市场** — 搜索和安装社区贡献的技能（ClawHub + SkillsMP 双源）
 - [x] **一键安装** — 从社区市场一键安装新技能
@@ -89,6 +113,11 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 | 查询实时信息 | AI 调用 HTTP 工具获取 API 数据 |
 | 管理多个 AI 角色 | 创建不同智能体，绑定到不同渠道/群组 |
 | 记住个人偏好 | AI 自动写入 USER.md，下次对话自动加载 |
+| 生成宣传图片 | 描述画面 → AI 调用图片生成 → 自动发送到聊天 |
+| 生成 PDF 报告 | 提供内容 → AI 生成 Markdown → 自动转 PDF 发送 |
+| 制作 PPT 演示文稿 | 描述大纲 → AI 生成幻灯片 JSON → 自动生成 .pptx |
+| 语音发消息给 AI | Telegram 发语音 → STT 转文字 → AI 处理 → 语音回复 |
+| 剪辑视频片段 | 发送视频 + "剪出 1:20-1:40" → AI 生成 Timeline → FFmpeg 渲染 |
 
 ---
 
@@ -119,10 +148,15 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 │ 11+ 供商 │           │ Screen    │ PairingStore          │
 │          │           │ SubAgent  │                       │
 │          │           │ Polymarket│                       │
+│          │           │ Image     │                       │
+│          │           │ Document  │                       │
+│          │           │ Voice     │                       │
+│          │           │ Video     │                       │
 ├──────────┴───────────┴───────────┴───────────────────────┤
 │  AgentManager · SubagentRegistry · PolicyEngine · Audit  │
 ├──────────────────────────────────────────────────────────┤
 │  CronScheduler · PolymarketScanner · NotificationService │
+│  VoiceService · ImageRouter                              │
 ├──────────────────────────────────────────────────────────┤
 │              Sandbox · PluginManager · Skills             │
 └──────────────────────────────────────────────────────────┘
@@ -145,6 +179,8 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 | Discord | discord.js v14 |
 | AI SDK | openai · @anthropic-ai/sdk · @google/generative-ai |
 | 定时任务 | node-cron |
+| 语音合成 | edge-tts (Python) |
+| 视频处理 | FFmpeg / FFprobe |
 | 后端测试 | Jest + ts-jest |
 | 前端测试 | Vitest + Testing Library |
 | 构建 | tsc (后端) + Vite (前端) |
@@ -167,10 +203,10 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 - [x] 每日 Token 限额
 
 ### 工具系统
-- [x] 9 类内置工具：文件、网络、Shell、浏览器、Patch、Memory、SubAgent、Screen、Polymarket
+- [x] 13 类内置工具：文件、网络、Shell、浏览器、Patch、Memory、SubAgent、Screen、Polymarket、图片生成、文档生成、语音、视频编辑
 - [x] PolicyEngine 策略引擎（允许/拒绝/需审批）
 - [x] AuditLogger 审计日志
-- [x] 工具目录（按 Profile 分组）
+- [x] 工具目录（37 工具，15 分类，按 Profile 分组）
 - [x] 执行审批队列（生产模式人工审批）
 
 ### 多智能体
@@ -213,6 +249,33 @@ OpenPilot 是一个单进程一体化部署的 AI 智能体运行平台，支持
 - [x] 扫描摘要通知
 - [x] 系统告警通知
 - [x] 24h 去重（notified_at 字段）
+
+### 图片生成
+- [x] ImageRouter 多引擎路由（Qwen/Stability/OpenAI/本地SD）
+- [x] 自动保存到 ~/.openpilot/generated/
+- [x] PendingFiles 机制自动发送到 Channel
+
+### 文档生成
+- [x] PDF 生成（Markdown → HTML → PDF，支持 Puppeteer 渲染）
+- [x] PPT 生成（JSON slides → .pptx，支持主题配置）
+- [x] PendingFiles 机制自动发送到 Channel
+
+### 语音交互 (STT/TTS)
+- [x] VoiceService 统一语音服务
+- [x] STT 多引擎：Google Gemini、OpenAI Whisper、DashScope Qwen Omni
+- [x] TTS 多引擎：Edge TTS（免费）、OpenAI TTS
+- [x] 语音消息闭环（inbound 模式：语音进 → 语音出）
+- [x] OGG/Opus → MP3 自动转码（ffmpeg）
+- [x] DashScope SSE 流式响应解析
+
+### 视频编辑 (Phase 1 MVP)
+- [x] FFmpeg Guardian（Fail-Fast 依赖校验）
+- [x] video_probe_tool（ffprobe 元数据探测）
+- [x] video_edit_tool（Timeline JSON → FFmpeg 确定性渲染）
+- [x] Timeline JSON 校验器（格式、时间范围、变速范围）
+- [x] FFmpeg 命令构建器（trim、speed_up、add_subtitle）
+- [x] PendingFiles 机制自动发送到 Channel
+- [x] VideoConfig 配置集成（ffmpegPath、outputDir、renderTimeout）
 
 ### 多频道多智能体协同
 - [x] CommandLane 并发控制（按 lane 限流）
@@ -306,7 +369,7 @@ openpilot/
 │   │   ├── ToolExecutor.ts     # 执行器 + Hook 链
 │   │   ├── PolicyEngine.ts     # 策略引擎
 │   │   ├── auditHook.ts        # 审计日志
-│   │   ├── toolCatalog.ts      # 工具目录（29 工具，13 分类）
+│   │   ├── toolCatalog.ts      # 工具目录（37 工具，15 分类）
 │   │   ├── fileTools.ts        # 文件操作
 │   │   ├── networkTools.ts     # HTTP 请求
 │   │   ├── shellTools.ts       # Shell 命令
@@ -315,12 +378,18 @@ openpilot/
 │   │   ├── memoryTools.ts      # 持久记忆
 │   │   ├── screenTools.ts      # 屏幕截图/录制
 │   │   ├── polymarketTools.ts  # Polymarket 市场工具
+│   │   ├── imageTools.ts       # 图片生成（多引擎）
+│   │   ├── documentTools.ts    # 文档生成（PDF/PPT）
+│   │   ├── voiceTools.ts       # 语音工具（STT/TTS/状态）
+│   │   ├── videoTools.ts       # 视频编辑（探测/渲染）
 │   │   └── subAgentTools.ts    # 子智能体调用
 │   ├── cron/                   # 定时任务
 │   │   └── CronScheduler.ts    # Cron 调度器（SQLite 持久化）
 │   ├── services/               # 业务服务
 │   │   ├── PolymarketScanner.ts # 市场扫描 + AI 分析
-│   │   └── NotificationService.ts # 通知推送（Telegram/Discord）
+│   │   ├── NotificationService.ts # 通知推送（Telegram/Discord）
+│   │   ├── VoiceService.ts     # 语音服务（STT/TTS 多引擎）
+│   │   └── ImageRouter.ts      # 图片生成路由（多引擎）
 │   ├── skills/                 # 技能系统
 │   │   ├── community.ts        # 社区技能（ClawHub + SkillsMP）
 │   │   └── types.ts
@@ -422,6 +491,16 @@ cp .env.example .env
       telegram: { chatId: "your-chat-id" },
       minEdge: 0.10,
     },
+  },
+  // 语音配置
+  voice: {
+    stt: { model: "qwen3-omni-flash/qwen3-omni-flash", language: "zh" },
+    tts: { auto: "inbound", model: "edge/default", voice: "zh-CN-XiaoxiaoNeural" },
+  },
+  // 视频编辑配置
+  video: {
+    outputDir: "~/.openpilot/generated/video",
+    renderTimeout: 120000,
   },
 }
 ```
