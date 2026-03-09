@@ -231,59 +231,99 @@ export class VoiceService {
      * DashScope requires stream=true; supported audio formats: AMR, WAV, MP3, AAC, 3GP.
      * Telegram voice messages are OGG/Opus — we send as mp3 (DashScope is lenient with Opus-in-OGG).
      */
-    private async sttOpenAICompatible(
-      audio: Buffer, apiKey: string, baseUrl: string, model: string, language?: string,
-    ): Promise<STTResult> {
-      const base64Audio = audio.toString('base64');
-      const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    /**
+       * STT via OpenAI-compatible multimodal chat completions (DashScope Qwen Omni, etc.).
+       * DashScope requires stream=true; supported audio formats: AMR, WAV, MP3, AAC, 3GP.
+       * Telegram voice is OGG/Opus — convert to MP3 via ffmpeg before sending.
+       */
+      private async sttOpenAICompatible(
+        audio: Buffer, apiKey: string, baseUrl: string, model: string, language?: string,
+      ): Promise<STTResult> {
+        // Convert OGG/Opus to MP3 for DashScope compatibility
+        const mp3Audio = await this.convertToMp3(audio);
+        const base64Audio = mp3Audio.toString('base64');
+        const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-      const prompt = `请将以下音频转录为文字，只输出转录文本，不要输出任何其他内容。${language ? `音频语言为${language}。` : ''}`;
+        const prompt = `请将以下音频转录为文字，只输出转录文本，不要输出任何其他内容。${language ? `音频语言为${language}。` : ''}`;
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'input_audio', input_audio: { data: `data:audio/ogg;base64,${base64Audio}`, format: 'mp3' } },
-              { type: 'text', text: prompt },
-            ],
-          }],
-          modalities: ['text'],
-          stream: true,
-          stream_options: { include_usage: true },
-        }),
-      });
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'input_audio', input_audio: { data: base64Audio, format: 'mp3' } },
+                { type: 'text', text: prompt },
+              ],
+            }],
+            modalities: ['text'],
+            stream: true,
+            stream_options: { include_usage: true },
+          }),
+        });
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        throw new Error(`OpenAI-compatible STT failed (${baseUrl}): ${response.status} ${errText.slice(0, 300)}`);
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          throw new Error(`OpenAI-compatible STT failed (${baseUrl}): ${response.status} ${errText.slice(0, 300)}`);
+        }
+
+        // Parse SSE streaming response
+        const body = await response.text();
+        let fullText = '';
+        for (const line of body.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (payload === '[DONE]') break;
+          try {
+            const chunk = JSON.parse(payload);
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta) fullText += delta;
+          } catch {
+            // skip malformed chunks
+          }
+        }
+
+        return { text: fullText.trim() };
       }
 
-      // Parse SSE streaming response
-      const body = await response.text();
-      let fullText = '';
-      for (const line of body.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-        const payload = trimmed.slice(5).trim();
-        if (payload === '[DONE]') break;
+      /**
+       * Convert audio buffer (OGG/Opus or any format) to MP3 via ffmpeg.
+       * Falls back to original buffer if ffmpeg is not available.
+       */
+      private async convertToMp3(audio: Buffer): Promise<Buffer> {
         try {
-          const chunk = JSON.parse(payload);
-          const delta = chunk.choices?.[0]?.delta?.content;
-          if (delta) fullText += delta;
-        } catch {
-          // skip malformed chunks
+          const { execFile } = await import('child_process');
+          const { promisify } = await import('util');
+          const { tmpdir } = await import('os');
+          const { join } = await import('path');
+          const { writeFile, readFile, unlink } = await import('fs/promises');
+          const execFileAsync = promisify(execFile);
+
+          const id = Date.now().toString(36);
+          const inputPath = join(tmpdir(), `stt_in_${id}.ogg`);
+          const outputPath = join(tmpdir(), `stt_out_${id}.mp3`);
+
+          await writeFile(inputPath, audio);
+          await execFileAsync('ffmpeg', ['-i', inputPath, '-f', 'mp3', '-ar', '16000', '-ac', '1', '-y', outputPath], { timeout: 15000 });
+          const mp3 = await readFile(outputPath);
+
+          // Cleanup temp files
+          unlink(inputPath).catch(() => {});
+          unlink(outputPath).catch(() => {});
+
+          return mp3;
+        } catch (err: any) {
+          console.warn(`[VoiceService] ffmpeg conversion failed, sending raw audio: ${err.message}`);
+          return audio;
         }
       }
 
-      return { text: fullText.trim() };
-    }
 
 
 
