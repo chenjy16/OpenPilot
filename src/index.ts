@@ -35,6 +35,7 @@ import { registerPolymarketTools } from './tools/polymarketTools';
 import { registerImageTools, setImageRouter, setImagePendingFiles } from './tools/imageTools';
 import { registerDocumentTools, getPendingFilesRef, setDocumentConfig } from './tools/documentTools';
 import { registerVoiceTools, setVoiceServiceRef } from './tools/voiceTools';
+import { registerVideoTools, setVideoPendingFiles, setVideoConfig } from './tools/videoTools';
 import { ImageRouter } from './services/ImageRouter';
 import { closeBrowser } from './tools/browserTools';
 import { createSandbox } from './runtime/sandbox';
@@ -259,6 +260,11 @@ async function main(): Promise<void> {
   registerImageTools(toolExecutor);
   registerDocumentTools(toolExecutor);
   registerVoiceTools(toolExecutor);
+
+  // Video editing tools
+  setVideoPendingFiles(getPendingFilesRef());
+  setVideoConfig(appConfig);
+  registerVideoTools(toolExecutor);
 
   console.log(`[${new Date().toISOString()}] Tools registered: ${toolExecutor.getRegisteredToolNames().join(', ')}`);
   console.log(`[${new Date().toISOString()}] Image generation: ${imageRouter.isConfigured() ? '✓ configured' : '✗ not configured (set imageGeneration in config.json5)'}`);

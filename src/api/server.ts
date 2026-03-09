@@ -194,6 +194,15 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
       outputDir: { type: 'string', label: '输出目录', description: '生成文件保存路径' },
     },
   },
+  video: {
+    icon: '🎬', label: '视频编辑', description: '视频编辑与渲染配置：FFmpeg 路径、输出目录、超时',
+    fields: {
+      ffmpegPath: { type: 'string', label: 'FFmpeg 路径', description: 'FFmpeg 二进制路径（默认从 PATH 查找）' },
+      outputDir: { type: 'string', label: '输出目录', description: '渲染后视频保存路径' },
+      renderTimeout: { type: 'number', label: '渲染超时(ms)', description: '最大渲染时间，默认 120000' },
+      maxInputSize: { type: 'number', label: '最大输入(MB)', description: '最大输入文件大小，默认 500' },
+    },
+  },
   ui: {
     icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称',
   },

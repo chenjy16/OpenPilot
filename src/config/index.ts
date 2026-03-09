@@ -571,6 +571,24 @@ export interface ImageGenerationConfig {
   }>;
 }
 
+/** Video editing configuration */
+export interface VideoEditConfig {
+  /** FFmpeg binary path (default: auto-detect from PATH) */
+  ffmpegPath?: string;
+  /** Output directory for rendered videos */
+  outputDir?: string;
+  /** Render timeout in milliseconds (default: 120000) */
+  renderTimeout?: number;
+  /** Max input file size in MB (default: 500) */
+  maxInputSize?: number;
+  /** Video generation API config (Phase 3) */
+  generation?: {
+    provider?: 'kling';
+    apiKey?: string;
+    baseUrl?: string;
+  };
+}
+
 /** Polymarket / PolyOracle configuration */
 export interface PolymarketConfig {
   enabled?: boolean;
@@ -664,6 +682,8 @@ export interface AppConfig {
   documentGeneration?: DocumentGenerationConfig;
   /** Voice (STT/TTS) */
   voice?: VoiceConfig;
+  /** Video editing */
+  video?: VideoEditConfig;
   /** Polymarket / PolyOracle */
   polymarket?: PolymarketConfig;
   /** UI appearance */

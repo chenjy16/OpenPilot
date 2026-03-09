@@ -78,6 +78,17 @@ const CATALOG: ToolCatalogEntry[] = [
   // Polymarket (PolyOracle)
   { id: 'polymarket_trending', label: 'polymarket_trending', section: 'Polymarket', description: '扫描热门预测市场', emoji: '📡', verb: 'Scanning markets', profiles: ['full'], ownerOnly: true },
   { id: 'polymarket_market_detail', label: 'polymarket_market_detail', section: 'Polymarket', description: '获取市场详情与概率', emoji: '📊', verb: 'Fetching market', profiles: ['full'], ownerOnly: true },
+  // Image Generation
+  { id: 'image_generation', label: 'image_generation', section: 'Media', description: '文字生成图片', emoji: '🎨', verb: 'Generating image', profiles: ['full'], openclawGroup: true },
+  // Document Generation
+  { id: 'pdf_generation', label: 'pdf_generation', section: 'Documents', description: 'Markdown 生成 PDF', emoji: '📑', verb: 'Generating PDF', profiles: ['full'], openclawGroup: true },
+  { id: 'ppt_generation', label: 'ppt_generation', section: 'Documents', description: 'JSON 生成 PPT', emoji: '📊', verb: 'Generating PPT', profiles: ['full'], openclawGroup: true },
+  // Voice (STT/TTS)
+  { id: 'stt', label: 'stt', section: 'Voice', description: '语音转文字', emoji: '🎤', verb: 'Transcribing audio', profiles: ['full'], openclawGroup: true },
+  { id: 'voice_status', label: 'voice_status', section: 'Voice', description: '语音服务状态', emoji: '📋', verb: 'Checking voice', profiles: ['full'], openclawGroup: true },
+  // Video Editing
+  { id: 'video_probe', label: 'video_probe', section: 'Video', description: '探测视频元数据', emoji: '🔍', verb: 'Probing video', profiles: ['full'], openclawGroup: true },
+  { id: 'video_edit', label: 'video_edit', section: 'Video', description: '视频编辑渲染', emoji: '🎬', verb: 'Editing video', profiles: ['full'], openclawGroup: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -189,6 +200,14 @@ const CATALOG_TO_EXECUTOR: Record<string, string> = {
   screen_record: 'screenRecord',
   polymarket_trending: 'polymarket_trending',
   polymarket_market_detail: 'polymarket_market_detail',
+  image_generation: 'image_generation_tool',
+  pdf_generation: 'pdf_generation_tool',
+  ppt_generation: 'ppt_generation_tool',
+  stt: 'stt_tool',
+  tts: 'tts_tool',
+  voice_status: 'voice_status',
+  video_probe: 'video_probe_tool',
+  video_edit: 'video_edit_tool',
 };
 
 /** Resolve a catalog ID to the actual ToolExecutor tool name */
