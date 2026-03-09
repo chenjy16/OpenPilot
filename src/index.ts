@@ -34,6 +34,7 @@ import { registerScreenTools } from './tools/screenTools';
 import { registerPolymarketTools } from './tools/polymarketTools';
 import { registerImageTools, setImageRouter, setImagePendingFiles } from './tools/imageTools';
 import { registerDocumentTools, getPendingFilesRef, setDocumentConfig } from './tools/documentTools';
+import { registerVoiceTools, setVoiceServiceRef } from './tools/voiceTools';
 import { ImageRouter } from './services/ImageRouter';
 import { closeBrowser } from './tools/browserTools';
 import { createSandbox } from './runtime/sandbox';
@@ -148,7 +149,7 @@ async function main(): Promise<void> {
             name: m.name ?? m.id,
             api: (provCfg.api as any) ?? 'openai-completions',
             reasoning: m.reasoning ?? false,
-            input: ['text'],
+            input: (m.input as any[]) ?? ['text'],
             contextWindow: m.contextWindow ?? 128_000,
             defaultMaxTokens: m.maxTokens ?? 4096,
             defaultTemperature: 0.7,
@@ -257,6 +258,7 @@ async function main(): Promise<void> {
   setDocumentConfig(appConfig);
   registerImageTools(toolExecutor);
   registerDocumentTools(toolExecutor);
+  registerVoiceTools(toolExecutor);
 
   console.log(`[${new Date().toISOString()}] Tools registered: ${toolExecutor.getRegisteredToolNames().join(', ')}`);
   console.log(`[${new Date().toISOString()}] Image generation: ${imageRouter.isConfigured() ? '✓ configured' : '✗ not configured (set imageGeneration in config.json5)'}`);
@@ -343,17 +345,23 @@ async function main(): Promise<void> {
   const allBindings = await buildMergedBindings(agentManager, appConfig.bindings as any);
 
   // Initialize VoiceService for STT/TTS
+  // Prefer new voice config section, fall back to legacy messages.tts
+  const voiceConfig = appConfig.voice;
   const ttsConfig = appConfig.messages?.tts;
   const defaultModel = appConfig.agents?.defaults?.model?.primary ?? 'none';
   const supportsAudio = defaultModel !== 'none' && modelManager.hasAudioInput(defaultModel);
   const voiceService = new VoiceService({
-    ttsAuto: ttsConfig?.auto ?? 'inbound',
-    ttsProvider: (ttsConfig?.provider === 'openai' ? 'openai' : 'edge') as 'edge' | 'openai',
-    sttLanguage: appConfig.tools?.media?.audio?.language ?? 'zh',
-    maxTtsLength: ttsConfig?.maxTextLength ?? 2000,
+    ttsAuto: voiceConfig?.tts?.auto ?? ttsConfig?.auto ?? 'inbound',
+    ttsModel: voiceConfig?.tts?.model,
+    ttsVoice: voiceConfig?.tts?.voice,
+    sttLanguage: voiceConfig?.stt?.language ?? appConfig.tools?.media?.audio?.language ?? 'zh',
+    sttModel: voiceConfig?.stt?.model,
+    maxTtsLength: voiceConfig?.tts?.maxTextLength ?? ttsConfig?.maxTextLength ?? 2000,
   }, modelManager, appConfig);
   console.log(`[${new Date().toISOString()}] VoiceService initialized (TTS: ${ttsConfig?.auto ?? 'inbound'}, STT: default model '${defaultModel}' ${supportsAudio ? '✓ supports audio' : '✗ no audio input'})`);
 
+  // Wire VoiceService into voice tools
+  setVoiceServiceRef(voiceService);
   const channelManager = new ChannelManager({
     onMessage: async (msg) => {
       // Route channel messages to Agent via binding resolution

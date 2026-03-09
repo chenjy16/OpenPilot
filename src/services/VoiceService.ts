@@ -24,8 +24,10 @@ import type { AppConfig } from '../config/index';
 export interface VoiceConfig {
   ttsAuto?: 'off' | 'always' | 'inbound' | 'tagged';
   ttsProvider?: 'edge' | 'openai';
+  ttsModel?: string;
   ttsVoice?: string;
   sttLanguage?: string;
+  sttModel?: string;
   maxTtsLength?: number;
 }
 
@@ -58,6 +60,29 @@ export class VoiceService {
     this.appConfig = appConfig;
   }
 
+  /**
+   * Live-read voice config from appConfig (hot-update support).
+   * Falls back to constructor-time config for fields not in appConfig.voice.
+   */
+  private get liveSTTModel(): string | undefined {
+    return this.appConfig?.voice?.stt?.model || this.config.sttModel;
+  }
+  private get liveTTSModel(): string | undefined {
+    return this.appConfig?.voice?.tts?.model || this.config.ttsModel;
+  }
+  private get liveSTTLanguage(): string {
+    return this.appConfig?.voice?.stt?.language || this.config.sttLanguage || 'zh';
+  }
+  private get liveTTSAuto(): string {
+    return this.appConfig?.voice?.tts?.auto || this.config.ttsAuto || 'off';
+  }
+  private get liveTTSVoice(): string | undefined {
+    return this.appConfig?.voice?.tts?.voice || this.config.ttsVoice;
+  }
+  private get liveMaxTtsLength(): number {
+    return this.appConfig?.voice?.tts?.maxTextLength || this.config.maxTtsLength || 2000;
+  }
+
   /** Download audio from a URL and return as Buffer. */
   async downloadAudio(url: string): Promise<Buffer> {
     const controller = new AbortController();
@@ -72,52 +97,68 @@ export class VoiceService {
   }
 
   /**
-   * Transcribe audio to text using the default model.
-   * Zero-fallback: if the default model doesn't support audio input, throws immediately.
+   * Transcribe audio to text.
+   * Priority: voice.stt.model (live from appConfig) → agents.defaults.model.primary
+   * Zero-fallback: if chosen model doesn't support audio input, throws immediately.
    */
   async transcribe(audio: Buffer): Promise<STTResult> {
+    const sttModel = this.liveSTTModel;
     const defaultModel = this.appConfig?.agents?.defaults?.model?.primary;
-    if (!defaultModel) {
-      throw new Error('🎤 语音转文字失败：未配置默认模型。请在设置中配置默认模型。');
+    const chosenModel = sttModel || defaultModel;
+
+    if (!chosenModel) {
+      throw new Error('🎤 语音转文字失败：未配置 STT 模型，也未配置默认模型。请在"语音配置"中设置 STT 模型，或在"智能体配置"中设置默认模型。');
     }
 
     // ── Explicit Capability Assertion ──
-    if (!this.modelManager?.hasAudioInput(defaultModel)) {
+    if (!this.modelManager?.hasAudioInput(chosenModel)) {
+      if (sttModel) {
+        throw new Error(
+          `🎤 语音配置中指定的 STT 模型 "${chosenModel}" 不支持音频输入。\n` +
+          `请在"语音配置 → STT 模型"中切换到支持音频的模型（如 google/gemini-2.0-flash）。`
+        );
+      }
       throw new Error(
-        `🎤 当前默认模型 "${defaultModel}" 不支持语音输入。\n` +
-        `请切换到支持音频的模型（如 Google Gemini 系列），或在"智能体配置"中更改默认模型。`
+        `🎤 当前默认模型 "${chosenModel}" 不支持语音输入。\n` +
+        `请在"语音配置"中单独设置 STT 模型（如 google/gemini-2.0-flash），或切换默认模型。`
       );
     }
 
     // Resolve provider config
     let modelConfig;
     try {
-      modelConfig = this.modelManager!.getConfig(defaultModel);
+      modelConfig = this.modelManager!.getConfig(chosenModel);
     } catch {
-      throw new Error(`🎤 语音转文字失败：模型 "${defaultModel}" 配置异常。`);
+      throw new Error(`🎤 语音转文字失败：模型 "${chosenModel}" 配置异常。`);
     }
     if (!modelConfig) {
-      throw new Error(`🎤 语音转文字失败：无法获取模型 "${defaultModel}" 的配置。`);
+      throw new Error(`🎤 语音转文字失败：无法获取模型 "${chosenModel}" 的配置。`);
     }
 
     const provider = modelConfig.provider;
     const apiKey = modelConfig.apiKey;
-    const lang = this.config.sttLanguage ?? 'zh';
+    const lang = this.liveSTTLanguage;
 
-    console.log(`[VoiceService] STT via "${defaultModel}" (provider: ${provider})`);
+    console.log(`[VoiceService] STT via "${chosenModel}" (provider: ${provider})`);
 
     // ── Dispatch by provider ──
     if (provider === 'google' || provider.startsWith('gemini')) {
       return this.sttGemini(audio, apiKey, modelConfig.model, lang);
     }
 
-    if (provider === 'openai') {
+    if (provider === 'openai' && !modelConfig.baseUrl) {
       return this.sttWhisper(audio, apiKey, undefined, lang);
+    }
+
+    // OpenAI-compatible providers with custom baseUrl (DashScope Qwen Omni, etc.)
+    // These use multimodal chat completions with audio in messages
+    if (modelConfig.baseUrl) {
+      return this.sttOpenAICompatible(audio, apiKey, modelConfig.baseUrl, modelConfig.model, lang);
     }
 
     // Provider has audio capability declared but no STT implementation
     throw new Error(
-      `🎤 模型 "${defaultModel}" 声明支持音频输入，但提供商 "${provider}" 的 STT 尚未实现。`
+      `🎤 模型 "${chosenModel}" 声明支持音频输入，但提供商 "${provider}" 的 STT 尚未实现。`
     );
   }
 
@@ -176,19 +217,72 @@ export class VoiceService {
     return { text: text.trim() };
   }
 
+  /**
+   * STT via OpenAI-compatible multimodal chat completions (DashScope Qwen Omni, etc.).
+   * Sends audio as base64 input_audio in the messages array.
+   */
+  private async sttOpenAICompatible(
+    audio: Buffer, apiKey: string, baseUrl: string, model: string, language?: string,
+  ): Promise<STTResult> {
+    const base64Audio = audio.toString('base64');
+    const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+
+    const prompt = `Transcribe the following audio to text. Output ONLY the transcribed text, nothing else.${language ? ` The audio language is ${language}.` : ''}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'input_audio', input_audio: { data: base64Audio, format: 'ogg' } },
+            { type: 'text', text: prompt },
+          ],
+        }],
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`OpenAI-compatible STT failed (${baseUrl}): ${response.status} ${errText.slice(0, 300)}`);
+    }
+
+    const result = await response.json() as any;
+    const text = result.choices?.[0]?.message?.content ?? '';
+    return { text: text.trim() };
+  }
+
+
   /** Synthesize text to speech. Returns null if text is too long. */
   async synthesize(text: string): Promise<TTSResult | null> {
-    if (!text || text.length > (this.config.maxTtsLength ?? 2000)) return null;
+    if (!text || text.length > this.liveMaxTtsLength) return null;
+
+    // Resolve TTS engine from tts.model config (live)
+    const ttsModel = this.liveTTSModel;
+    let engine: 'edge' | 'openai' = 'edge';
+
+    if (ttsModel) {
+      if (ttsModel.startsWith('openai/')) {
+        engine = 'openai';
+      }
+      // All other models (including edge/* or unknown) default to edge
+    }
+
     return synthesize(text, {
-      engine: this.config.ttsProvider ?? 'edge',
-      voice: this.config.ttsVoice,
+      engine,
+      voice: this.liveTTSVoice,
       format: 'mp3',
     });
   }
 
   /** Should we auto-reply with voice for this message? */
   shouldAutoTTS(isVoiceInbound: boolean): boolean {
-    switch (this.config.ttsAuto) {
+    switch (this.liveTTSAuto) {
       case 'always': return true;
       case 'inbound': return isVoiceInbound;
       default: return false;
@@ -196,6 +290,13 @@ export class VoiceService {
   }
 
   getConfig(): VoiceConfig {
-    return { ...this.config };
+    return {
+      sttModel: this.liveSTTModel,
+      sttLanguage: this.liveSTTLanguage,
+      ttsAuto: this.liveTTSAuto as any,
+      ttsModel: this.liveTTSModel,
+      ttsVoice: this.liveTTSVoice,
+      maxTtsLength: this.liveMaxTtsLength,
+    };
   }
 }

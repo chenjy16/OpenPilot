@@ -421,6 +421,7 @@ export interface ModelsConfig {
       reasoning?: boolean;
       contextWindow?: number;
       maxTokens?: number;
+      input?: string[];
     }>;
   }>;
   bedrockDiscovery?: {
@@ -521,6 +522,23 @@ export interface EnvConfig {
 export interface MetaConfig {
   lastTouchedVersion?: string;
   lastTouchedAt?: string;
+}
+
+/** Voice (STT/TTS) configuration */
+export interface VoiceConfig {
+  stt?: {
+    enabled?: boolean;
+    language?: string;
+    /** Dedicated STT model (e.g. google/gemini-2.0-flash). Falls back to default model if not set. */
+    model?: string;
+  };
+  tts?: {
+    auto?: 'off' | 'always' | 'inbound' | 'tagged';
+    /** Dedicated TTS model (e.g. openai/tts-1, edge/default). Falls back to edge-tts if not set. */
+    model?: string;
+    voice?: string;
+    maxTextLength?: number;
+  };
 }
 
 /** Document generation (PDF/PPT) configuration */
@@ -644,6 +662,8 @@ export interface AppConfig {
   imageGeneration?: ImageGenerationConfig;
   /** Document generation (PDF/PPT) */
   documentGeneration?: DocumentGenerationConfig;
+  /** Voice (STT/TTS) */
+  voice?: VoiceConfig;
   /** Polymarket / PolyOracle */
   polymarket?: PolymarketConfig;
   /** UI appearance */

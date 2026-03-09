@@ -9,7 +9,10 @@ let _modelOptions: ModelOption[] = [];
 // Paths that should render as model selectors
 const MODEL_FIELD_PATHS = new Set([
   'agents.defaults.model.primary',
+  'voice.stt.model',
+  'voice.tts.model',
 ]);
+
 // Paths that should render as model multi-select (arrays)
 const MODEL_ARRAY_PATHS = new Set([
   'agents.defaults.model.fallbacks',
@@ -46,19 +49,20 @@ const SECTION_META: Record<string, { icon: string; label: string; description: s
   auth: { icon: '�', label: '认证 Profile', description: '模型提供商认证与退避策略', order: 21 },
   discovery: { icon: '�', label: '服务发现', description: 'mDNS 广播与广域发现', order: 22 },
   talk: { icon: '🎙️', label: '实时语音', description: 'Talk 实时语音模式', order: 23 },
-  imageGeneration: { icon: '🖼️', label: '图片生成', description: 'Provider 配置（Qwen/Stability/OpenAI/本地SD）', order: 24 },
-  documentGeneration: { icon: '📄', label: '文档生成', description: 'PDF/PPT 输出目录、渲染器、默认样式', order: 25 },
-  polymarket: { icon: '📈', label: 'PolyOracle', description: '预测市场扫描、信号阈值、通知', order: 26 },
-  ui: { icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称', order: 27 },
-  cli: { icon: '💻', label: 'CLI 配置', description: 'CLI 横幅与标语模式', order: 28 },
-  secrets: { icon: '🔒', label: '密钥管理', description: '密钥来源提供商', order: 29 },
-  env: { icon: '🌱', label: '环境变量', description: '环境变量注入与 Shell 导入', order: 30 },
-  meta: { icon: '📝', label: '配置元数据', description: '配置文件版本与时间戳', order: 31 },
-  apiKeys: { icon: '🔑', label: 'API 密钥', description: '环境变量设置', order: 32 },
-  nodeEnv: { icon: '⚙️', label: '运行环境', description: '环境标识', order: 33 },
-  logLevel: { icon: '📊', label: '全局日志级别', description: '日志级别', order: 34 },
-  databasePath: { icon: '💾', label: '数据库路径', description: 'SQLite 路径', order: 35 },
-  debug: { icon: '🐛', label: '调试模式', description: '调试输出', order: 36 },
+  voice: { icon: '🎤', label: '语音配置', description: 'STT 语音转文字 / TTS 文字转语音', order: 24 },
+  imageGeneration: { icon: '🖼️', label: '图片生成', description: 'Provider 配置（Qwen/Stability/OpenAI/本地SD）', order: 25 },
+  documentGeneration: { icon: '📄', label: '文档生成', description: 'PDF/PPT 输出目录、渲染器、默认样式', order: 26 },
+  polymarket: { icon: '📈', label: 'PolyOracle', description: '预测市场扫描、信号阈值、通知', order: 27 },
+  ui: { icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称', order: 28 },
+  cli: { icon: '💻', label: 'CLI 配置', description: 'CLI 横幅与标语模式', order: 29 },
+  secrets: { icon: '🔒', label: '密钥管理', description: '密钥来源提供商', order: 30 },
+  env: { icon: '🌱', label: '环境变量', description: '环境变量注入与 Shell 导入', order: 31 },
+  meta: { icon: '📝', label: '配置元数据', description: '配置文件版本与时间戳', order: 32 },
+  apiKeys: { icon: '🔑', label: 'API 密钥', description: '环境变量设置', order: 33 },
+  nodeEnv: { icon: '⚙️', label: '运行环境', description: '环境标识', order: 34 },
+  logLevel: { icon: '📊', label: '全局日志级别', description: '日志级别', order: 35 },
+  databasePath: { icon: '💾', label: '数据库路径', description: 'SQLite 路径', order: 36 },
+  debug: { icon: '🐛', label: '调试模式', description: '调试输出', order: 37 },
 };
 
 // Known enum fields for select rendering
@@ -101,6 +105,8 @@ const ENUM_FIELDS: Record<string, string[]> = {
   'messages.tts.provider': ['elevenlabs', 'openai', 'edge'],
   'discovery.mdns.mode': ['off', 'minimal', 'full'],
   'imageGeneration.provider': ['', 'qwen', 'openai', 'stability', 'local_sd'],
+  'voice.stt.language': ['zh', 'en', 'ja', 'ko'],
+  'voice.tts.auto': ['off', 'always', 'inbound', 'tagged'],
   'documentGeneration.pdf.renderer': ['html', 'puppeteer'],
   'documentGeneration.pdf.defaultPageSize': ['A4', 'A3', 'Letter', 'Legal'],
   'cli.banner.taglineMode': ['random', 'default', 'off'],

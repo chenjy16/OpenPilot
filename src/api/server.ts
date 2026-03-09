@@ -161,6 +161,18 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
   talk: {
     icon: '🎙️', label: '实时语音', description: 'Talk 实时语音模式提供商',
   },
+  voice: {
+    icon: '🎤', label: '语音配置', description: 'STT（语音转文字）和 TTS（文字转语音）配置',
+    fields: {
+      'stt.enabled': { type: 'boolean', label: '启用 STT', description: '启用语音转文字功能' },
+      'stt.model': { type: 'string', label: 'STT 模型', description: '语音转文字专用模型（如 google/gemini-2.0-flash），留空则使用默认模型' },
+      'stt.language': { type: 'select', label: 'STT 语言', options: ['zh', 'en', 'ja', 'ko'], description: '语音识别默认语言' },
+      'tts.auto': { type: 'select', label: 'TTS 自动回复', options: ['off', 'always', 'inbound', 'tagged'], description: '何时自动语音回复' },
+      'tts.model': { type: 'string', label: 'TTS 模型', description: 'TTS 引擎（如 edge/default、openai/tts-1），留空则使用 Edge TTS' },
+      'tts.voice': { type: 'string', label: '语音名称', description: '如 zh-CN-XiaoxiaoNeural、alloy' },
+      'tts.maxTextLength': { type: 'number', label: '最大文本长度', description: 'TTS 最大字符数（默认 2000）' },
+    },
+  },
   imageGeneration: {
     icon: '🖼️', label: '图片生成', description: '图片生成 Provider 配置（Qwen/Stability/OpenAI/本地SD）',
     fields: {
@@ -1609,6 +1621,17 @@ export class APIServer {
       if (!imgProviders.local_sd) imgProviders.local_sd = { endpoint: 'http://127.0.0.1:7860' };
       safe.imageGeneration.providers = imgProviders;
 
+      // Ensure voice config has default structure for UI editing
+      if (!safe.voice) {
+        safe.voice = {
+          stt: { enabled: true, model: '', language: 'zh' },
+          tts: { auto: 'off', model: '', voice: 'zh-CN-XiaoxiaoNeural', maxTextLength: 2000 },
+        };
+      } else {
+        if (safe.voice.stt && !('model' in safe.voice.stt)) safe.voice.stt.model = '';
+        if (safe.voice.tts && !('model' in safe.voice.tts)) safe.voice.tts.model = '';
+      }
+
       // Ensure documentGeneration has default structure for UI editing
       if (!safe.documentGeneration) {
         safe.documentGeneration = {
@@ -1638,6 +1661,17 @@ export class APIServer {
           }
         }
       }
+
+      // Ensure polymarket config has default structure for UI editing
+      if (!safe.polymarket) {
+        safe.polymarket = {
+          enabled: false,
+          scanLimit: 20,
+          minVolume: 10000,
+          signalThreshold: 0.1,
+        };
+      }
+
       res.status(200).json(safe);
     });
 
