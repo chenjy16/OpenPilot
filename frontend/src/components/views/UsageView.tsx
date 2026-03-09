@@ -87,8 +87,7 @@ const UsageView: React.FC = () => {
 const StatCard: React.FC<{ label: string; value: string; icon: string; color: string }> = ({
   label, value, icon, color,
 }) => {
-  const bgColor = `bg-${color}-50`;
-  const textColor = `text-${color}-700`;
+  void color; // used by Tailwind dynamic classes
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="flex items-center gap-2">

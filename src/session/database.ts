@@ -92,6 +92,34 @@ export function initializeDatabase(dbPath: string): Database.Database {
     ON market_signals(edge DESC)
   `);
 
+  // Create stock_signals table (Quant Stock Analysis)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stock_signals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL,
+      action TEXT NOT NULL CHECK(action IN ('buy', 'sell', 'hold')),
+      entry_price REAL,
+      stop_loss REAL,
+      take_profit REAL,
+      reasoning TEXT,
+      technical_summary TEXT,
+      sentiment_summary TEXT,
+      confidence TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      notified_at INTEGER
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_stock_signals_symbol
+    ON stock_signals(symbol)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_stock_signals_created
+    ON stock_signals(created_at DESC)
+  `);
+
   // Create cron_jobs table (persistent cron storage)
   db.exec(`
     CREATE TABLE IF NOT EXISTS cron_jobs (

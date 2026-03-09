@@ -89,6 +89,10 @@ const CATALOG: ToolCatalogEntry[] = [
   // Video Editing
   { id: 'video_probe', label: 'video_probe', section: 'Video', description: '探测视频元数据', emoji: '🔍', verb: 'Probing video', profiles: ['full'], openclawGroup: true },
   { id: 'video_edit', label: 'video_edit', section: 'Video', description: '视频编辑渲染', emoji: '🎬', verb: 'Editing video', profiles: ['full'], openclawGroup: true },
+  // Quant (Stock Analysis)
+  { id: 'stock_tech_analysis', label: 'stock_tech_analysis', section: 'Quant', description: '股票技术面分析', emoji: '📊', verb: 'Analyzing technicals', profiles: ['full'], ownerOnly: true },
+  { id: 'stock_sentiment', label: 'stock_sentiment', section: 'Quant', description: '股票消息面分析', emoji: '📰', verb: 'Analyzing sentiment', profiles: ['full'], ownerOnly: true },
+  { id: 'stock_deliver_alert', label: 'stock_deliver_alert', section: 'Quant', description: '股票信号投递', emoji: '🔔', verb: 'Delivering alert', profiles: ['full'], ownerOnly: true },
 ];
 
 // ---------------------------------------------------------------------------
@@ -139,6 +143,7 @@ const SECTION_TO_GROUP: Record<string, string> = {
   Media: 'media',
   Screen: 'screen',
   Polymarket: 'polymarket',
+  Quant: 'quant',
 };
 
 /** Expand tool group references (e.g. "group:fs" → ["read","write","edit","apply_patch"]) */
@@ -208,6 +213,9 @@ const CATALOG_TO_EXECUTOR: Record<string, string> = {
   voice_status: 'voice_status',
   video_probe: 'video_probe_tool',
   video_edit: 'video_edit_tool',
+  stock_tech_analysis: 'stock_tech_analysis',
+  stock_sentiment: 'stock_sentiment',
+  stock_deliver_alert: 'stock_deliver_alert',
 };
 
 /** Resolve a catalog ID to the actual ToolExecutor tool name */

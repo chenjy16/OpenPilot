@@ -14,6 +14,7 @@ export type NavTab =
   | 'nodes'
   | 'models'
   | 'polymarket'
+  | 'stocks'
   | 'config'
   | 'debug'
   | 'logs';
@@ -44,7 +45,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'agents', label: '智能体', icon: '🤖' },
       { id: 'skills', label: '技能', icon: '⚡' },
       { id: 'nodes', label: '节点', icon: '🖥️' },
-      { id: 'polymarket', label: 'PolyOracle', icon: '🔮' },
+    ],
+  },
+  {
+    label: 'Scenario Navigators',
+    tabs: [
+      { id: 'polymarket', label: 'Polymarket Copilot', icon: '🔮' },
+      { id: 'stocks', label: 'Quant Copilot', icon: '📈' },
     ],
   },
   {

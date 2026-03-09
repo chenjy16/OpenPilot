@@ -182,10 +182,17 @@ const AgentOverview: React.FC<{ agent: AgentInfo; onUpdate: () => void }> = ({ a
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<ModelOption[]>(FALLBACK_MODELS);
+  const [defaultModel, setDefaultModel] = useState('');
 
   useEffect(() => {
     get<any[]>('/models/configured')
       .then(data => setAvailableModels(data.map(m => ({ ref: m.ref, name: m.name, provider: m.providerLabel ?? m.provider }))))
+      .catch(() => {});
+    get<Record<string, any>>('/config')
+      .then(data => {
+        const dm = data?.agents?.defaults?.model?.primary;
+        if (dm) setDefaultModel(dm);
+      })
       .catch(() => {});
   }, []);
 
@@ -240,7 +247,7 @@ const AgentOverview: React.FC<{ agent: AgentInfo; onUpdate: () => void }> = ({ a
             <label className="mb-1 block text-xs text-gray-500">主模型</label>
             <select value={primaryModel} onChange={e => setPrimaryModel(e.target.value)}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-              <option value="">继承默认</option>
+              <option value="">继承全局默认{defaultModel ? ` (${defaultModel})` : ''}</option>
               {availableModels.map(m => <option key={m.ref} value={m.ref}>{m.name} ({m.provider})</option>)}
             </select>
           </div>

@@ -686,6 +686,13 @@ export interface AppConfig {
   video?: VideoEditConfig;
   /** Polymarket / PolyOracle */
   polymarket?: PolymarketConfig;
+  /** Stock Analysis / Quant Copilot */
+  stockAnalysis?: {
+    finnhubApiKey?: string;
+    watchlist?: string | string[];
+    model?: string;
+    signalThreshold?: number;
+  };
   /** UI appearance */
   ui?: UIConfig;
   /** CLI configuration */

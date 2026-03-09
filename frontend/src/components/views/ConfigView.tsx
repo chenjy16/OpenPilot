@@ -53,16 +53,17 @@ const SECTION_META: Record<string, { icon: string; label: string; description: s
   documentGeneration: { icon: '📄', label: '文档生成', description: 'PDF/PPT 输出目录、渲染器、默认样式', order: 26 },
   video: { icon: '🎬', label: '视频编辑', description: 'FFmpeg 路径、输出目录、渲染超时', order: 27 },
   polymarket: { icon: '📈', label: 'PolyOracle', description: '预测市场扫描、信号阈值、通知', order: 28 },
-  ui: { icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称', order: 29 },
-  cli: { icon: '💻', label: 'CLI 配置', description: 'CLI 横幅与标语模式', order: 30 },
-  secrets: { icon: '🔒', label: '密钥管理', description: '密钥来源提供商', order: 31 },
-  env: { icon: '🌱', label: '环境变量', description: '环境变量注入与 Shell 导入', order: 32 },
-  meta: { icon: '📝', label: '配置元数据', description: '配置文件版本与时间戳', order: 33 },
-  apiKeys: { icon: '🔑', label: 'API 密钥', description: '环境变量设置', order: 34 },
-  nodeEnv: { icon: '⚙️', label: '运行环境', description: '环境标识', order: 35 },
-  logLevel: { icon: '📊', label: '全局日志级别', description: '日志级别', order: 36 },
-  databasePath: { icon: '💾', label: '数据库路径', description: 'SQLite 路径', order: 37 },
-  debug: { icon: '🐛', label: '调试模式', description: '调试输出', order: 38 },
+  stockAnalysis: { icon: '📊', label: 'Quant Copilot', description: '量化股票分析：Finnhub API、自选股池、信号阈值', order: 29 },
+  ui: { icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称', order: 30 },
+  cli: { icon: '💻', label: 'CLI 配置', description: 'CLI 横幅与标语模式', order: 31 },
+  secrets: { icon: '🔒', label: '密钥管理', description: '密钥来源提供商', order: 32 },
+  env: { icon: '🌱', label: '环境变量', description: '环境变量注入与 Shell 导入', order: 33 },
+  meta: { icon: '📝', label: '配置元数据', description: '配置文件版本与时间戳', order: 34 },
+  apiKeys: { icon: '🔑', label: 'API 密钥', description: '环境变量设置', order: 35 },
+  nodeEnv: { icon: '⚙️', label: '运行环境', description: '环境标识', order: 36 },
+  logLevel: { icon: '📊', label: '全局日志级别', description: '日志级别', order: 37 },
+  databasePath: { icon: '💾', label: '数据库路径', description: 'SQLite 路径', order: 38 },
+  debug: { icon: '🐛', label: '调试模式', description: '调试输出', order: 39 },
 };
 
 // Known enum fields for select rendering
@@ -124,14 +125,16 @@ const ConfigView: React.FC = () => {
   const [originalRaw, setOriginalRaw] = useState('');
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [, setModelOptions] = useState<ModelOption[]>([]);
+  const [schema, setSchema] = useState<Record<string, any>>({});
 
   const fetchConfig = useCallback(async () => {
     try {
       setLoading(true);
-      const [data, models] = await Promise.all([
+      const [data, models, schemaData] = await Promise.all([
         get<Record<string, unknown>>('/config'),
         get<ModelOption[]>('/models').catch(() => [] as ModelOption[]),
+        get<Record<string, any>>('/config/schema').catch(() => ({} as Record<string, any>)),
       ]);
       setConfig(data);
       setOriginalConfig(JSON.parse(JSON.stringify(data)));
@@ -139,7 +142,7 @@ const ConfigView: React.FC = () => {
       setRawJson(raw);
       setOriginalRaw(raw);
       setModelOptions(models);
-      _modelOptions = models;
+      setSchema(schemaData);
       setError(null);
     } catch (err) {
       setError((err as Error).message);
@@ -335,6 +338,7 @@ const ConfigView: React.FC = () => {
                     label={meta.label}
                     description={meta.description}
                     value={value}
+                    schema={schema[key]}
                     onChange={(newVal) => setConfig(prev => prev ? { ...prev, [key]: newVal } : prev)}
                   />
                 );
@@ -361,8 +365,8 @@ function getEnumOptions(path: string): string[] | null {
 // Editable config section
 const ConfigSection: React.FC<{
   sectionKey: string; icon: string; label: string; description: string;
-  value: unknown; onChange: (v: unknown) => void;
-}> = ({ sectionKey, icon, label, description, value, onChange }) => {
+  value: unknown; onChange: (v: unknown) => void; schema?: any;
+}> = ({ sectionKey, icon, label, description, value, onChange, schema }) => {
   const [expanded, setExpanded] = useState(false);
   const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
   const isSimple = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
@@ -393,7 +397,7 @@ const ConfigSection: React.FC<{
           {isSimple ? (
             <FieldEditor path={sectionKey} value={value} onChange={onChange} />
           ) : isObject ? (
-            <NestedFields path={sectionKey} value={value as Record<string, unknown>} onChange={onChange} />
+            <NestedFields path={sectionKey} value={value as Record<string, unknown>} onChange={onChange} schema={schema} />
           ) : Array.isArray(value) ? (
             <ArrayField path={sectionKey} value={value as unknown[]} onChange={onChange} />
           ) : (
@@ -488,7 +492,7 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
           isMaskedVal ? 'border-gray-200 bg-gray-50 text-gray-400' : 'border-gray-300'
         } ${isPassword ? 'pr-14' : ''}`}
       />
-      {isPassword && value && (
+      {isPassword && value ? (
         <button
           type="button"
           onClick={() => setShowPassword(!showPassword)}
@@ -496,7 +500,7 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
         >
           {showPassword ? '🙈' : '👁'}
         </button>
-      )}
+      ) : null}
       {isMaskedVal && !showPassword && (
         <p className="mt-0.5 text-xs text-green-600">✓ 已配置（输入新值可覆盖）</p>
       )}
@@ -506,14 +510,25 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
 
 // Nested object fields with recursive rendering
 const NestedFields: React.FC<{
-  path: string; value: Record<string, unknown>; onChange: (v: unknown) => void;
-}> = ({ path, value, onChange }) => {
+  path: string; value: Record<string, unknown>; onChange: (v: unknown) => void; schema?: any;
+}> = ({ path, value, onChange, schema }) => {
   // Guard against null/undefined values
   if (!value || typeof value !== 'object') {
     return <span className="text-xs text-gray-400 font-mono">{JSON.stringify(value)}</span>;
   }
   const entries = Object.entries(value);
   const isApiKeys = path === 'apiKeys';
+  const fields = schema?.fields as Record<string, { type?: string; label?: string; description?: string }> | undefined;
+
+  // Helper: look up schema field info by key, supporting dot-notation (e.g. 'stt.enabled' for nested paths)
+  const getFieldMeta = (key: string) => {
+    if (!fields) return undefined;
+    // Direct match first
+    if (fields[key]) return fields[key];
+    // Try relative path from section root (e.g. path='voice', key='stt' → look for 'stt.*')
+    // For nested keys rendered flat, the schema uses dot notation like 'stt.enabled'
+    return undefined;
+  };
 
   const handleFieldChange = (key: string, newVal: unknown) => {
     onChange({ ...value, [key]: newVal });
@@ -526,15 +541,29 @@ const NestedFields: React.FC<{
         const isNested = v !== null && typeof v === 'object' && !Array.isArray(v);
         const isArray = Array.isArray(v);
         const isSimple = typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+        const meta = getFieldMeta(k);
+
+        // For nested objects, collect sub-field schema entries with dot prefix
+        const nestedSchema = isNested && fields ? {
+          fields: Object.fromEntries(
+            Object.entries(fields)
+              .filter(([fk]) => fk.startsWith(k + '.'))
+              .map(([fk, fv]) => [fk.slice(k.length + 1), fv])
+          ),
+        } : undefined;
 
         return (
           <div key={k}>
             <label className="mb-1 flex items-center gap-1 text-xs font-medium text-gray-500">
-              <span>{k}</span>
+              <span>{meta?.label || k}</span>
+              {meta?.label && <span className="text-gray-300 font-normal">{k}</span>}
               {getEnumOptions(fieldPath) && (
                 <span className="text-gray-300">enum</span>
               )}
             </label>
+            {meta?.description && (
+              <p className="mb-1 text-xs text-gray-400">{meta.description}</p>
+            )}
             {v === null || v === undefined ? (
               <span className="text-xs text-gray-400 font-mono italic">(未设置)</span>
             ) : isApiKeys ? (
@@ -551,7 +580,7 @@ const NestedFields: React.FC<{
             ) : isArray ? (
               <ArrayField path={fieldPath} value={v as unknown[]} onChange={newVal => handleFieldChange(k, newVal)} />
             ) : isNested ? (
-              <NestedBlock path={fieldPath} value={v as Record<string, unknown>} onChange={newVal => handleFieldChange(k, newVal)} />
+              <NestedBlock path={fieldPath} value={v as Record<string, unknown>} onChange={newVal => handleFieldChange(k, newVal)} schema={nestedSchema} />
             ) : (
               <span className="text-xs text-gray-400 font-mono">{JSON.stringify(v)}</span>
             )}
@@ -564,8 +593,8 @@ const NestedFields: React.FC<{
 
 // Collapsible nested block for deep objects
 const NestedBlock: React.FC<{
-  path: string; value: Record<string, unknown>; onChange: (v: unknown) => void;
-}> = ({ path, value, onChange }) => {
+  path: string; value: Record<string, unknown>; onChange: (v: unknown) => void; schema?: any;
+}> = ({ path, value, onChange, schema }) => {
   const [open, setOpen] = useState(false);
   const keyCount = Object.keys(value).length;
 
@@ -577,7 +606,7 @@ const NestedBlock: React.FC<{
       </button>
       {open && (
         <div className="border-t border-gray-100 px-3 py-2">
-          <NestedFields path={path} value={value} onChange={onChange} />
+          <NestedFields path={path} value={value} onChange={onChange} schema={schema} />
         </div>
       )}
     </div>

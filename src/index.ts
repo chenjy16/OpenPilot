@@ -58,7 +58,11 @@ import {
 import { CronScheduler } from './cron/CronScheduler';
 import { PolymarketScanner } from './services/PolymarketScanner';
 import { NotificationService } from './services/NotificationService';
+import { StockScanner } from './services/StockScanner';
 import { VoiceService } from './services/VoiceService';
+import { registerStockTools } from './tools/stockTools';
+import { execSync } from 'child_process';
+import * as path from 'path';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -120,8 +124,56 @@ const log = createLogger('Main');
 // Bootstrap
 // ---------------------------------------------------------------------------
 
+/**
+ * Ensure Python dependencies for stock analysis are installed.
+ * Uses a local venv at scripts/.venv to avoid PEP 668 system-package restrictions.
+ */
+function ensurePythonDeps(): void {
+  const scriptsDir = path.join(__dirname, '..', 'scripts');
+  const reqFile = path.join(scriptsDir, 'requirements.txt');
+  const venvDir = path.join(scriptsDir, '.venv');
+  const venvPython = path.join(venvDir, 'bin', 'python3');
+
+  // If venv already exists and yfinance is importable, skip
+  if (require('fs').existsSync(venvPython)) {
+    try {
+      execSync(`"${venvPython}" -c "import yfinance"`, { stdio: 'ignore', timeout: 10_000 });
+      console.log(`[${new Date().toISOString()}] Python deps: ✓ venv ready`);
+      return;
+    } catch {
+      // venv exists but deps missing — reinstall below
+    }
+  }
+
+  // Create venv if needed
+  if (!require('fs').existsSync(venvPython)) {
+    console.log(`[${new Date().toISOString()}] Python deps: creating venv at scripts/.venv...`);
+    try {
+      execSync(`python3 -m venv "${venvDir}"`, { stdio: 'inherit', timeout: 30_000 });
+    } catch (err: any) {
+      console.warn(`[${new Date().toISOString()}] Python deps: ✗ venv creation failed (${err.message})`);
+      return;
+    }
+  }
+
+  // Install deps into venv
+  console.log(`[${new Date().toISOString()}] Python deps: installing from requirements.txt...`);
+  try {
+    // Install pandas_ta without deps first (numba may not support current Python version)
+    execSync(`"${venvPython}" -m pip install --no-deps pandas_ta`, { stdio: 'inherit', timeout: 60_000 });
+    // Then install yfinance and pandas (which pull their own deps)
+    execSync(`"${venvPython}" -m pip install yfinance pandas`, { stdio: 'inherit', timeout: 120_000 });
+    console.log(`[${new Date().toISOString()}] Python deps: ✓ installed successfully`);
+  } catch (err: any) {
+    console.warn(`[${new Date().toISOString()}] Python deps: ✗ install failed (${err.message}). Stock tech analysis may not work.`);
+  }
+}
+
 async function main(): Promise<void> {
   console.log(`[${new Date().toISOString()}] Starting AI Assistant MVP (OpenPilot)...`);
+
+  // 0. Ensure Python dependencies for stock analysis
+  ensurePythonDeps();
 
   // 1. Initialize SQLite database
   const db = initializeDatabase(config.databasePath);
@@ -252,6 +304,12 @@ async function main(): Promise<void> {
   registerScreenTools(toolExecutor);
   registerPolymarketTools(toolExecutor);
 
+  // Stock analysis tools (channelManager wired later via stockTools deps)
+  registerStockTools(toolExecutor, {
+    sandbox,
+    db,
+  });
+
   // Image & Document generation tools
   const imageRouter = new ImageRouter(appConfig);
   setImageRouter(imageRouter);
@@ -274,6 +332,79 @@ async function main(): Promise<void> {
   const agentManager = new AgentManager();
   await agentManager.initialize();
   console.log(`[${new Date().toISOString()}] AgentManager initialized (${(await agentManager.listAgents()).length} agents)`);
+
+  // 9a. Create Quant_Agent if it doesn't exist (Task 7.1 + 7.2)
+  const existingQuantAgent = await agentManager.getAgent('quant-analyst');
+  if (!existingQuantAgent) {
+    await agentManager.createAgent({
+      id: 'quant-analyst',
+      name: 'Quant Analyst',
+      description: '量化分析智能体 — 技术面分析、消息面分析、综合研判、信号投递',
+      model: { primary: 'deepseek/deepseek-reasoner', fallbacks: ['openai/o1-mini'] },
+      toolProfile: 'minimal',
+      tools: { allow: ['stock_tech_analysis', 'stock_sentiment', 'stock_deliver_alert'] },
+    });
+    console.log(`[${new Date().toISOString()}] Quant_Agent created (quant-analyst)`);
+  }
+
+  // Set Quant_Agent System Prompt (IDENTITY.md)
+  await agentManager.setFile('quant-analyst', 'IDENTITY.md', [
+    '# 量化分析师 (Quant Analyst)',
+    '',
+    '## 角色',
+    '你是一位专业的量化分析师，专注于股票技术面与消息面的综合研判。',
+    '你的职责是基于工具返回的真实数据进行客观分析，生成可操作的交易信号。',
+    '',
+    '## 核心约束',
+    '',
+    '### 数据获取优先',
+    '- 你 **必须** 先调用 `stock_tech_analysis` 工具获取技术面数据（价格、均线、RSI、MACD、布林带等）',
+    '- 你 **必须** 再调用 `stock_sentiment` 工具获取消息面数据（财报、评级、新闻）',
+    '- **严禁** 在未调用工具的情况下捏造任何数字、价格、指标或数据',
+    '- **严禁** 凭空编造新闻标题、分析师评级或财报数据',
+    '- 如果工具调用失败，必须如实报告错误，不得用虚构数据替代',
+    '',
+    '### 执行顺序',
+    '每次分析必须严格按照以下顺序执行：',
+    '',
+    '1. **技术面分析**：调用 `stock_tech_analysis` 获取技术指标数据',
+    '2. **消息面分析**：调用 `stock_sentiment` 获取市场情绪与新闻数据',
+    '3. **综合研判**：基于技术面和消息面数据进行交叉验证与综合判断',
+    '4. **信号投递**：调用 `stock_deliver_alert` 将分析结论以 Signal_Card 格式投递',
+    '',
+    '不得跳过任何步骤，不得调换顺序。',
+    '',
+    '## 分析框架',
+    '',
+    '### 技术面研判要点',
+    '- 趋势判断：SMA20 与 SMA50 的交叉关系（金叉/死叉）',
+    '- 动量指标：RSI(14) 超买(>70)/超卖(<30) 区域判断',
+    '- MACD 信号：MACD 线与信号线的交叉、柱状图方向',
+    '- 波动区间：布林带上下轨与当前价格的相对位置',
+    '- 成交量：与均量的对比，确认趋势有效性',
+    '',
+    '### 消息面研判要点',
+    '- 财报数据：营收、利润是否超预期',
+    '- 分析师评级：共识方向与目标价变化',
+    '- 突发新闻：是否存在重大利好/利空事件',
+    '',
+    '### 综合研判原则',
+    '- 技术面与消息面信号一致时，提高置信度',
+    '- 技术面与消息面信号矛盾时，降低置信度并在 reasoning 中说明分歧',
+    '- 数据不足或工具返回错误时，置信度设为 low',
+    '',
+    '## 输出格式',
+    '',
+    '最终通过 `stock_deliver_alert` 投递的 Signal_Card 必须包含：',
+    '- **symbol**：股票代码',
+    '- **action**：操作建议（buy / sell / hold）',
+    '- **entry_price**：建议入场价（必须基于工具返回的真实价格）',
+    '- **stop_loss**：止损位（基于技术面支撑/阻力位计算）',
+    '- **take_profit**：止盈位（基于技术面支撑/阻力位计算）',
+    '- **reasoning**：逻辑支撑摘要（包含技术面和消息面关键依据）',
+    '- **confidence**：置信度（high / medium / low）',
+  ].join('\n'));
+  log.info('Quant_Agent IDENTITY.md configured');
 
   // 10. Create AIRuntime
   const aiRuntime = new AIRuntime(sessionManager, modelManager, toolExecutor);
@@ -493,6 +624,87 @@ async function main(): Promise<void> {
     }
   });
 
+  // Initialize StockScanner
+  // Apply FINNHUB_API_KEY from config if not already in env
+  const stockConfig = appConfig.stockAnalysis;
+  if (stockConfig?.finnhubApiKey && !process.env.FINNHUB_API_KEY) {
+    process.env.FINNHUB_API_KEY = stockConfig.finnhubApiKey;
+  }
+  const stockWatchlist = stockConfig?.watchlist
+    ? (typeof stockConfig.watchlist === 'string'
+        ? stockConfig.watchlist.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
+        : stockConfig.watchlist)
+    : [];
+  const stockScanner = new StockScanner(db, aiRuntime, {
+    watchlist: stockWatchlist,
+    model: stockConfig?.model || polyConfig?.model,
+    signalThreshold: stockConfig?.signalThreshold,
+  }, agentManager);
+
+  // Register the stock-scan handler (Task 6.1 + 6.2)
+  cronScheduler.registerHandler('stock-scan', async (job) => {
+    // Read watchlist and config from CronJob.config
+    if (job.config) {
+      const updates: Record<string, any> = {};
+      if (Array.isArray(job.config.watchlist)) {
+        updates.watchlist = job.config.watchlist;
+      }
+      if (job.config.model) {
+        updates.model = job.config.model;
+      }
+      if (job.config.signalThreshold != null) {
+        updates.signalThreshold = job.config.signalThreshold;
+      }
+      if (Object.keys(updates).length > 0) {
+        stockScanner.updateConfig(updates);
+      }
+    }
+
+    const result = await stockScanner.runFullScan();
+
+    // Determine confidence threshold for Signal_Card push
+    const threshold = job.config?.signalThreshold ?? 0.6;
+    const confidenceMap: Record<string, number> = { high: 0.9, medium: 0.6, low: 0.3 };
+
+    // Push Signal_Card for signals meeting the threshold
+    for (const signal of result.signals) {
+      const score = confidenceMap[signal.confidence] ?? 0;
+      if (score >= threshold) {
+        const card = [
+          '📈 量化分析信号',
+          '',
+          `🏷️ ${signal.symbol}`,
+          `📊 操作建议: ${signal.action}`,
+          `💰 建议入场: $${signal.entry_price}`,
+          `🛑 止损位: $${signal.stop_loss}`,
+          `🎯 止盈位: $${signal.take_profit}`,
+          `🔒 置信度: ${signal.confidence}`,
+          '',
+          `💡 逻辑支撑:\n${signal.reasoning}`,
+          '',
+          `⏰ ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`,
+        ].join('\n');
+        await notificationService.sendSystemAlert(card);
+      }
+    }
+
+    // Send scan summary
+    await notificationService.sendScanSummary({
+      marketsScanned: result.scannedCount,
+      signalsGenerated: result.signals.length,
+      opportunities: result.signals.filter(s => (confidenceMap[s.confidence] ?? 0) >= threshold).length,
+      errors: result.errors.length,
+      durationMs: result.durationMs,
+    });
+
+    // Send error alerts
+    if (result.errors.length > 0) {
+      await notificationService.sendSystemAlert(
+        `股票扫描出现 ${result.errors.length} 个错误:\n${result.errors.slice(0, 3).join('\n')}`,
+      );
+    }
+  });
+
   // Seed default polymarket-scan job if none exists and polymarket is enabled
   if (polyConfig?.enabled !== false) {
     const existingJobs = cronScheduler.listJobs();
@@ -521,6 +733,9 @@ async function main(): Promise<void> {
     notificationService,
     cronScheduler,
   });
+
+  // Inject StockScanner into API server
+  server.setStockServices({ scanner: stockScanner });
 
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';

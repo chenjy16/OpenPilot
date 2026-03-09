@@ -16,6 +16,7 @@ import CronView from '../views/CronView';
 import ConfigView from '../views/ConfigView';
 import ModelsView from '../views/ModelsView';
 import PolymarketView from '../views/PolymarketView';
+import StockAnalysisView from '../views/StockAnalysisView';
 
 const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   chat: <ChatView />,
@@ -31,6 +32,7 @@ const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   nodes: <NodesView />,
   models: <ModelsView />,
   polymarket: <PolymarketView />,
+  stocks: <StockAnalysisView />,
   config: <ConfigView />,
 };
 

@@ -42,6 +42,7 @@ import {
 } from '../skills/community';
 import type { CommunitySource } from '../skills/types';
 import { AgentManager } from '../agents/AgentManager';
+import type { StockScanner } from '../services/StockScanner';
 import {
   upsertPairingRequest,
   approveChannelPairingCode,
@@ -188,6 +189,14 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
       signalThreshold: { type: 'number', label: '信号阈值', description: 'AI概率与市场概率的最小差值' },
     },
   },
+  stockAnalysis: {
+    icon: '📊', label: 'Quant Copilot', description: '量化股票分析配置：Finnhub API Key、自选股池、信号阈值',
+    fields: {
+      finnhubApiKey: { type: 'password', label: 'Finnhub API Key', description: '消息面分析所需的 Finnhub API 密钥（免费注册 finnhub.io）' },
+      watchlist: { type: 'string', label: '自选股池', description: '逗号分隔的股票代码，如 AAPL,GOOGL,MSFT' },
+      signalThreshold: { type: 'number', label: '信号阈值', description: '置信度阈值（0-1），低于此值不推送' },
+    },
+  },
   documentGeneration: {
     icon: '📄', label: '文档生成', description: 'PDF / PPT 生成配置：输出目录、渲染器、默认样式',
     fields: {
@@ -295,6 +304,8 @@ export class APIServer {
   private notificationService?: any;
   /** CronScheduler for job management */
   private cronScheduler?: any;
+  /** StockScanner for stock analysis triggers */
+  private stockScanner?: StockScanner;
 
   constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
@@ -429,6 +440,31 @@ export class APIServer {
     if (incoming.imageGeneration) {
       // ImageRouter reads from appConfig directly, so the merged value is already effective
       console.log(`[Config] Image generation config updated (provider: ${this.appConfig.imageGeneration?.provider ?? 'none'})`);
+    }
+
+    // 8. StockAnalysis config — apply Finnhub API key to env
+    if (incoming.stockAnalysis) {
+      const stockCfg = this.appConfig.stockAnalysis;
+      if (stockCfg?.finnhubApiKey && typeof stockCfg.finnhubApiKey === 'string' && !stockCfg.finnhubApiKey.startsWith('••••')) {
+        process.env.FINNHUB_API_KEY = stockCfg.finnhubApiKey;
+        console.log('[Config] FINNHUB_API_KEY updated from stockAnalysis config');
+      }
+      // Update StockScanner watchlist/threshold if changed
+      if (this.stockScanner) {
+        const updates: Record<string, any> = {};
+        if (stockCfg?.watchlist) {
+          const list = typeof stockCfg.watchlist === 'string'
+            ? stockCfg.watchlist.split(',').map((s: string) => s.trim().toUpperCase()).filter(Boolean)
+            : stockCfg.watchlist;
+          updates.watchlist = list;
+        }
+        if (stockCfg?.signalThreshold != null) {
+          updates.signalThreshold = Number(stockCfg.signalThreshold);
+        }
+        if (Object.keys(updates).length > 0) {
+          this.stockScanner.updateConfig(updates);
+        }
+      }
     }
   }
 
@@ -1681,6 +1717,19 @@ export class APIServer {
         };
       }
 
+      // Ensure stockAnalysis config has default structure for UI editing
+      if (!safe.stockAnalysis) {
+        safe.stockAnalysis = {
+          finnhubApiKey: '',
+          watchlist: '',
+          signalThreshold: 0.6,
+        };
+      }
+      // Mask finnhubApiKey
+      if (safe.stockAnalysis?.finnhubApiKey && typeof safe.stockAnalysis.finnhubApiKey === 'string' && safe.stockAnalysis.finnhubApiKey.length > 0) {
+        safe.stockAnalysis.finnhubApiKey = '••••' + safe.stockAnalysis.finnhubApiKey.slice(-4);
+      }
+
       res.status(200).json(safe);
     });
 
@@ -2019,6 +2068,113 @@ export class APIServer {
           await this.notificationService.notifySignals(result.opportunities);
         }
         res.status(200).json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // ----- Stock Analysis endpoints -----
+
+    // POST /api/stocks/analyze — single stock analysis
+    this.app.post('/api/stocks/analyze', async (req: Request, res: Response) => {
+      const { symbol, model } = req.body;
+      if (!symbol || typeof symbol !== 'string' || symbol.trim().length === 0) {
+        res.status(400).json({ error: 'symbol is required and must be a non-empty string' });
+        return;
+      }
+      const trimmed = symbol.trim().toUpperCase();
+      if (!/^[A-Z]{1,10}$/.test(trimmed)) {
+        res.status(400).json({ error: 'symbol must be 1-10 uppercase letters' });
+        return;
+      }
+      if (!this.stockScanner) {
+        res.status(503).json({ error: 'StockScanner not initialized' });
+        return;
+      }
+      try {
+        const result = await this.stockScanner.analyzeSingle(trimmed, model || undefined);
+        res.status(200).json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // GET /api/stocks/signals — query stock_signals with optional filters
+    this.app.get('/api/stocks/signals', (req: Request, res: Response) => {
+      try {
+        const { symbol, from, to } = req.query;
+        // Validate from/to if provided
+        if (from !== undefined && (isNaN(Number(from)) || String(from).trim() === '')) {
+          res.status(400).json({ error: 'from must be a valid number (unix timestamp)' });
+          return;
+        }
+        if (to !== undefined && (isNaN(Number(to)) || String(to).trim() === '')) {
+          res.status(400).json({ error: 'to must be a valid number (unix timestamp)' });
+          return;
+        }
+
+        const db = (this.sessionManager as any).db;
+        const conditions: string[] = [];
+        const params: any[] = [];
+
+        if (symbol && typeof symbol === 'string' && symbol.trim().length > 0) {
+          conditions.push('symbol = ?');
+          params.push(symbol.toString().trim().toUpperCase());
+        }
+        if (from !== undefined) {
+          conditions.push('created_at >= ?');
+          params.push(Number(from));
+        }
+        if (to !== undefined) {
+          conditions.push('created_at <= ?');
+          params.push(Number(to));
+        }
+
+        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const rows = db.prepare(`SELECT * FROM stock_signals ${where} ORDER BY created_at DESC LIMIT 100`).all(...params);
+        res.status(200).json(rows);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // POST /api/stocks/scan — trigger full watchlist scan
+    this.app.post('/api/stocks/scan', async (_req: Request, res: Response) => {
+      if (!this.stockScanner) {
+        res.status(503).json({ error: 'StockScanner not initialized' });
+        return;
+      }
+      try {
+        const result = await this.stockScanner.runFullScan();
+        res.status(200).json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // GET /api/stocks/watchlist — return current watchlist
+    this.app.get('/api/stocks/watchlist', (_req: Request, res: Response) => {
+      const watchlist = this.appConfig?.stocks?.watchlist ?? [];
+      res.status(200).json({ watchlist });
+    });
+
+    // PUT /api/stocks/watchlist — update watchlist
+    this.app.put('/api/stocks/watchlist', (req: Request, res: Response) => {
+      const { watchlist } = req.body;
+      if (!Array.isArray(watchlist) || !watchlist.every((s: any) => typeof s === 'string')) {
+        res.status(400).json({ error: 'watchlist is required and must be an array of strings' });
+        return;
+      }
+      try {
+        if (!this.appConfig) this.appConfig = {};
+        if (!this.appConfig.stocks) this.appConfig.stocks = {};
+        this.appConfig.stocks.watchlist = watchlist;
+        // Persist config
+        try {
+          const { saveAppConfig } = require('../config/index');
+          saveAppConfig(this.appConfig);
+        } catch { /* config persistence optional */ }
+        res.status(200).json({ watchlist });
       } catch (err: any) {
         res.status(500).json({ error: err.message });
       }
@@ -2430,6 +2586,14 @@ export class APIServer {
     this.polymarketScanner = services.scanner;
     this.notificationService = services.notificationService;
     this.cronScheduler = services.cronScheduler;
+  }
+
+  // -----------------------------------------------------------------------
+  // Stock service injection
+  // -----------------------------------------------------------------------
+
+  setStockServices(services: { scanner?: StockScanner }): void {
+    this.stockScanner = services.scanner;
   }
 
   // -----------------------------------------------------------------------
