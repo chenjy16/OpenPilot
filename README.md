@@ -58,6 +58,20 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 - [x] **Auto Python Environment** — Python venv and dependencies are automatically installed on startup
 - [x] **Agent Model Routing** — Uses the model configured for the `quant-analyst` agent, with fallback chain support
 
+### 📈 Auto Quant Trading — Automated Quantitative Trading Pipeline
+- [x] **Signal Evaluation** — Confidence-based filtering (high→0.9, medium→0.6, low→0.3) with configurable threshold
+- [x] **Auto Order Execution** — Signals automatically converted to orders via Longport broker API
+- [x] **Quantity Calculation** — Supports fixed quantity, fixed amount, and Kelly formula sizing modes
+- [x] **Stop-Loss / Take-Profit** — Automatic monitoring with configurable check intervals, triggers market sell orders
+- [x] **Trade Notifications** — Order creation, fill, failure, stop-loss trigger, and risk alerts pushed to Telegram/Discord
+- [x] **Paper / Live Mode** — Paper mode routes through Longport's simulated API; live mode uses real account (same codebase, different Access Token)
+- [x] **Signal Deduplication** — Configurable dedup window prevents duplicate orders for the same signal
+- [x] **Strategy Engine** — Technical indicator strategy scanning and backtesting
+- [x] **Portfolio Management** — Position tracking and P&L analysis
+- [x] **Risk Control** — Pre-order risk checks (position limits, daily loss limits, order size limits)
+- [x] **Trading Dashboard** — Real-time order list, pipeline status, stop-loss monitors, auto-trading config panel
+- [x] **Audit Trail** — All trading operations logged with full request/response details
+
 ### ⏰ Scheduled Task Scheduling
 - [x] **Cron Scheduler** — Persistent scheduled task system based on node-cron
 - [x] **Database Storage** — Task definitions stored in SQLite, manageable via UI
@@ -128,6 +142,8 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 | Create PPT presentations | Describe outline → AI generates slide JSON → auto-generates .pptx |
 | Send voice messages to AI | Send voice on Telegram → STT transcription → AI processes → voice reply |
 | Edit video clips | Send video + "trim 1:20-1:40" → AI generates Timeline → FFmpeg renders |
+| Auto quant trading | Stock scan → AI signal → confidence filter → auto order → stop-loss monitor → notification |
+| Paper trading test | Configure paper mode → orders route to Longport simulated API → verify strategy without real money |
 
 ---
 
@@ -163,11 +179,14 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 │          │           │ Document  │                       │
 │          │           │ Voice     │                       │
 │          │           │ Video     │                       │
+│          │           │ Trading   │                       │
 ├──────────┴───────────┴───────────┴───────────────────────┤
 │  AgentManager · SubagentRegistry · PolicyEngine · Audit  │
 ├──────────────────────────────────────────────────────────┤
 │  CronScheduler · PolymarketScanner · StockScanner        │
 │  NotificationService · VoiceService · ImageRouter        │
+│  AutoTradingPipeline · TradingGateway · StopLossManager  │
+│  SignalEvaluator · StrategyEngine · PortfolioManager     │
 ├──────────────────────────────────────────────────────────┤
 │              Sandbox · PluginManager · Skills             │
 └──────────────────────────────────────────────────────────┘
@@ -192,8 +211,9 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 | Scheduled Tasks | node-cron |
 | Voice Synthesis | edge-tts (Python) |
 | Stock Analysis | yfinance + pandas (Python) |
+| Trading | longport SDK (Longport OpenAPI) |
 | Video Processing | FFmpeg / FFprobe |
-| Backend Testing | Jest + ts-jest |
+| Backend Testing | Jest + ts-jest + fast-check (property-based) |
 | Frontend Testing | Vitest + Testing Library |
 | Build | tsc (backend) + Vite (frontend) |
 
@@ -215,7 +235,7 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 - [x] Daily token quota
 
 ### Tool System
-- [x] 14 built-in tool categories: File, Network, Shell, Browser, Patch, Memory, SubAgent, Screen, Polymarket, Stock, Image, Document, Voice, Video
+- [x] 14 built-in tool categories: File, Network, Shell, Browser, Patch, Memory, SubAgent, Screen, Polymarket, Stock, Trading, Image, Document, Voice, Video
 - [x] PolicyEngine (allow/deny/require-approval)
 - [x] AuditLogger audit logging
 - [x] Tool catalog (38+ tools, 16 categories, grouped by Profile)
@@ -257,6 +277,25 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 - [x] Agent-level model routing (quant-analyst agent config → fallback chain → auto-detect)
 - [x] Stock analysis tools registered in tool catalog
 - [x] Unit tests and property-based tests
+
+### Auto Quant Trading — Automated Trading Pipeline
+- [x] AutoTradingPipeline: signal polling → evaluation → order → stop-loss → notification
+- [x] SignalEvaluator: confidence filtering (high/medium/low → numeric) + dedup window
+- [x] QuantityCalculator: fixed_quantity / fixed_amount / kelly_formula sizing modes
+- [x] StopLossManager: register, monitor (configurable interval), trigger, restore from DB
+- [x] TradeNotifier: order/fill/fail/stop-loss/risk notifications via NotificationService
+- [x] TradingGateway: unified entry point, paper/live mode routing, risk check, audit logging
+- [x] LongportAdapter: Longport OpenAPI SDK integration, symbol normalization (AAPL→AAPL.US), connection reuse
+- [x] OrderManager: order CRUD, status transitions, daily stats
+- [x] RiskController: position limits, daily loss limits, order size limits
+- [x] PaperTradingEngine: local paper engine fallback (when no broker credentials)
+- [x] StrategyEngine: technical indicator strategy scanning and backtesting
+- [x] PortfolioManager: position tracking and P&L analysis
+- [x] SignalTracker: signal lifecycle management
+- [x] Trading API endpoints (config, pipeline status, signals, stop-loss, orders, account, positions)
+- [x] Trading Dashboard UI (orders, pipeline status, auto-trading panel, stop-loss monitors)
+- [x] CronView: scheduler job display with edit, toggle, and manual trigger
+- [x] Property-based tests for all core modules (fast-check)
 
 ### Scheduled Task System
 - [x] CronScheduler (node-cron + SQLite persistence)
@@ -310,7 +349,7 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 - [x] Wildcard accountId binding
 
 ### API Gateway
-- [x] REST API: 50+ endpoints (sessions, chat, models, agents, channels, config, skills, cron, polymarket, stocks, etc.)
+- [x] REST API: 60+ endpoints (sessions, chat, models, agents, channels, config, skills, cron, polymarket, stocks, trading, etc.)
 - [x] WebSocket streaming chat (stream_start → stream_chunk → tool_call_start → tool_call_result → stream_end)
 - [x] Concurrent request guard (no parallel requests for the same session)
 - [x] Request rate limiting + input validation + security middleware (Helmet)
@@ -328,10 +367,13 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 - [x] Cron scheduled task management
 - [x] PolyOracle dashboard (markets, signals, cron, notification settings, about)
 - [x] Quant Copilot dashboard (stock analysis, technical indicators, AI signals)
+- [x] Trading Dashboard (order list, pipeline status, auto-trading config, stop-loss monitors)
+- [x] Portfolio view (position tracking, P&L)
+- [x] Cron scheduler management (legacy + DB-backed jobs, edit, toggle, manual trigger)
 - [x] Usage statistics
 - [x] Audit log viewer
 - [x] System status overview
-- [x] Scenario Navigators menu group (PolyOracle + Quant Copilot)
+- [x] Scenario Navigators menu group (PolyOracle + Quant Copilot + Trading Dashboard + Portfolio)
 
 ### Configuration System
 - [x] JSON5 config file (~/.openpilot/config.json5)
@@ -348,13 +390,14 @@ OpenPilot is a single-process, all-in-one AI agent runtime platform supporting m
 - [x] One-click install
 
 ### Test Coverage
-- [x] Backend: 27+ test suites, 484+ test cases passing
-- [x] Frontend: 20 test suites, 136 test cases passing
+- [x] Backend: 40+ test suites, 970+ test cases passing
+- [x] Frontend: 20 test suites, 154 test cases passing
 - [x] Multi-agent collaboration tests (single-channel 21 cases + cross-channel 20 cases)
 - [x] Discord integration tests (43 cases)
 - [x] E2E production readiness tests
 - [x] StockScanner unit tests + property-based tests
 - [x] Stock tools unit tests + property-based tests
+- [x] Trading module: 12 test suites (unit + property-based tests with fast-check)
 - [x] Tool catalog tests
 
 ## Project Structure
@@ -364,7 +407,8 @@ openpilot/
 ├── src/                        # Backend source code
 │   ├── index.ts                # Entry point, full bootstrap flow
 │   ├── api/                    # Express API gateway + WebSocket
-│   │   ├── server.ts           # 50+ REST endpoints + WS streaming
+│   │   ├── server.ts           # 60+ REST endpoints + WS streaming
+│   │   ├── tradingRoutes.ts    # Trading API endpoints (orders, config, pipeline, stop-loss)
 │   │   └── middleware.ts       # Rate limiting, input validation, security
 │   ├── runtime/                # AI runtime
 │   │   ├── AIRuntime.ts        # Core execution engine (retry, failover, concurrency)
@@ -417,9 +461,26 @@ openpilot/
 │   ├── services/               # Business services
 │   │   ├── PolymarketScanner.ts # Market scanning + AI analysis
 │   │   ├── StockScanner.ts     # Stock technical analysis + AI signals
+│   │   ├── StrategyEngine.ts   # Technical indicator strategy engine
+│   │   ├── PortfolioManager.ts # Position tracking + P&L analysis
+│   │   ├── SignalTracker.ts    # Signal lifecycle management
 │   │   ├── NotificationService.ts # Push notifications (Telegram/Discord)
 │   │   ├── VoiceService.ts     # Voice service (STT/TTS multi-engine)
-│   │   └── ImageRouter.ts      # Image generation routing (multi-engine)
+│   │   ├── ImageRouter.ts      # Image generation routing (multi-engine)
+│   │   └── trading/            # Automated trading system
+│   │       ├── types.ts        # Trading type definitions
+│   │       ├── tradingSchema.ts # DB schema (orders, stop-loss, audit, etc.)
+│   │       ├── AutoTradingPipeline.ts # Signal polling + order orchestration
+│   │       ├── TradingGateway.ts # Unified entry point (paper/live routing)
+│   │       ├── LongportAdapter.ts # Longport broker API adapter
+│   │       ├── SignalEvaluator.ts # Confidence filtering + dedup
+│   │       ├── QuantityCalculator.ts # Order sizing (fixed/kelly)
+│   │       ├── StopLossManager.ts # Stop-loss/take-profit monitoring
+│   │       ├── TradeNotifier.ts # Trade notification formatting
+│   │       ├── OrderManager.ts  # Order CRUD + status transitions
+│   │       ├── RiskController.ts # Pre-order risk checks
+│   │       ├── PaperTradingEngine.ts # Local paper engine fallback
+│   │       └── PositionSyncer.ts # Position sync with broker
 │   ├── skills/                 # Skill system
 │   │   ├── community.ts        # Community skills (ClawHub + SkillsMP)
 │   │   └── types.ts
@@ -432,19 +493,21 @@ openpilot/
 │   └── logger.ts               # Structured logging
 ├── scripts/                    # Python scripts
 │   ├── stock_analysis.py       # Technical indicator calculation (SMA, RSI, MACD, BB)
+│   ├── backtest_engine.py      # Strategy backtesting engine
 │   └── requirements.txt        # Python dependencies (yfinance, pandas)
 ├── frontend/                   # Frontend Control UI
 │   ├── src/
 │   │   ├── App.tsx             # Main app + routing
 │   │   ├── components/
 │   │   │   ├── chat/           # Chat components (message list, input, tool calls)
+│   │   │   ├── charts/         # Chart components (K-line chart)
 │   │   │   ├── session/        # Session list
 │   │   │   ├── model/          # Model selector
 │   │   │   ├── common/         # Common components (confirm dialog, error banner, progress bar)
 │   │   │   ├── layout/         # Layout (sidebar, topbar)
-│   │   │   ├── views/          # Page views (16+)
+│   │   │   ├── views/          # Page views (20+: Chat, Sessions, Trading Dashboard, Auto Trading, etc.)
 │   │   │   └── tools/          # Audit log component
-│   │   ├── stores/             # Zustand state management
+│   │   ├── stores/             # Zustand state management (uiStore, tradingStore)
 │   │   ├── services/           # API client
 │   │   ├── hooks/              # Custom hooks
 │   │   └── types/              # Frontend types
@@ -496,6 +559,10 @@ cp .env.example .env
 # (Optional) Configure Finnhub API Key for stock analysis:
 #   FINNHUB_API_KEY=...
 #   (Can also be set via the Web UI under Quant Copilot config section)
+
+# (Optional) Configure Longport for auto quant trading:
+#   Credentials are configured via the Web UI Trading Config panel
+#   (app_key, app_secret, paper_access_token from https://open.longbridge.com)
 ```
 
 Advanced configuration uses JSON5 format, located at `~/.openpilot/config.json5`:
@@ -654,6 +721,14 @@ CMD ["node", "dist/index.js"]
 | Polymarket | `GET /api/polymarket/signals` | AI signals |
 | Polymarket | `POST /api/polymarket/scan` | Manual scan trigger |
 | Stocks | `POST /api/stocks/analyze` | Stock technical analysis + AI signal |
+| Trading | `GET /api/trading/orders` | Order list (with filter) |
+| Trading | `POST /api/trading/orders` | Place order |
+| Trading | `GET/PUT /api/trading/config` | Trading config (mode, auto-trade, quantity, etc.) |
+| Trading | `GET /api/trading/account` | Account info (paper or live) |
+| Trading | `GET /api/trading/positions` | Current positions |
+| Trading | `GET /api/trading/pipeline/status` | Auto-trading pipeline status |
+| Trading | `GET /api/trading/pipeline/signals` | Recent processed signals |
+| Trading | `GET /api/trading/stop-loss` | Active stop-loss monitors |
 | Usage | `GET /api/usage` | Token usage statistics |
 | Audit | `GET /api/audit-logs` | Tool audit logs |
 
