@@ -63,6 +63,19 @@ import { VoiceService } from './services/VoiceService';
 import { registerStockTools } from './tools/stockTools';
 import { execSync } from 'child_process';
 import * as path from 'path';
+import { initTradingTables } from './services/trading/tradingSchema';
+import { OrderManager } from './services/trading/OrderManager';
+import { RiskController } from './services/trading/RiskController';
+import { PaperTradingEngine } from './services/trading/PaperTradingEngine';
+import { TradingGateway } from './services/trading/TradingGateway';
+import { PositionSyncer } from './services/trading/PositionSyncer';
+import { LongportAdapter } from './services/trading/LongportAdapter';
+import { PortfolioManager } from './services/PortfolioManager';
+import { SignalEvaluator } from './services/trading/SignalEvaluator';
+import { StopLossManager } from './services/trading/StopLossManager';
+import { TradeNotifier } from './services/trading/TradeNotifier';
+import { AutoTradingPipeline } from './services/trading/AutoTradingPipeline';
+import { StrategyEngine } from './services/StrategyEngine';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -734,8 +747,63 @@ async function main(): Promise<void> {
     cronScheduler,
   });
 
-  // Inject StockScanner into API server
-  server.setStockServices({ scanner: stockScanner });
+  // Inject StockScanner + Sandbox into API server
+  server.setStockServices({ scanner: stockScanner, sandbox });
+
+  // 15. Initialize trading module
+  initTradingTables(db);
+  const tradingOrderManager = new OrderManager(db);
+  const tradingRiskController = new RiskController(db);
+  tradingRiskController.initDefaultRules();
+  const paperTradingEngine = new PaperTradingEngine(db, {
+    initial_capital: 1000000,
+    commission_rate: 0.0003,
+  });
+  const tradingGateway = new TradingGateway(db, tradingOrderManager, tradingRiskController, paperTradingEngine, new LongportAdapter());
+
+  // 15a. Initialize auto-trading modules
+  const tradeNotifier = new TradeNotifier(notificationService);
+  const signalEvaluator = new SignalEvaluator(db);
+  const stopLossManager = new StopLossManager(db, tradingGateway, tradeNotifier);
+  const strategyEngine = new StrategyEngine(db, sandbox);
+  const autoTradingPipeline = new AutoTradingPipeline(
+    db,
+    tradingGateway,
+    signalEvaluator,
+    stopLossManager,
+    tradeNotifier,
+    strategyEngine,
+  );
+
+  // Restore active stop-loss monitoring from database (Requirement 4.8)
+  stopLossManager.restoreFromDb();
+
+  // Start auto-trading pipeline if enabled (Requirements 7.3, 7.4)
+  const pipelineConfig = autoTradingPipeline.getConfig();
+  if (pipelineConfig.auto_trade_enabled) {
+    autoTradingPipeline.start();
+    console.log(`[${new Date().toISOString()}] AutoTradingPipeline started (signal polling active)`);
+  } else {
+    console.log(`[${new Date().toISOString()}] AutoTradingPipeline idle (auto_trade_enabled=false)`);
+  }
+
+  server.setTradingServices({
+    gateway: tradingGateway,
+    riskController: tradingRiskController,
+    orderManager: tradingOrderManager,
+    pipeline: autoTradingPipeline,
+    stopLossManager,
+    db,
+  });
+
+  // Connect signal auto-trading (if StrategyEngine exists)
+  // tradingGateway.handleSignal will be called when strategy signals are generated
+
+  // Start position syncer
+  const portfolioManager = new PortfolioManager(db);
+  const positionSyncer = new PositionSyncer(portfolioManager, tradingGateway);
+  positionSyncer.start();
+  console.log(`[${new Date().toISOString()}] Trading module initialized (paper mode)`);
 
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';
@@ -755,6 +823,9 @@ async function main(): Promise<void> {
 
   const shutdown = (signal: string): void => {
     console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down gracefully...`);
+    autoTradingPipeline.stop();
+    stopLossManager.stopMonitoring();
+    positionSyncer.stop();
     cronScheduler.stop();
     server.stop();
     channelManager.disconnectAll().catch(() => {});

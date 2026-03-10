@@ -47,6 +47,13 @@ const validSignalArb: fc.Arbitrary<StockSignalResult> = fc.record({
   confidence: confidenceArb,
   technical_summary: fc.string({ minLength: 1, maxLength: 300 }),
   sentiment_summary: fc.string({ minLength: 1, maxLength: 300 }),
+  outcome: fc.constantFrom('pending' as const, 'hit_tp' as const, 'hit_sl' as const, 'expired' as const),
+  outcome_at: fc.option(fc.integer({ min: 1_700_000_000, max: 1_710_000_000 }), { nil: null }),
+  scores: fc.record({
+    technical_score: fc.option(fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }), { nil: null }),
+    sentiment_score: fc.option(fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }), { nil: null }),
+    overall_score: fc.option(fc.double({ min: 0, max: 100, noNaN: true, noDefaultInfinity: true }), { nil: null }),
+  }),
 });
 
 // ---------------------------------------------------------------------------
@@ -66,6 +73,11 @@ function createInMemoryDb(): Database.Database {
     technical_summary TEXT,
     sentiment_summary TEXT,
     confidence TEXT,
+    outcome TEXT DEFAULT 'pending' CHECK(outcome IN ('pending', 'hit_tp', 'hit_sl', 'expired')),
+    outcome_at INTEGER,
+    technical_score REAL,
+    sentiment_score REAL,
+    overall_score REAL,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     notified_at INTEGER
   )`);
@@ -85,6 +97,11 @@ const AI_RESPONSE_JSON = {
   take_profit: 210.0,
   reasoning: 'RSI oversold, MACD golden cross',
   confidence: 'high',
+  scores: {
+    technical_score: 75,
+    sentiment_score: 60,
+    overall_score: 69,
+  },
 };
 
 function makeMockAiRuntime(overrides?: {

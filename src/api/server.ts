@@ -43,6 +43,17 @@ import {
 import type { CommunitySource } from '../skills/types';
 import { AgentManager } from '../agents/AgentManager';
 import type { StockScanner } from '../services/StockScanner';
+import { StrategyEngine } from '../services/StrategyEngine';
+import { PortfolioManager } from '../services/PortfolioManager';
+import { SignalTracker } from '../services/SignalTracker';
+import type { ExecutionSandbox } from '../runtime/sandbox';
+import { createTradingRoutes } from './tradingRoutes';
+import type { TradingGateway } from '../services/trading/TradingGateway';
+import type { RiskController } from '../services/trading/RiskController';
+import type { OrderManager } from '../services/trading/OrderManager';
+import type { AutoTradingPipeline } from '../services/trading/AutoTradingPipeline';
+import type { StopLossManager } from '../services/trading/StopLossManager';
+import type Database from 'better-sqlite3';
 import {
   upsertPairingRequest,
   approveChannelPairingCode,
@@ -306,6 +317,20 @@ export class APIServer {
   private cronScheduler?: any;
   /** StockScanner for stock analysis triggers */
   private stockScanner?: StockScanner;
+  /** StrategyEngine for strategy CRUD and backtesting */
+  private strategyEngine?: StrategyEngine;
+  /** PortfolioManager for portfolio CRUD and metrics */
+  private portfolioManager?: PortfolioManager;
+  /** SignalTracker for signal performance stats */
+  private signalTracker?: SignalTracker;
+  /** ExecutionSandbox for running Python scripts */
+  private executionSandbox?: ExecutionSandbox;
+  /** TradingGateway for trading operations */
+  private tradingGateway?: TradingGateway;
+  /** RiskController for risk management */
+  private tradingRiskController?: RiskController;
+  /** OrderManager for order lifecycle */
+  private tradingOrderManager?: OrderManager;
 
   constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
@@ -2180,6 +2205,389 @@ export class APIServer {
       }
     });
 
+    // ----- Validation helpers for new stock endpoints -----
+    const validateSymbol = (symbol: any): string | null => {
+      if (!symbol || typeof symbol !== 'string' || symbol.trim().length === 0) return null;
+      const trimmed = symbol.trim().toUpperCase();
+      if (!/^[A-Z]{1,10}$/.test(trimmed)) return null;
+      return trimmed;
+    };
+
+    const validationError = (res: Response, message: string) => {
+      res.status(400).json({ error: 'VALIDATION_ERROR', message });
+    };
+
+    // ----- Resolve venv Python for stock scripts -----
+    const venvPython = 'scripts/.venv/bin/python3';
+    const stockPython = require('fs').existsSync(venvPython) ? venvPython : 'python3';
+
+    // ----- GET /api/stocks/history/:symbol — OHLCV history -----
+    this.app.get('/api/stocks/history/:symbol', async (req: Request, res: Response) => {
+      const symbol = validateSymbol(req.params.symbol);
+      if (!symbol) {
+        validationError(res, 'symbol must be 1-10 uppercase letters');
+        return;
+      }
+      if (!this.executionSandbox) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'Execution sandbox not initialized' });
+        return;
+      }
+      const timeframe = req.query.timeframe as string || 'daily';
+      if (!['daily', 'weekly', 'monthly'].includes(timeframe)) {
+        validationError(res, 'timeframe must be daily, weekly, or monthly');
+        return;
+      }
+      const period = req.query.period as string || '3mo';
+      try {
+        const result = await this.executionSandbox.exec(
+          `${stockPython} scripts/stock_analysis.py ${symbol} --timeframe ${timeframe} --history --period ${period}`,
+          { timeoutMs: 30000 },
+        );
+        const data = JSON.parse(result.stdout);
+        if (data.error) {
+          res.status(502).json({ error: 'SCRIPT_ERROR', message: data.message || data.error });
+          return;
+        }
+        res.status(200).json(data);
+      } catch (err: any) {
+        res.status(502).json({ error: 'SCRIPT_ERROR', message: err.message });
+      }
+    });
+
+    // ----- POST /api/stocks/backtest — trigger strategy backtest -----
+    this.app.post('/api/stocks/backtest', async (req: Request, res: Response) => {
+      const { strategy_id, strategy, symbol, start, end, capital, commission, slippage } = req.body;
+      if (!strategy_id && !strategy) {
+        validationError(res, 'strategy_id or strategy is required');
+        return;
+      }
+      const sym = validateSymbol(symbol);
+      if (!sym) {
+        validationError(res, 'symbol must be 1-10 uppercase letters');
+        return;
+      }
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!start || !dateRegex.test(start)) {
+        validationError(res, 'start date is required and must be YYYY-MM-DD format');
+        return;
+      }
+      if (!end || !dateRegex.test(end)) {
+        validationError(res, 'end date is required and must be YYYY-MM-DD format');
+        return;
+      }
+      if (!this.strategyEngine) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'StrategyEngine not initialized' });
+        return;
+      }
+      try {
+        let strategyDef = strategy;
+        if (strategy_id) {
+          const found = this.strategyEngine.getStrategy(Number(strategy_id));
+          if (!found) {
+            res.status(404).json({ error: 'NOT_FOUND', message: `Strategy ${strategy_id} not found` });
+            return;
+          }
+          strategyDef = found;
+        }
+        const result = await this.strategyEngine.runBacktest({
+          strategy: strategyDef,
+          symbol: sym,
+          start,
+          end,
+          capital: capital || 100000,
+          commission: commission || 0.001,
+          slippage: slippage || 0.001,
+        });
+        res.status(200).json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    // ----- /api/stocks/strategies CRUD -----
+    this.app.get('/api/stocks/strategies', (_req: Request, res: Response) => {
+      if (!this.strategyEngine) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'StrategyEngine not initialized' });
+        return;
+      }
+      try {
+        const strategies = this.strategyEngine.listStrategies();
+        res.status(200).json(strategies);
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    this.app.post('/api/stocks/strategies', (req: Request, res: Response) => {
+      if (!this.strategyEngine) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'StrategyEngine not initialized' });
+        return;
+      }
+      const { name, description, entry_conditions, exit_conditions, stop_loss_rule, take_profit_rule } = req.body;
+      if (!name || typeof name !== 'string' || name.trim().length === 0) {
+        validationError(res, 'name is required and must be a non-empty string');
+        return;
+      }
+      if (!entry_conditions || !exit_conditions || !stop_loss_rule || !take_profit_rule) {
+        validationError(res, 'entry_conditions, exit_conditions, stop_loss_rule, and take_profit_rule are required');
+        return;
+      }
+      try {
+        const created = this.strategyEngine.createStrategy({
+          name: name.trim(),
+          description: description || '',
+          entry_conditions,
+          exit_conditions,
+          stop_loss_rule,
+          take_profit_rule,
+          enabled: true,
+        });
+        res.status(201).json(created);
+      } catch (err: any) {
+        if (err.message && err.message.includes('UNIQUE')) {
+          res.status(409).json({ error: 'CONFLICT', message: `Strategy name '${name}' already exists` });
+        } else {
+          res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+        }
+      }
+    });
+
+    this.app.put('/api/stocks/strategies/:id', (req: Request, res: Response) => {
+      if (!this.strategyEngine) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'StrategyEngine not initialized' });
+        return;
+      }
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        validationError(res, 'Strategy ID must be a positive integer');
+        return;
+      }
+      try {
+        const updated = this.strategyEngine.updateStrategy(id, req.body);
+        res.status(200).json(updated);
+      } catch (err: any) {
+        if (err.message && err.message.includes('not found')) {
+          res.status(404).json({ error: 'NOT_FOUND', message: err.message });
+        } else if (err.message && err.message.includes('UNIQUE')) {
+          res.status(409).json({ error: 'CONFLICT', message: err.message });
+        } else {
+          res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+        }
+      }
+    });
+
+    this.app.delete('/api/stocks/strategies/:id', (req: Request, res: Response) => {
+      if (!this.strategyEngine) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'StrategyEngine not initialized' });
+        return;
+      }
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        validationError(res, 'Strategy ID must be a positive integer');
+        return;
+      }
+      try {
+        this.strategyEngine.deleteStrategy(id);
+        res.status(200).json({ ok: true });
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    // ----- /api/stocks/portfolio CRUD -----
+    this.app.get('/api/stocks/portfolio', (_req: Request, res: Response) => {
+      if (!this.portfolioManager) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'PortfolioManager not initialized' });
+        return;
+      }
+      try {
+        // Attempt to derive daily returns from backtest_results for Sharpe/MaxDrawdown
+        let dailyReturns: number[] | undefined;
+        let portfolioValues: number[] | undefined;
+        try {
+          const db = (this.sessionManager as any).db;
+          if (db) {
+            const backtestRows = db.prepare(
+              `SELECT trades_json FROM backtest_results ORDER BY rowid DESC LIMIT 20`
+            ).all() as Array<{ trades_json: string }>;
+            if (backtestRows && backtestRows.length > 0) {
+              const allReturns: number[] = [];
+              for (const row of backtestRows) {
+                try {
+                  const trades = JSON.parse(row.trades_json);
+                  for (const t of trades) {
+                    if (typeof t.pnl_pct === 'number') allReturns.push(t.pnl_pct);
+                  }
+                } catch { /* skip malformed */ }
+              }
+              if (allReturns.length >= 2) {
+                dailyReturns = allReturns;
+                // Build equity curve for max drawdown
+                let equity = 100000;
+                portfolioValues = [equity];
+                for (const r of allReturns) {
+                  equity *= (1 + r);
+                  portfolioValues.push(equity);
+                }
+              }
+            }
+          }
+        } catch { /* backtest data unavailable — metrics will be null */ }
+
+        const metrics = this.portfolioManager.getMetrics(dailyReturns, portfolioValues);
+        res.status(200).json(metrics);
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    this.app.post('/api/stocks/portfolio', (req: Request, res: Response) => {
+      if (!this.portfolioManager) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'PortfolioManager not initialized' });
+        return;
+      }
+      const { symbol, quantity, cost_price, current_price } = req.body;
+      const sym = validateSymbol(symbol);
+      if (!sym) {
+        validationError(res, 'symbol must be 1-10 uppercase letters');
+        return;
+      }
+      if (typeof quantity !== 'number' || quantity <= 0) {
+        validationError(res, 'quantity must be a positive number');
+        return;
+      }
+      if (typeof cost_price !== 'number' || cost_price <= 0) {
+        validationError(res, 'cost_price must be a positive number');
+        return;
+      }
+      try {
+        const position = this.portfolioManager.addPosition({
+          symbol: sym,
+          quantity,
+          cost_price,
+          current_price: current_price ?? undefined,
+        });
+        res.status(201).json(position);
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    this.app.put('/api/stocks/portfolio/:id', (req: Request, res: Response) => {
+      if (!this.portfolioManager) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'PortfolioManager not initialized' });
+        return;
+      }
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        validationError(res, 'Position ID must be a positive integer');
+        return;
+      }
+      const { symbol, quantity, cost_price } = req.body;
+      if (symbol !== undefined) {
+        const sym = validateSymbol(symbol);
+        if (!sym) {
+          validationError(res, 'symbol must be 1-10 uppercase letters');
+          return;
+        }
+        req.body.symbol = sym;
+      }
+      if (quantity !== undefined && (typeof quantity !== 'number' || quantity <= 0)) {
+        validationError(res, 'quantity must be a positive number');
+        return;
+      }
+      if (cost_price !== undefined && (typeof cost_price !== 'number' || cost_price <= 0)) {
+        validationError(res, 'cost_price must be a positive number');
+        return;
+      }
+      try {
+        const updated = this.portfolioManager.updatePosition(id, req.body);
+        res.status(200).json(updated);
+      } catch (err: any) {
+        if (err.message && err.message.includes('not found')) {
+          res.status(404).json({ error: 'NOT_FOUND', message: err.message });
+        } else {
+          res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+        }
+      }
+    });
+
+    this.app.delete('/api/stocks/portfolio/:id', (req: Request, res: Response) => {
+      if (!this.portfolioManager) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'PortfolioManager not initialized' });
+        return;
+      }
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id <= 0) {
+        validationError(res, 'Position ID must be a positive integer');
+        return;
+      }
+      try {
+        this.portfolioManager.deletePosition(id);
+        res.status(200).json({ ok: true });
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    // ----- GET /api/stocks/signals/stats — signal performance stats -----
+    this.app.get('/api/stocks/signals/stats', (req: Request, res: Response) => {
+      if (!this.signalTracker) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'SignalTracker not initialized' });
+        return;
+      }
+      try {
+        const filters: { symbol?: string; days?: number } = {};
+        if (req.query.symbol && typeof req.query.symbol === 'string') {
+          const sym = validateSymbol(req.query.symbol);
+          if (!sym) {
+            validationError(res, 'symbol must be 1-10 uppercase letters');
+            return;
+          }
+          filters.symbol = sym;
+        }
+        if (req.query.days !== undefined) {
+          const days = Number(req.query.days);
+          if (!Number.isFinite(days) || days <= 0) {
+            validationError(res, 'days must be a positive number');
+            return;
+          }
+          filters.days = days;
+        }
+        const stats = this.signalTracker.getStats(Object.keys(filters).length > 0 ? filters : undefined);
+        res.status(200).json(stats);
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
+    // ----- GET /api/stocks/analyze/:symbol/multi-timeframe -----
+    this.app.get('/api/stocks/analyze/:symbol/multi-timeframe', async (req: Request, res: Response) => {
+      const symbol = validateSymbol(req.params.symbol);
+      if (!symbol) {
+        validationError(res, 'symbol must be 1-10 uppercase letters');
+        return;
+      }
+      if (!this.executionSandbox) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'Execution sandbox not initialized' });
+        return;
+      }
+      try {
+        const result = await this.executionSandbox.exec(
+          `${stockPython} scripts/stock_analysis.py ${symbol} --multi-timeframe`,
+          { timeoutMs: 60000 },
+        );
+        const data = JSON.parse(result.stdout);
+        if (data.error) {
+          res.status(502).json({ error: 'SCRIPT_ERROR', message: data.message || data.error });
+          return;
+        }
+        res.status(200).json(data);
+      } catch (err: any) {
+        res.status(502).json({ error: 'SCRIPT_ERROR', message: err.message });
+      }
+    });
+
     // ----- Cron DB-backed endpoints -----
     this.app.get('/api/cron/scheduler/jobs', (_req: Request, res: Response) => {
       if (!this.cronScheduler) {
@@ -2592,8 +3000,42 @@ export class APIServer {
   // Stock service injection
   // -----------------------------------------------------------------------
 
-  setStockServices(services: { scanner?: StockScanner }): void {
+  setStockServices(services: { scanner?: StockScanner; sandbox?: ExecutionSandbox }): void {
     this.stockScanner = services.scanner;
+    if (services.sandbox) {
+      this.executionSandbox = services.sandbox;
+    }
+    const db = (this.sessionManager as any).db;
+    if (db) {
+      if (services.sandbox) {
+        this.strategyEngine = new StrategyEngine(db, services.sandbox);
+      }
+      this.portfolioManager = new PortfolioManager(db);
+      this.signalTracker = new SignalTracker(db);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Trading service injection
+  // -----------------------------------------------------------------------
+
+  setTradingServices(services: {
+    gateway: TradingGateway;
+    riskController: RiskController;
+    orderManager: OrderManager;
+    pipeline?: AutoTradingPipeline;
+    stopLossManager?: StopLossManager;
+    db?: Database.Database;
+  }): void {
+    this.tradingGateway = services.gateway;
+    this.tradingRiskController = services.riskController;
+    this.tradingOrderManager = services.orderManager;
+    // Register trading routes immediately
+    this.app.use('/api/trading', createTradingRoutes(services.gateway, services.riskController, services.orderManager, {
+      pipeline: services.pipeline,
+      stopLossManager: services.stopLossManager,
+      db: services.db,
+    }));
   }
 
   // -----------------------------------------------------------------------

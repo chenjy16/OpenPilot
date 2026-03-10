@@ -38,6 +38,13 @@ export interface StockSignalResult {
   confidence: string;
   technical_summary: string;
   sentiment_summary: string;
+  outcome: 'pending' | 'hit_tp' | 'hit_sl' | 'expired';
+  outcome_at: number | null;
+  scores: {
+    technical_score: number | null;
+    sentiment_score: number | null;
+    overall_score: number | null;
+  };
 }
 
 export interface StockScanResult {
@@ -228,6 +235,15 @@ export class StockScanner {
       '=== 消息面数据 (Market_Sentiment_Tool) ===',
       sentimentSummary,
       '',
+      '=== 多因子评分框架 ===',
+      '请对以下因子进行独立评分（0-100）:',
+      '1. technical_score (技术面评分): 基于 RSI、MACD、SMA、布林带、ATR、KDJ 等技术指标综合评估。',
+      '   - 趋势方向、动量强度、超买超卖状态、波动率水平等。',
+      '2. sentiment_score (消息面评分): 基于新闻情绪、分析师评级、财报数据等综合评估。',
+      '   - 市场情绪偏向、分析师共识、近期事件影响等。',
+      '3. overall_score (综合评分): 技术面与消息面的加权综合评分。',
+      '   - 建议权重: 技术面 60%、消息面 40%，可根据数据可用性调整。',
+      '',
       '请分析以上数据，给出交易建议。仅返回以下 JSON 格式，不要包含其他文本:',
       '{',
       '  "action": "buy" | "sell" | "hold",',
@@ -235,7 +251,12 @@ export class StockScanner {
       '  "stop_loss": <止损位>,',
       '  "take_profit": <止盈位>,',
       '  "reasoning": "<分析逻辑，2-3句话>",',
-      '  "confidence": "high" | "medium" | "low"',
+      '  "confidence": "high" | "medium" | "low",',
+      '  "scores": {',
+      '    "technical_score": <0-100>,',
+      '    "sentiment_score": <0-100>,',
+      '    "overall_score": <0-100>',
+      '  }',
       '}',
     ].join('\n');
 
@@ -257,6 +278,14 @@ export class StockScanner {
     const action = ['buy', 'sell', 'hold'].includes(analysis.action) ? analysis.action : 'hold';
     const confidence = ['high', 'medium', 'low'].includes(analysis.confidence) ? analysis.confidence : 'low';
 
+    // Extract multi-factor scores from AI response (default to null if not present)
+    const rawScores = analysis.scores || {};
+    const parseScore = (val: unknown): number | null => {
+      const n = Number(val);
+      if (val == null || isNaN(n)) return null;
+      return Math.max(0, Math.min(100, n));
+    };
+
     return {
       symbol,
       action,
@@ -267,6 +296,13 @@ export class StockScanner {
       confidence,
       technical_summary: filterSensitiveInfo(techSummary),
       sentiment_summary: filterSensitiveInfo(sentimentSummary),
+      outcome: 'pending',
+      outcome_at: null,
+      scores: {
+        technical_score: parseScore(rawScores.technical_score ?? analysis.technical_score),
+        sentiment_score: parseScore(rawScores.sentiment_score ?? analysis.sentiment_score),
+        overall_score: parseScore(rawScores.overall_score ?? analysis.overall_score),
+      },
     };
   }
 
@@ -275,24 +311,28 @@ export class StockScanner {
   // -------------------------------------------------------------------------
 
   private saveSignal(signal: StockSignalResult): void {
-    try {
-      this.db.prepare(`
-        INSERT INTO stock_signals (symbol, action, entry_price, stop_loss, take_profit, reasoning, technical_summary, sentiment_summary, confidence, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        signal.symbol,
-        signal.action,
-        signal.entry_price,
-        signal.stop_loss,
-        signal.take_profit,
-        signal.reasoning,
-        signal.technical_summary,
-        signal.sentiment_summary,
-        signal.confidence,
-        Math.floor(Date.now() / 1000),
-      );
-    } catch (err: any) {
-      console.warn(`[StockScanner] Failed to save signal for ${signal.symbol}: ${err.message}`);
+      try {
+        this.db.prepare(`
+          INSERT INTO stock_signals (symbol, action, entry_price, stop_loss, take_profit, reasoning, technical_summary, sentiment_summary, confidence, outcome, technical_score, sentiment_score, overall_score, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          signal.symbol,
+          signal.action,
+          signal.entry_price,
+          signal.stop_loss,
+          signal.take_profit,
+          signal.reasoning,
+          signal.technical_summary,
+          signal.sentiment_summary,
+          signal.confidence,
+          signal.outcome,
+          signal.scores.technical_score,
+          signal.scores.sentiment_score,
+          signal.scores.overall_score,
+          Math.floor(Date.now() / 1000),
+        );
+      } catch (err: any) {
+        console.warn(`[StockScanner] Failed to save signal for ${signal.symbol}: ${err.message}`);
+      }
     }
-  }
 }

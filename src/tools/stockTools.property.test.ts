@@ -48,8 +48,12 @@ const validTechResultArb = fc.record({
   bollinger_upper: priceArb,
   bollinger_lower: priceArb,
   volume_avg: fc.integer({ min: 1, max: 1_000_000_000 }),
-  data_date: fc.date({ min: new Date('2000-01-01'), max: new Date('2030-12-31') })
-    .map(d => d.toISOString().split('T')[0]),
+  data_date: fc.integer({ min: 0, max: 11322 })
+    .map(n => {
+      const d = new Date('2000-01-01');
+      d.setDate(d.getDate() + n);
+      return d.toISOString().split('T')[0];
+    }),
 });
 
 /** Valid DeliverAlertParams */

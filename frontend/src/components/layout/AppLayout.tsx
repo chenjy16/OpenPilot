@@ -5,8 +5,6 @@ import NavSidebar from './NavSidebar';
 import ChatView from '../views/ChatView';
 import OverviewView from '../views/OverviewView';
 import SessionsView from '../views/SessionsView';
-import DebugView from '../views/DebugView';
-import LogsView from '../views/LogsView';
 import SkillsView from '../views/SkillsView';
 import AgentsView from '../views/AgentsView';
 import NodesView from '../views/NodesView';
@@ -17,13 +15,13 @@ import ConfigView from '../views/ConfigView';
 import ModelsView from '../views/ModelsView';
 import PolymarketView from '../views/PolymarketView';
 import StockAnalysisView from '../views/StockAnalysisView';
+import PortfolioView from '../views/PortfolioView';
+import TradingDashboardView from '../views/TradingDashboardView';
 
 const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   chat: <ChatView />,
   overview: <OverviewView />,
   sessions: <SessionsView />,
-  debug: <DebugView />,
-  logs: <LogsView />,
   channels: <ChannelsView />,
   usage: <UsageView />,
   cron: <CronView />,
@@ -33,6 +31,8 @@ const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   models: <ModelsView />,
   polymarket: <PolymarketView />,
   stocks: <StockAnalysisView />,
+  portfolio: <PortfolioView />,
+  trading: <TradingDashboardView />,
   config: <ConfigView />,
 };
 

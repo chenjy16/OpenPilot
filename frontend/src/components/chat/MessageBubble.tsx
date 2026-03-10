@@ -44,11 +44,21 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   const [isOverflow, setIsOverflow] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
+  // Strip tool result/error blocks from assistant messages (raw JSON noise)
+  const displayContent = !isUser
+    ? message.content.replace(/\[Tool (?:result|error): [\s\S]*?\](?:\n?)/g, '').trim()
+    : message.content;
+
   useEffect(() => {
     if (contentRef.current && !isUser) {
       setIsOverflow(contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT);
     }
-  }, [message.content, isUser]);
+  }, [displayContent, isUser]);
+
+  // Don't render empty bubbles (e.g. assistant message that was only tool calls)
+  if (!isUser && !displayContent && !message.isStreaming) {
+    return null;
+  }
 
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
@@ -75,7 +85,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
               code: CodeBlock as React.ComponentType<React.ComponentPropsWithoutRef<'code'>>,
             }}
           >
-            {message.content}
+            {displayContent}
           </ReactMarkdown>
         </div>
         {isOverflow && (

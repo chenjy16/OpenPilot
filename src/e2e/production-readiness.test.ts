@@ -904,7 +904,7 @@ describe('Production Readiness E2E', () => {
     it('POST /api/cron/jobs creates a job', async () => {
       const res = await httpRequest(server, 'POST', '/api/cron/jobs', {
         schedule: '0 9 * * *',
-        agentId: 'main',
+        agentId: 'default',
         message: 'Daily summary',
         enabled: true,
       });

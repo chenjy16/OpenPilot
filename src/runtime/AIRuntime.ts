@@ -376,9 +376,7 @@ export class AIRuntime {
         };
       } else if (event.type === 'tool_call_result') {
         yield {
-          text: event.error
-            ? `[Tool error: ${event.error}]`
-            : `[Tool result: ${typeof event.result === 'string' ? event.result : JSON.stringify(event.result)}]`,
+          text: '',
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           toolCallResult: { id: event.id, result: event.result, error: event.error },
         };

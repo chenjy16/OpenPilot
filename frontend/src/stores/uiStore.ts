@@ -15,9 +15,9 @@ export type NavTab =
   | 'models'
   | 'polymarket'
   | 'stocks'
-  | 'config'
-  | 'debug'
-  | 'logs';
+  | 'portfolio'
+  | 'trading'
+  | 'config';
 
 export interface NavGroup {
   label: string;
@@ -52,6 +52,8 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: 'polymarket', label: 'Polymarket Copilot', icon: '🔮' },
       { id: 'stocks', label: 'Quant Copilot', icon: '📈' },
+      { id: 'portfolio', label: '投资组合', icon: '💼' },
+      { id: 'trading', label: '量化交易', icon: '📊' },
     ],
   },
   {
@@ -59,8 +61,6 @@ export const NAV_GROUPS: NavGroup[] = [
     tabs: [
       { id: 'models', label: '模型', icon: '🧩' },
       { id: 'config', label: '配置', icon: '⚙️' },
-      { id: 'debug', label: '调试', icon: '🐛' },
-      { id: 'logs', label: '日志', icon: '📜' },
     ],
   },
 ];

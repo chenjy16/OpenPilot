@@ -110,6 +110,23 @@ export function initializeDatabase(dbPath: string): Database.Database {
     )
   `);
 
+  // Migration: add signal tracking fields to stock_signals (REQ-6)
+  try {
+    db.exec(`ALTER TABLE stock_signals ADD COLUMN outcome TEXT DEFAULT 'pending' CHECK(outcome IN ('pending', 'hit_tp', 'hit_sl', 'expired'))`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE stock_signals ADD COLUMN outcome_at INTEGER`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE stock_signals ADD COLUMN technical_score REAL`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE stock_signals ADD COLUMN sentiment_score REAL`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE stock_signals ADD COLUMN overall_score REAL`);
+  } catch { /* column already exists */ }
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_stock_signals_symbol
     ON stock_signals(symbol)
@@ -118,6 +135,66 @@ export function initializeDatabase(dbPath: string): Database.Database {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_stock_signals_created
     ON stock_signals(created_at DESC)
+  `);
+
+  // Create backtest_results table (Quant Backtest Engine)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS backtest_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      strategy_id INTEGER,
+      symbol TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      total_return REAL,
+      annual_return REAL,
+      max_drawdown REAL,
+      sharpe_ratio REAL,
+      win_rate REAL,
+      profit_loss_ratio REAL,
+      total_trades INTEGER,
+      trades_json TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (strategy_id) REFERENCES strategies(id)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_backtest_results_symbol
+    ON backtest_results(symbol)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_backtest_results_created
+    ON backtest_results(created_at DESC)
+  `);
+
+  // Create strategies table (Quant Strategy Framework)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS strategies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      entry_conditions TEXT NOT NULL,
+      exit_conditions TEXT NOT NULL,
+      stop_loss_rule TEXT NOT NULL,
+      take_profit_rule TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  // Create portfolio_positions table (Portfolio & Risk Management)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS portfolio_positions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      cost_price REAL NOT NULL,
+      current_price REAL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
   `);
 
   // Create cron_jobs table (persistent cron storage)

@@ -24,8 +24,8 @@ describe('UIStore', () => {
     useUIStore.getState().setActiveTab('sessions');
     expect(useUIStore.getState().activeTab).toBe('sessions');
 
-    useUIStore.getState().setActiveTab('debug');
-    expect(useUIStore.getState().activeTab).toBe('debug');
+    useUIStore.getState().setActiveTab('config');
+    expect(useUIStore.getState().activeTab).toBe('config');
   });
 
   it('toggleSidebar should toggle sidebarCollapsed', () => {

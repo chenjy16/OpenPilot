@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { get, post } from '../../services/apiClient';
+import KlineChart from '../charts/KlineChart';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,6 +19,11 @@ interface StockSignal {
   confidence: string | null;
   created_at: number;
   notified_at: number | null;
+  outcome: string | null;
+  outcome_at: number | null;
+  technical_score: number | null;
+  sentiment_score: number | null;
+  overall_score: number | null;
 }
 
 interface AnalyzeResult {
@@ -30,6 +36,11 @@ interface AnalyzeResult {
   confidence: string;
   technical_summary: string;
   sentiment_summary: string;
+  scores?: {
+    technical_score: number | null;
+    sentiment_score: number | null;
+    overall_score: number | null;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +56,9 @@ const StockAnalysisView: React.FC = () => {
   const [symbol, setSymbol] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(null);
+
+  // K-line chart state
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
 
   const fetchSignals = useCallback(async () => {
     try {
@@ -72,6 +86,7 @@ const StockAnalysisView: React.FC = () => {
     try {
       const result = await post<AnalyzeResult>('/stocks/analyze', { symbol: trimmed });
       setAnalyzeResult(result);
+      setChartSymbol(trimmed);
       await fetchSignals();
     } catch (err) {
       setError(`分析失败: ${(err as Error).message}`);
@@ -96,6 +111,38 @@ const StockAnalysisView: React.FC = () => {
       case 'low': return 'bg-gray-50 text-gray-500';
       default: return 'bg-gray-50 text-gray-500';
     }
+  };
+
+  const outcomeLabel = (outcome: string | null) => {
+    switch (outcome) {
+      case 'hit_tp': return { text: '止盈', color: 'bg-green-100 text-green-700' };
+      case 'hit_sl': return { text: '止损', color: 'bg-red-100 text-red-700' };
+      case 'expired': return { text: '过期', color: 'bg-gray-100 text-gray-500' };
+      case 'pending': return { text: '待验证', color: 'bg-blue-100 text-blue-600' };
+      default: return null;
+    }
+  };
+
+  const scoreBarColor = (score: number) => {
+    if (score >= 70) return 'bg-green-500';
+    if (score >= 40) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  const ScoreBar = ({ label, score }: { label: string; score: number | null }) => {
+    if (score == null) return null;
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-16 text-gray-500 shrink-0">{label}</span>
+        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${scoreBarColor(score)}`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+        <span className="w-8 text-right text-gray-600 font-medium">{score}</span>
+      </div>
+    );
   };
 
   return (
@@ -173,9 +220,26 @@ const StockAnalysisView: React.FC = () => {
                   {analyzeResult.reasoning}
                 </div>
               )}
+              {analyzeResult.scores && (analyzeResult.scores.technical_score != null || analyzeResult.scores.sentiment_score != null || analyzeResult.scores.overall_score != null) && (
+                <div className="mt-3 space-y-1.5 rounded bg-white p-3">
+                  <span className="text-xs font-medium text-gray-500">多因子评分</span>
+                  <ScoreBar label="技术面" score={analyzeResult.scores.technical_score} />
+                  <ScoreBar label="消息面" score={analyzeResult.scores.sentiment_score} />
+                  <ScoreBar label="综合" score={analyzeResult.scores.overall_score} />
+                </div>
+              )}
             </div>
           )}
         </div>
+
+        {/* K-line Chart — shown inline in signal cards or after manual analysis */}
+        {chartSymbol && !signals.some(s => s.symbol === chartSymbol) && (
+          <KlineChart
+            symbol={chartSymbol}
+            timeframe="daily"
+            indicators={['sma20', 'sma50', 'bollinger']}
+          />
+        )}
 
         {/* Signals List Panel */}
         <div className="rounded-lg border border-gray-200 bg-white p-6">
@@ -213,10 +277,30 @@ const StockAnalysisView: React.FC = () => {
                             置信度: {signal.confidence}
                           </span>
                         )}
+                        {(() => {
+                          const oc = outcomeLabel(signal.outcome);
+                          return oc ? (
+                            <span className={`rounded px-2 py-0.5 text-xs font-medium ${oc.color}`}>
+                              {oc.text}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
-                      <span className="text-xs text-gray-400">
-                        {new Date(signal.created_at * 1000).toLocaleString()}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setChartSymbol(chartSymbol === signal.symbol ? null : signal.symbol)}
+                          className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+                            chartSymbol === signal.symbol
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                          }`}
+                        >
+                          📈 K线
+                        </button>
+                        <span className="text-xs text-gray-400">
+                          {new Date(signal.created_at * 1000).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-600">
                       {signal.entry_price != null && <span>💰 入场: ${signal.entry_price.toFixed(2)}</span>}
@@ -226,6 +310,23 @@ const StockAnalysisView: React.FC = () => {
                     {signal.reasoning && (
                       <div className="mt-2 rounded bg-gray-50 p-2 text-xs text-gray-600">
                         {signal.reasoning}
+                      </div>
+                    )}
+                    {(signal.technical_score != null || signal.sentiment_score != null || signal.overall_score != null) && (
+                      <div className="mt-2 space-y-1.5 rounded bg-gray-50 p-3">
+                        <span className="text-xs font-medium text-gray-500">多因子评分</span>
+                        <ScoreBar label="技术面" score={signal.technical_score} />
+                        <ScoreBar label="消息面" score={signal.sentiment_score} />
+                        <ScoreBar label="综合" score={signal.overall_score} />
+                      </div>
+                    )}
+                    {chartSymbol === signal.symbol && (
+                      <div className="mt-3">
+                        <KlineChart
+                          symbol={signal.symbol}
+                          timeframe="daily"
+                          indicators={['sma20', 'sma50', 'bollinger']}
+                        />
                       </div>
                     )}
                   </div>

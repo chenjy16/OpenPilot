@@ -1,2 +1,4 @@
 yfinance
 pandas
+hypothesis
+pytest

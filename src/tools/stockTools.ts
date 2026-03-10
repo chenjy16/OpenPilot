@@ -33,6 +33,13 @@ export interface TechAnalysisResult {
   bollinger_lower: number;
   volume_avg: number;
   data_date: string;
+  atr14: number | null;
+  obv: number | null;
+  vwap: number | null;
+  kdj_k: number | null;
+  kdj_d: number | null;
+  kdj_j: number | null;
+  williams_r: number | null;
 }
 
 export interface SentimentResult {
@@ -146,12 +153,18 @@ export function createStockTechAnalysisTool(sandbox: ExecutionSandbox): Tool {
           type: 'string',
           description: 'Data period for analysis (default: "3mo")',
         },
+        timeframe: {
+          type: 'string',
+          description: 'Analysis timeframe: "daily", "weekly", or "monthly" (default: "daily"). Use "multi" for multi-timeframe analysis.',
+          enum: ['daily', 'weekly', 'monthly', 'multi'],
+        },
       },
       required: ['symbol'],
     },
     execute: async (params: Record<string, unknown>) => {
       const symbol = (params.symbol as string).toUpperCase().trim();
       const period = (params.period as string) || '3mo';
+      const timeframe = (params.timeframe as string) || 'daily';
 
       if (!symbol || !/^[A-Z]{1,10}$/.test(symbol)) {
         return {
@@ -160,12 +173,30 @@ export function createStockTechAnalysisTool(sandbox: ExecutionSandbox): Tool {
         } satisfies ToolError;
       }
 
+      // Validate timeframe parameter
+      const validTimeframes = ['daily', 'weekly', 'monthly', 'multi'];
+      if (!validTimeframes.includes(timeframe)) {
+        return {
+          error: 'INVALID_PARAMS',
+          message: `Invalid timeframe: "${timeframe}". Must be one of: ${validTimeframes.join(', ')}`,
+        } satisfies ToolError;
+      }
+
       try {
         // Use venv Python if available, fallback to system python
         const venvPython = 'scripts/.venv/bin/python3';
         const pythonCmd = require('fs').existsSync(venvPython) ? venvPython : 'python3';
+
+        // Build command with timeframe arguments
+        let cmd = `${pythonCmd} scripts/stock_analysis.py ${symbol}`;
+        if (timeframe === 'multi') {
+          cmd += ' --multi-timeframe';
+        } else if (timeframe !== 'daily') {
+          cmd += ` --timeframe ${timeframe}`;
+        }
+
         const result = await sandbox.exec(
-          `${pythonCmd} scripts/stock_analysis.py ${symbol} ${period}`,
+          cmd,
           { timeoutMs: 30_000 },
         );
 

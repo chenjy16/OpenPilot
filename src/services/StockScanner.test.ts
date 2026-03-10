@@ -188,11 +188,15 @@ describe('StockScanner', () => {
         195.5,
         190.0,
         210.0,
-        expect.any(String),
-        expect.any(String),
-        expect.any(String),
-        'high',
-        expect.any(Number),
+        expect.any(String),   // reasoning
+        expect.any(String),   // technical_summary
+        expect.any(String),   // sentiment_summary
+        'high',               // confidence
+        'pending',            // outcome
+        null,                 // technical_score
+        null,                 // sentiment_score
+        null,                 // overall_score
+        expect.any(Number),   // created_at
       );
     });
 
@@ -255,7 +259,9 @@ describe('StockScanner', () => {
       expect(typeof runCall[6]).toBe('string'); // technical_summary
       expect(typeof runCall[7]).toBe('string'); // sentiment_summary
       expect(runCall[8]).toBe('high');         // confidence
-      expect(typeof runCall[9]).toBe('number'); // created_at (unix timestamp)
+      expect(typeof runCall[9]).toBe('string'); // outcome
+      // runCall[10..12] = technical_score, sentiment_score, overall_score
+      expect(typeof runCall[13]).toBe('number'); // created_at (unix timestamp)
     });
 
     it('should not throw when db save fails (error is logged)', async () => {
