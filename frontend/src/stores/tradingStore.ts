@@ -125,10 +125,34 @@ export interface StopLossRecord {
   entry_price: number;
   stop_loss: number;
   take_profit: number;
+  trailing_percent?: number;
+  highest_price?: number;
   status: 'active' | 'triggered_sl' | 'triggered_tp' | 'cancelled';
   triggered_at?: number;
   triggered_price?: number;
   created_at: number;
+}
+
+export interface PerformanceMetrics {
+  total_trades: number;
+  winning_trades: number;
+  losing_trades: number;
+  win_rate: number;
+  avg_pnl: number;
+  avg_win: number;
+  avg_loss: number;
+  profit_factor: number;
+  avg_hold_hours: number;
+  total_pnl: number;
+  sharpe_ratio: number | null;
+  sortino_ratio: number | null;
+  max_drawdown: number;
+  max_drawdown_pct: number;
+  recovery_days: number | null;
+  best_trade: { symbol: string; pnl: number; pnl_pct: number } | null;
+  worst_trade: { symbol: string; pnl: number; pnl_pct: number } | null;
+  equity_curve: Array<{ date: string; equity: number; daily_pnl: number; daily_return: number; cumulative_return: number }>;
+  by_strategy: Array<{ strategy_id: number | null; strategy_name: string; trades: number; win_rate: number; total_pnl: number; avg_pnl: number }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +171,7 @@ interface TradingState {
   pipelineStatus: PipelineStatus | null;
   stopLossRecords: StopLossRecord[];
   pipelineSignals: ProcessResult[];
+  performanceMetrics: PerformanceMetrics | null;
 
   // UI state
   loading: boolean;
@@ -164,6 +189,7 @@ interface TradingState {
   fetchPipelineStatus: () => Promise<void>;
   fetchStopLossRecords: () => Promise<void>;
   fetchPipelineSignals: () => Promise<void>;
+  fetchPerformance: (periodDays?: number) => Promise<void>;
   placeOrder: (req: CreateOrderRequest) => Promise<TradingOrder>;
   cancelOrder: (id: number) => Promise<void>;
   updateRiskRules: (id: number, updates: Partial<RiskRule>) => Promise<void>;
@@ -186,6 +212,7 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
   pipelineStatus: null,
   stopLossRecords: [],
   pipelineSignals: [],
+  performanceMetrics: null,
   loading: false,
   error: null,
   pollingTimer: null,
@@ -275,6 +302,15 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
     try {
       const data = await get<ProcessResult[]>('/trading/pipeline/signals');
       set({ pipelineSignals: data });
+    } catch (err) {
+      set({ error: (err as Error).message });
+    }
+  },
+
+  fetchPerformance: async (periodDays: number = 30) => {
+    try {
+      const data = await get<PerformanceMetrics>(`/trading/performance?period=${periodDays}`);
+      set({ performanceMetrics: data });
     } catch (err) {
       set({ error: (err as Error).message });
     }

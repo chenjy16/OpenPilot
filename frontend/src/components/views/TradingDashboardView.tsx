@@ -399,27 +399,27 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-xs text-gray-500">
-                <th className="pb-2 pr-4">代码</th><th className="pb-2 pr-4">方向</th>
-                <th className="pb-2 pr-4">类型</th><th className="pb-2 pr-4">数量</th>
-                <th className="pb-2 pr-4">价格</th><th className="pb-2 pr-4">成交量</th>
-                <th className="pb-2 pr-4">成交价</th><th className="pb-2 pr-4">来源</th>
-                <th className="pb-2 pr-4">状态</th>
-                <th className="pb-2">时间</th>
+                <th className="whitespace-nowrap pb-2 pr-3">代码</th><th className="whitespace-nowrap pb-2 pr-3">方向</th>
+                <th className="whitespace-nowrap pb-2 pr-3">类型</th><th className="whitespace-nowrap pb-2 pr-3">数量</th>
+                <th className="whitespace-nowrap pb-2 pr-3">价格</th><th className="whitespace-nowrap pb-2 pr-3">成交量</th>
+                <th className="whitespace-nowrap pb-2 pr-3">成交价</th><th className="whitespace-nowrap pb-2 pr-3">来源</th>
+                <th className="whitespace-nowrap pb-2 pr-3">状态</th>
+                <th className="whitespace-nowrap pb-2">时间</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((o) => (
                 <tr key={o.id ?? o.local_order_id} className="border-b border-gray-100">
-                  <td className="py-2 pr-4 font-medium">{o.symbol}</td>
-                  <td className={`py-2 pr-4 ${o.side === 'buy' ? 'text-red-600' : 'text-green-600'}`}>{o.side === 'buy' ? '买入' : '卖出'}</td>
-                  <td className="py-2 pr-4">{o.order_type}</td>
-                  <td className="py-2 pr-4">{o.quantity}</td>
-                  <td className="py-2 pr-4">{o.price ?? '-'}</td>
-                  <td className="py-2 pr-4">{o.filled_quantity}</td>
-                  <td className="py-2 pr-4">{o.filled_price ?? '-'}</td>
-                  <td className="py-2 pr-4"><OrderSourceBadge order={o} /></td>
-                  <td className="py-2 pr-4"><StatusBadge status={o.status} /></td>
-                  <td className="py-2 text-gray-500">{new Date(o.created_at * 1000).toLocaleTimeString()}</td>
+                  <td className="whitespace-nowrap py-2 pr-3 font-medium">{o.symbol}</td>
+                  <td className={`whitespace-nowrap py-2 pr-3 ${o.side === 'buy' ? 'text-red-600' : 'text-green-600'}`}>{o.side === 'buy' ? '买入' : '卖出'}</td>
+                  <td className="whitespace-nowrap py-2 pr-3">{o.order_type}</td>
+                  <td className="whitespace-nowrap py-2 pr-3">{o.quantity}</td>
+                  <td className="whitespace-nowrap py-2 pr-3">{o.price ?? '-'}</td>
+                  <td className="whitespace-nowrap py-2 pr-3">{o.filled_quantity}</td>
+                  <td className="whitespace-nowrap py-2 pr-3">{o.filled_price ?? '-'}</td>
+                  <td className="whitespace-nowrap py-2 pr-3"><OrderSourceBadge order={o} /></td>
+                  <td className="whitespace-nowrap py-2 pr-3"><StatusBadge status={o.status} /></td>
+                  <td className="whitespace-nowrap py-2 text-gray-500">{new Date(o.created_at * 1000).toLocaleTimeString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -562,7 +562,7 @@ const TradingDashboardView: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-[1600px] space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-900">量化交易</h1>
@@ -611,12 +611,12 @@ const TradingDashboardView: React.FC = () => {
           <ActiveOrdersTable orders={orders} onCancel={cancelOrder} />
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="grid gap-6 lg:grid-cols-5">
+          <section className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-3">
             <h2 className="mb-3 text-sm font-semibold text-gray-700">交易记录</h2>
             <OrderHistoryTable orders={orders} />
           </section>
-          <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <section className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-2">
             <h2 className="mb-3 text-sm font-semibold text-gray-700">风控状态</h2>
             <RiskStatusPanel rules={riskRules} stats={stats} />
           </section>

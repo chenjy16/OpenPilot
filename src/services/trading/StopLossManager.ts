@@ -44,8 +44,8 @@ export class StopLossManager {
   register(record: Omit<StopLossRecord, 'id' | 'status' | 'created_at'>): StopLossRecord {
     const now = Math.floor(Date.now() / 1000);
     const result = this.db.prepare(`
-      INSERT INTO stop_loss_records (order_id, symbol, side, entry_price, stop_loss, take_profit, status, created_at)
-      VALUES (@order_id, @symbol, @side, @entry_price, @stop_loss, @take_profit, 'active', @created_at)
+      INSERT INTO stop_loss_records (order_id, symbol, side, entry_price, stop_loss, take_profit, trailing_percent, highest_price, status, created_at)
+      VALUES (@order_id, @symbol, @side, @entry_price, @stop_loss, @take_profit, @trailing_percent, @highest_price, 'active', @created_at)
     `).run({
       order_id: record.order_id,
       symbol: record.symbol,
@@ -53,12 +53,15 @@ export class StopLossManager {
       entry_price: record.entry_price,
       stop_loss: record.stop_loss,
       take_profit: record.take_profit,
+      trailing_percent: record.trailing_percent ?? null,
+      highest_price: record.trailing_percent ? record.entry_price : null,
       created_at: now,
     });
 
     const saved: StopLossRecord = {
       id: Number(result.lastInsertRowid),
       ...record,
+      highest_price: record.trailing_percent ? record.entry_price : undefined,
       status: 'active',
       created_at: now,
     };
@@ -123,6 +126,23 @@ export class StopLossManager {
       } catch {
         // 获取价格失败，跳过本轮，下轮重试
         continue;
+      }
+
+      // Trailing stop: if price made new high, raise stop_loss
+      if (record.trailing_percent && record.trailing_percent > 0) {
+        const prevHighest = record.highest_price ?? record.entry_price;
+        if (currentPrice > prevHighest) {
+          record.highest_price = currentPrice;
+          const newStopLoss = currentPrice * (1 - record.trailing_percent / 100);
+          // Only raise stop_loss, never lower it
+          if (newStopLoss > record.stop_loss) {
+            record.stop_loss = Math.round(newStopLoss * 100) / 100;
+          }
+          // Persist trailing updates to DB
+          this.db.prepare(`
+            UPDATE stop_loss_records SET highest_price = @highest_price, stop_loss = @stop_loss WHERE id = @id
+          `).run({ highest_price: record.highest_price, stop_loss: record.stop_loss, id: record.id });
+        }
       }
 
       const triggerType = checkStopLossTrigger(currentPrice, record.stop_loss, record.take_profit);
@@ -205,7 +225,7 @@ export class StopLossManager {
   restoreFromDb(): StopLossRecord[] {
     const rows = this.db.prepare(`
       SELECT id, order_id, symbol, side, entry_price, stop_loss, take_profit,
-             status, triggered_at, triggered_price, created_at
+             trailing_percent, highest_price, status, triggered_at, triggered_price, created_at
       FROM stop_loss_records
       WHERE status = 'active'
     `).all() as StopLossRecord[];

@@ -342,21 +342,32 @@ function ActiveStopLossList({ records }: { records: StopLossRecord[] }) {
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-xs text-gray-500">
-            <th className="pb-2 pr-4">代码</th>
-            <th className="pb-2 pr-4">入场价</th>
-            <th className="pb-2 pr-4">止损价</th>
-            <th className="pb-2 pr-4">止盈价</th>
-            <th className="pb-2">状态</th>
+            <th className="whitespace-nowrap pb-2 pr-3">代码</th>
+            <th className="whitespace-nowrap pb-2 pr-3">入场价</th>
+            <th className="whitespace-nowrap pb-2 pr-3">止损价</th>
+            <th className="whitespace-nowrap pb-2 pr-3">止盈价</th>
+            <th className="whitespace-nowrap pb-2 pr-3">移动止损</th>
+            <th className="whitespace-nowrap pb-2">状态</th>
           </tr>
         </thead>
         <tbody>
           {active.map((r) => (
             <tr key={r.id ?? r.order_id} className="border-b border-gray-100">
-              <td className="py-2 pr-4 font-medium">{r.symbol}</td>
-              <td className="py-2 pr-4">{r.entry_price.toFixed(2)}</td>
-              <td className="py-2 pr-4 text-red-600">{r.stop_loss.toFixed(2)}</td>
-              <td className="py-2 pr-4 text-green-600">{r.take_profit.toFixed(2)}</td>
-              <td className="py-2">
+              <td className="whitespace-nowrap py-2 pr-3 font-medium">{r.symbol}</td>
+              <td className="whitespace-nowrap py-2 pr-3">{r.entry_price.toFixed(2)}</td>
+              <td className="whitespace-nowrap py-2 pr-3 text-red-600">{r.stop_loss.toFixed(2)}</td>
+              <td className="whitespace-nowrap py-2 pr-3 text-green-600">{r.take_profit.toFixed(2)}</td>
+              <td className="whitespace-nowrap py-2 pr-3">
+                {r.trailing_percent ? (
+                  <span className="inline-flex items-center gap-1 text-xs">
+                    <span className="rounded bg-purple-100 px-1.5 py-0.5 font-medium text-purple-700">{r.trailing_percent}%</span>
+                    {r.highest_price && <span className="text-gray-400">峰值 {r.highest_price.toFixed(2)}</span>}
+                  </span>
+                ) : (
+                  <span className="text-gray-300">—</span>
+                )}
+              </td>
+              <td className="whitespace-nowrap py-2">
                 <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
                   监控中
                 </span>

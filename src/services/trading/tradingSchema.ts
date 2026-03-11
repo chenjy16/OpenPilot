@@ -131,6 +131,8 @@ export function initTradingTables(db: Database.Database): void {
       entry_price REAL NOT NULL,
       stop_loss REAL NOT NULL,
       take_profit REAL NOT NULL,
+      trailing_percent REAL,
+      highest_price REAL,
       status TEXT NOT NULL DEFAULT 'active'
         CHECK(status IN ('active', 'triggered_sl', 'triggered_tp', 'cancelled')),
       triggered_at INTEGER,
@@ -139,6 +141,14 @@ export function initTradingTables(db: Database.Database): void {
       FOREIGN KEY (order_id) REFERENCES trading_orders(id)
     )
   `);
+
+  // Migration: add trailing columns if missing
+  try {
+    db.exec(`ALTER TABLE stop_loss_records ADD COLUMN trailing_percent REAL`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE stop_loss_records ADD COLUMN highest_price REAL`);
+  } catch { /* column already exists */ }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_stop_loss_status ON stop_loss_records(status)

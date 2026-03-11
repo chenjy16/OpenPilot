@@ -17,6 +17,7 @@ export type NavTab =
   | 'stocks'
   | 'portfolio'
   | 'trading'
+  | 'performance'
   | 'config';
 
 export interface NavGroup {
@@ -54,6 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'stocks', label: 'Quant Copilot', icon: '📈' },
       { id: 'portfolio', label: '投资组合', icon: '💼' },
       { id: 'trading', label: '量化交易', icon: '📊' },
+      { id: 'performance', label: '交易绩效', icon: '🏆' },
     ],
   },
   {

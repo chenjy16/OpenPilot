@@ -209,6 +209,8 @@ export interface StopLossRecord {
   entry_price: number;
   stop_loss: number;
   take_profit: number;
+  trailing_percent?: number;
+  highest_price?: number;
   status: 'active' | 'triggered_sl' | 'triggered_tp' | 'cancelled';
   triggered_at?: number;
   triggered_price?: number;

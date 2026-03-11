@@ -487,5 +487,21 @@ export function createTradingRoutes(
     }
   });
 
+  // GET /performance — trading performance metrics and equity curve
+  router.get('/performance', (_req: Request, res: Response) => {
+    try {
+      if (!db) {
+        return errorResponse(res, 503, 'SERVICE_UNAVAILABLE', 'Database is not configured');
+      }
+      const periodDays = _req.query.period ? Number(_req.query.period) : 30;
+      const { PerformanceAnalytics } = require('../services/trading/PerformanceAnalytics');
+      const analytics = new PerformanceAnalytics(db);
+      const metrics = analytics.getMetrics(periodDays);
+      res.status(200).json(metrics);
+    } catch (err: any) {
+      errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
+    }
+  });
+
   return router;
 }

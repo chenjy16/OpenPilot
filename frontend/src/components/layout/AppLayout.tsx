@@ -17,6 +17,7 @@ import PolymarketView from '../views/PolymarketView';
 import StockAnalysisView from '../views/StockAnalysisView';
 import PortfolioView from '../views/PortfolioView';
 import TradingDashboardView from '../views/TradingDashboardView';
+import PerformanceView from '../views/PerformanceView';
 
 const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   chat: <ChatView />,
@@ -33,6 +34,7 @@ const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   stocks: <StockAnalysisView />,
   portfolio: <PortfolioView />,
   trading: <TradingDashboardView />,
+  performance: <PerformanceView />,
   config: <ConfigView />,
 };
 
