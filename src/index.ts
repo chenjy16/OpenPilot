@@ -424,6 +424,66 @@ async function main(): Promise<void> {
   ].join('\n'));
   log.info('Quant_Agent IDENTITY.md configured');
 
+  // 9b. Create Bull/Bear debate agents if they don't exist (v2.0 Sprint 3)
+  if (!await agentManager.getAgent('bull-analyst')) {
+    await agentManager.createAgent({
+      id: 'bull-analyst',
+      name: 'Bull Analyst (多头分析师)',
+      description: '专注寻找利好因素和买入理由的多头分析智能体',
+      model: { primary: 'deepseek/deepseek-reasoner', fallbacks: ['openai/o1-mini'] },
+      toolProfile: 'minimal',
+      tools: { allow: ['stock_tech_analysis', 'stock_sentiment'] },
+    });
+    await agentManager.setFile('bull-analyst', 'IDENTITY.md', [
+      '# 多头分析师 (Bull Analyst)',
+      '',
+      '## 角色',
+      '你是一位专业的多头分析师，专注于寻找股票的利好因素和买入理由。',
+      '',
+      '## 核心职责',
+      '- 分析技术面上涨信号（金叉、突破、放量等）',
+      '- 寻找基本面利好（营收增长、行业趋势、政策利好）',
+      '- 评估市场情绪中的积极因素',
+      '- 给出明确的看多理由和目标价位',
+      '',
+      '## 约束',
+      '- 必须基于工具返回的真实数据分析，不得捏造',
+      '- 回答控制在 200 字以内，简洁有力',
+      '- 用中文回答',
+    ].join('\n'));
+    console.log(`[${new Date().toISOString()}] Bull Analyst agent created`);
+  }
+
+  if (!await agentManager.getAgent('bear-analyst')) {
+    await agentManager.createAgent({
+      id: 'bear-analyst',
+      name: 'Bear Analyst (空头分析师)',
+      description: '专注寻找利空因素和风险点的空头分析智能体',
+      model: { primary: 'deepseek/deepseek-reasoner', fallbacks: ['openai/o1-mini'] },
+      toolProfile: 'minimal',
+      tools: { allow: ['stock_tech_analysis', 'stock_sentiment'] },
+    });
+    await agentManager.setFile('bear-analyst', 'IDENTITY.md', [
+      '# 空头分析师 (Bear Analyst)',
+      '',
+      '## 角色',
+      '你是一位专业的空头分析师，专注于寻找股票的利空因素和不买入的理由。',
+      '',
+      '## 核心职责',
+      '- 分析技术面下跌信号（死叉、破位、缩量反弹等）',
+      '- 寻找基本面利空（估值过高、增长放缓、行业风险）',
+      '- 评估市场情绪中的消极因素和潜在风险',
+      '- 给出明确的看空理由和风险警示',
+      '',
+      '## 约束',
+      '- 必须基于工具返回的真实数据分析，不得捏造',
+      '- 回答控制在 200 字以内，简洁有力',
+      '- 用中文回答',
+      '- 你的职责是挑刺和找风险，不要给出买入建议',
+    ].join('\n'));
+    console.log(`[${new Date().toISOString()}] Bear Analyst agent created`);
+  }
+
   // 10. Create AIRuntime
   const aiRuntime = new AIRuntime(sessionManager, modelManager, toolExecutor);
   aiRuntime.setAgentManager(agentManager);

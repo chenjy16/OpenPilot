@@ -500,19 +500,19 @@ export class AutoTradingPipeline {
       `置信度: ${signal.confidence ?? 'N/A'}`,
     ].join('\n');
 
-    // Run bull and bear agents in parallel
+    // Run bull and bear agents in parallel (using dedicated agent identities)
     const [bullResult, bearResult] = await Promise.all([
       this.aiRuntime.execute({
         sessionId: `${sessionPrefix}:bull`,
-        message: `你是多头分析师(Bull Analyst)。请为以下标的找出所有利好因素和买入理由，用中文简洁回答（200字以内）：\n\n${signalContext}`,
+        message: `请为以下标的找出所有利好因素和买入理由，用中文简洁回答（200字以内）：\n\n${signalContext}`,
         model,
-        agentId: 'quant-analyst',
+        agentId: 'bull-analyst',
       }).catch(() => ({ text: '无法获取多头分析' })),
       this.aiRuntime.execute({
         sessionId: `${sessionPrefix}:bear`,
-        message: `你是空头分析师(Bear Analyst)。请为以下标的找出所有利空因素和不买入的理由，用中文简洁回答（200字以内）：\n\n${signalContext}`,
+        message: `请为以下标的找出所有利空因素和不买入的理由，用中文简洁回答（200字以内）：\n\n${signalContext}`,
         model,
-        agentId: 'quant-analyst',
+        agentId: 'bear-analyst',
       }).catch(() => ({ text: '无法获取空头分析' })),
     ]);
 

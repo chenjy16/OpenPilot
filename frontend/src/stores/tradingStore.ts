@@ -83,13 +83,16 @@ export interface TradingConfig {
   // Auto trading config fields
   confidence_threshold?: number;
   dedup_window_hours?: number;
-  quantity_mode?: 'fixed_quantity' | 'fixed_amount' | 'kelly_formula';
+  quantity_mode?: 'fixed_quantity' | 'fixed_amount' | 'kelly_formula' | 'volatility_parity';
   quantity_params?: {
     fixed_quantity_value?: number;
     fixed_amount_value?: number;
   };
   sl_tp_enabled?: boolean;
   sl_tp_check_interval?: number;
+  // v2.0: Dual-agent debate
+  debate_enabled?: boolean;
+  debate_model?: string;
 }
 
 export interface BrokerCredentialsMasked {

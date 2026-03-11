@@ -276,6 +276,8 @@ export function createTradingRoutes(
           },
           sl_tp_check_interval: 30000,
           sl_tp_enabled: true,
+          debate_enabled: pipelineConfig.debate_enabled,
+          debate_model: pipelineConfig.debate_model,
         });
       }
       res.status(200).json(config);
@@ -311,7 +313,7 @@ export function createTradingRoutes(
         }
       }
       if (config.quantity_mode !== undefined) {
-        const validModes = ['fixed_quantity', 'fixed_amount', 'kelly_formula'];
+        const validModes = ['fixed_quantity', 'fixed_amount', 'kelly_formula', 'volatility_parity'];
         if (!validModes.includes(config.quantity_mode)) {
           return errorResponse(res, 400, 'VALIDATION_ERROR', `quantity_mode must be one of: ${validModes.join(', ')}`);
         }
@@ -335,6 +337,8 @@ export function createTradingRoutes(
             pipelineUpdates.fixed_amount_value = config.quantity_params.fixed_amount_value;
           }
         }
+        if (config.debate_enabled !== undefined) pipelineUpdates.debate_enabled = config.debate_enabled;
+        if (config.debate_model !== undefined) pipelineUpdates.debate_model = config.debate_model;
 
         if (Object.keys(pipelineUpdates).length > 0) {
           pipeline.updateConfig(pipelineUpdates);
@@ -363,6 +367,8 @@ export function createTradingRoutes(
           },
           sl_tp_check_interval: 30000,
           sl_tp_enabled: true,
+          debate_enabled: pipelineConfig.debate_enabled,
+          debate_model: pipelineConfig.debate_model,
         });
       }
       res.status(200).json(updated);

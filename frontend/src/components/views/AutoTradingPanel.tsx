@@ -38,7 +38,7 @@ function reasonBadgeColor(r: ProcessResult): string {
   }
 }
 
-type QuantityMode = 'fixed_quantity' | 'fixed_amount' | 'kelly_formula';
+type QuantityMode = 'fixed_quantity' | 'fixed_amount' | 'kelly_formula' | 'volatility_parity';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -123,6 +123,7 @@ function PipelineToggle({
 }
 
 /** Config editing section */
+
 function ConfigEditor({
   config,
   onSave,
@@ -137,6 +138,8 @@ function ConfigEditor({
   const [fixedAmountValue, setFixedAmountValue] = useState(config?.quantity_params?.fixed_amount_value ?? 10000);
   const [slTpEnabled, setSlTpEnabled] = useState(config?.sl_tp_enabled ?? true);
   const [slTpCheckInterval, setSlTpCheckInterval] = useState(config?.sl_tp_check_interval ?? 30000);
+  const [debateEnabled, setDebateEnabled] = useState(config?.debate_enabled ?? false);
+  const [debateModel, setDebateModel] = useState(config?.debate_model ?? 'deepseek/deepseek-reasoner');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
@@ -149,6 +152,8 @@ function ConfigEditor({
     setFixedAmountValue(config.quantity_params?.fixed_amount_value ?? 10000);
     setSlTpEnabled(config.sl_tp_enabled ?? true);
     setSlTpCheckInterval(config.sl_tp_check_interval ?? 30000);
+    setDebateEnabled(config.debate_enabled ?? false);
+    setDebateModel(config.debate_model ?? 'deepseek/deepseek-reasoner');
   }, [config]);
 
   const handleSave = async () => {
@@ -165,6 +170,8 @@ function ConfigEditor({
         },
         sl_tp_enabled: slTpEnabled,
         sl_tp_check_interval: slTpCheckInterval,
+        debate_enabled: debateEnabled,
+        debate_model: debateModel,
       });
       setSaveMsg('保存成功');
       setTimeout(() => setSaveMsg(''), 3000);
@@ -220,6 +227,7 @@ function ConfigEditor({
             <option value="fixed_quantity">固定数量</option>
             <option value="fixed_amount">固定金额</option>
             <option value="kelly_formula">Kelly 公式</option>
+            <option value="volatility_parity">波动率平价 (ATR)</option>
           </select>
         </div>
 
@@ -246,6 +254,14 @@ function ConfigEditor({
               onChange={(e) => setFixedAmountValue(Number(e.target.value))}
               className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
             />
+          </div>
+        )}
+        {quantityMode === 'volatility_parity' && (
+          <div className="sm:col-span-2">
+            <p className="text-xs text-gray-400">
+              波动率平价模式：单笔最大亏损 = 账户总资金 × 1%，止损宽容度 = 2 × ATR(14)。
+              波动大的股票自动少买，波动小的股票自动多买。需要信号中包含 ATR 数据。
+            </p>
           </div>
         )}
 
@@ -280,6 +296,48 @@ function ConfigEditor({
             onChange={(e) => setSlTpCheckInterval(Number(e.target.value))}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           />
+        </div>
+      </div>
+
+      {/* v2.0: Dual-Agent Debate Section */}
+      <div className="border-t border-gray-200 pt-4">
+        <h4 className="text-sm font-medium text-gray-700 mb-3">🤖 双智能体辩论 (v2.0)</h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setDebateEnabled(!debateEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                debateEnabled ? 'bg-blue-500' : 'bg-gray-300'
+              }`}
+              role="switch"
+              aria-checked={debateEnabled}
+              aria-label="辩论机制开关"
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  debateEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+            <div>
+              <span className="text-xs text-gray-500">辩论机制 {debateEnabled ? '已启用' : '已停用'}</span>
+              <p className="text-xs text-gray-400">买入前由多头/空头 Agent 辩论，首席风控官裁决</p>
+            </div>
+          </div>
+
+          {debateEnabled && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">裁决模型</label>
+              <input
+                type="text"
+                value={debateModel}
+                onChange={(e) => setDebateModel(e.target.value)}
+                placeholder="deepseek/deepseek-reasoner"
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-0.5">用于最终裁决的 LLM 模型 ID</p>
+            </div>
+          )}
         </div>
       </div>
 

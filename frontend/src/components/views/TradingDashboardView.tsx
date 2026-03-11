@@ -518,6 +518,54 @@ function ManualOrderForm({ onSubmit }: { onSubmit: (req: { symbol: string; side:
 // Main View
 // ---------------------------------------------------------------------------
 
+function DynamicRiskPanel() {
+  const [riskState, setRiskState] = useState<{
+    regime: string; vix_level: number | null; portfolio_drawdown: number; risk_multiplier: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const fetchRisk = async () => {
+      try {
+        const res = await fetch('/api/trading/dynamic-risk');
+        if (res.ok) setRiskState(await res.json());
+      } catch { /* ignore */ }
+    };
+    fetchRisk();
+    const timer = setInterval(fetchRisk, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!riskState) return null;
+
+  const regimeLabels: Record<string, { label: string; color: string; icon: string }> = {
+    low_vol: { label: '低波动', color: 'text-green-600 bg-green-50 border-green-200', icon: '🟢' },
+    normal: { label: '正常', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: '🔵' },
+    high_vol: { label: '高波动', color: 'text-orange-600 bg-orange-50 border-orange-200', icon: '🟠' },
+    crisis: { label: '危机', color: 'text-red-600 bg-red-50 border-red-200', icon: '🔴' },
+  };
+  const regime = regimeLabels[riskState.regime] || regimeLabels.normal;
+
+  return (
+    <div className={`rounded-lg border p-3 ${regime.color}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-lg">{regime.icon}</span>
+          <div>
+            <span className="text-sm font-medium">市场状态: {regime.label}</span>
+            {riskState.vix_level != null && (
+              <span className="ml-3 text-xs opacity-75">VIX: {riskState.vix_level.toFixed(1)}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <span>风险乘数: {riskState.risk_multiplier.toFixed(2)}x</span>
+          <span>组合回撤: {(riskState.portfolio_drawdown * 100).toFixed(1)}%</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const TradingDashboardView: React.FC = () => {
   const {
     account, orders, riskRules, stats, config, credentials,
@@ -602,6 +650,9 @@ const TradingDashboardView: React.FC = () => {
 
         {/* Account Overview */}
         <AccountOverview account={account} stats={stats} />
+
+        {/* Dynamic Risk State (VIX) */}
+        <DynamicRiskPanel />
 
         {/* Auto Trading Panel */}
         <section className="rounded-lg border border-gray-200 bg-white p-4">
