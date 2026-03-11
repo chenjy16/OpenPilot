@@ -62,6 +62,10 @@ export class QuoteService extends EventEmitter {
   private subscribedSymbols: Set<string> = new Set();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private started = false;
+  private wsConnected = false;
+  private httpFallbackTimer: ReturnType<typeof setInterval> | null = null;
+  /** External fallback price provider (e.g. Finnhub HTTP quote API) */
+  private fallbackProvider: ((symbol: string) => Promise<number>) | null = null;
 
   /**
    * Initialize with credentials. Call start() to begin.
@@ -71,6 +75,14 @@ export class QuoteService extends EventEmitter {
     // Reset connection if reconfigured
     this.quoteCtx = null;
     this.config = null;
+  }
+
+  /**
+   * Set an external HTTP-based fallback price provider.
+   * Used when Longport WebSocket is unreachable (e.g. network/region issues).
+   */
+  setFallbackProvider(provider: (symbol: string) => Promise<number>): void {
+    this.fallbackProvider = provider;
   }
 
   isConfigured(): boolean {
@@ -148,71 +160,100 @@ export class QuoteService extends EventEmitter {
   /**
    * Start the quote service. Subscribes to symbols and begins polling.
    */
-  async start(symbols: string[], pollIntervalMs: number = 60000): Promise<void> {
-    if (this.started) return;
-    if (!this.isConfigured()) {
-      console.log('[QuoteService] Not configured, skipping start');
-      return;
-    }
+  /**
+     * Start the quote service. Subscribes to symbols and begins polling.
+     * If WebSocket connection fails, automatically degrades to HTTP fallback polling.
+     */
+    async start(symbols: string[], pollIntervalMs: number = 60000): Promise<void> {
+      if (this.started) return;
+      if (!this.isConfigured()) {
+        console.log('[QuoteService] Not configured, skipping start');
+        return;
+      }
 
-    this.started = true;
-
-    try {
-      const ctx = await this.ensureContext();
+      this.started = true;
 
       // Normalize symbols to Longport format
       const lpSymbols = symbols.map(s => this.normalizeSymbol(s));
 
-      if (lpSymbols.length > 0) {
-        // Subscribe to quote push
-        await ctx.subscribe(lpSymbols, [SubType.Quote]);
-        for (const s of lpSymbols) this.subscribedSymbols.add(s);
-        console.log(`[QuoteService] Subscribed to ${lpSymbols.length} symbols`);
-      }
+      try {
+        // Race QuoteContext creation against a 8-second timeout
+        const ctx = await Promise.race([
+          this.ensureContext(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('QuoteContext connection timeout (8s)')), 8000),
+          ),
+        ]);
 
-      // Initial fetch of all prices
-      await this.refreshPrices(lpSymbols);
+        this.wsConnected = true;
 
-      // Start periodic polling (for free accounts with delayed data, polling ensures freshness)
-      this.pollTimer = setInterval(() => {
-        const syms = Array.from(this.subscribedSymbols);
-        if (syms.length > 0) {
-          this.refreshPrices(syms).catch(err => {
-            console.error(`[QuoteService] Poll error: ${err.message}`);
-          });
+        if (lpSymbols.length > 0) {
+          // Subscribe to quote push
+          await ctx.subscribe(lpSymbols, [SubType.Quote]);
+          for (const s of lpSymbols) this.subscribedSymbols.add(s);
+          console.log(`[QuoteService] Subscribed to ${lpSymbols.length} symbols`);
         }
-      }, pollIntervalMs);
 
-      console.log(`[QuoteService] Started (${lpSymbols.length} symbols, poll every ${pollIntervalMs / 1000}s)`);
-    } catch (err: any) {
-      console.error(`[QuoteService] Start failed: ${err.message}`);
-      this.started = false;
+        // Initial fetch of all prices
+        await this.refreshPrices(lpSymbols);
+
+        // Start periodic polling (for free accounts with delayed data, polling ensures freshness)
+        this.pollTimer = setInterval(() => {
+          const syms = Array.from(this.subscribedSymbols);
+          if (syms.length > 0) {
+            this.refreshPrices(syms).catch(err => {
+              console.error(`[QuoteService] Poll error: ${err.message}`);
+            });
+          }
+        }, pollIntervalMs);
+
+        console.log(`[QuoteService] Started (${lpSymbols.length} symbols, poll every ${pollIntervalMs / 1000}s)`);
+      } catch (err: any) {
+        console.warn(`[QuoteService] WebSocket connection failed: ${err.message}`);
+        this.wsConnected = false;
+        // Reset broken context so it doesn't block future attempts
+        this.quoteCtx = null;
+
+        // Track symbols even though WS failed — HTTP fallback needs them
+        for (const s of lpSymbols) this.subscribedSymbols.add(s);
+
+        // Auto-degrade to HTTP fallback polling
+        this.startHttpFallbackPolling(pollIntervalMs);
+      }
     }
-  }
 
   /**
    * Stop the quote service.
    */
-  async stop(): Promise<void> {
-    if (!this.started) return;
-    this.started = false;
+  /**
+     * Stop the quote service.
+     */
+    async stop(): Promise<void> {
+      if (!this.started) return;
+      this.started = false;
 
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
-
-    if (this.quoteCtx && this.subscribedSymbols.size > 0) {
-      try {
-        await this.quoteCtx.unsubscribe(Array.from(this.subscribedSymbols), [SubType.Quote]);
-      } catch {
-        // Ignore unsubscribe errors on shutdown
+      if (this.pollTimer) {
+        clearInterval(this.pollTimer);
+        this.pollTimer = null;
       }
-    }
 
-    this.subscribedSymbols.clear();
-    console.log('[QuoteService] Stopped');
-  }
+      if (this.httpFallbackTimer) {
+        clearInterval(this.httpFallbackTimer);
+        this.httpFallbackTimer = null;
+      }
+
+      if (this.quoteCtx && this.subscribedSymbols.size > 0) {
+        try {
+          await this.quoteCtx.unsubscribe(Array.from(this.subscribedSymbols), [SubType.Quote]);
+        } catch {
+          // Ignore unsubscribe errors on shutdown
+        }
+      }
+
+      this.subscribedSymbols.clear();
+      this.wsConnected = false;
+      console.log('[QuoteService] Stopped');
+    }
 
   /**
    * Subscribe to additional symbols.
@@ -264,19 +305,43 @@ export class QuoteService extends EventEmitter {
    * Get latest price as a number (for StopLossManager compatibility).
    * Throws if no price available.
    */
-  async getPriceNumber(symbol: string): Promise<number> {
-    const data = this.getPrice(symbol);
-    if (data && data.lastPrice > 0) return data.lastPrice;
+  /**
+     * Get latest price as a number (for StopLossManager compatibility).
+     * Tries: 1) cache → 2) Longport WS direct fetch → 3) HTTP fallback provider.
+     * Throws if no price available from any source.
+     */
+    async getPriceNumber(symbol: string): Promise<number> {
+      const data = this.getPrice(symbol);
+      if (data && data.lastPrice > 0) return data.lastPrice;
 
-    // Try a direct fetch if cache miss
-    if (this.quoteCtx) {
-      try {
-        const lpSymbol = this.normalizeSymbol(symbol);
-        const quotes = await this.quoteCtx.quote([lpSymbol]);
-        if (quotes.length > 0) {
-          const q = quotes[0];
-          const price = typeof q.lastDone.toNumber === 'function' ? q.lastDone.toNumber() : Number(q.lastDone);
+      // Try a direct fetch via Longport WS if connected
+      if (this.quoteCtx && this.wsConnected) {
+        try {
+          const lpSymbol = this.normalizeSymbol(symbol);
+          const quotes = await this.quoteCtx.quote([lpSymbol]);
+          if (quotes.length > 0) {
+            const q = quotes[0];
+            const price = typeof q.lastDone.toNumber === 'function' ? q.lastDone.toNumber() : Number(q.lastDone);
+            if (price > 0) {
+              this.priceCache.set(lpSymbol, {
+                symbol: lpSymbol,
+                lastPrice: price,
+                timestamp: Date.now(),
+              });
+              return price;
+            }
+          }
+        } catch {
+          // Fall through to HTTP fallback
+        }
+      }
+
+      // Try HTTP fallback provider (Finnhub / yfinance)
+      if (this.fallbackProvider) {
+        try {
+          const price = await this.fallbackProvider(symbol);
           if (price > 0) {
+            const lpSymbol = this.normalizeSymbol(symbol);
             this.priceCache.set(lpSymbol, {
               symbol: lpSymbol,
               lastPrice: price,
@@ -284,14 +349,13 @@ export class QuoteService extends EventEmitter {
             });
             return price;
           }
+        } catch {
+          // Fall through
         }
-      } catch {
-        // Fall through
       }
-    }
 
-    throw new Error(`No price data for ${symbol}`);
-  }
+      throw new Error(`No price data for ${symbol}`);
+    }
 
   /**
    * Get all cached prices.
@@ -305,6 +369,55 @@ export class QuoteService extends EventEmitter {
    */
   getSubscriptionCount(): number {
     return this.subscribedSymbols.size;
+  }
+
+  /** Whether the Longport WebSocket is connected. */
+  isWsConnected(): boolean {
+    return this.wsConnected;
+  }
+
+  /**
+   * Start HTTP fallback polling when WebSocket is unavailable.
+   * Uses the fallbackProvider to fetch prices for all subscribed symbols.
+   */
+  private startHttpFallbackPolling(intervalMs: number): void {
+    if (this.httpFallbackTimer) return;
+    if (!this.fallbackProvider) {
+      console.warn('[QuoteService] No fallback provider set — prices will be unavailable');
+      return;
+    }
+
+    console.log(`[QuoteService] ⚠️ Degraded mode: HTTP fallback polling every ${intervalMs / 1000}s`);
+
+    const poll = async () => {
+      if (!this.fallbackProvider) return;
+      const symbols = Array.from(this.subscribedSymbols);
+      for (const lpSymbol of symbols) {
+        try {
+          // Strip market suffix for fallback provider (AAPL.US → AAPL)
+          const bareSymbol = lpSymbol.includes('.') ? lpSymbol.split('.')[0] : lpSymbol;
+          const price = await this.fallbackProvider(bareSymbol);
+          if (price > 0) {
+            const data: PriceData = {
+              symbol: lpSymbol,
+              lastPrice: price,
+              timestamp: Date.now(),
+            };
+            this.priceCache.set(lpSymbol, data);
+            this.emit('price', data);
+          }
+        } catch {
+          // Skip this symbol, try next
+        }
+      }
+    };
+
+    // Immediate first poll
+    poll().catch(err => console.error(`[QuoteService] HTTP fallback poll error: ${err.message}`));
+
+    this.httpFallbackTimer = setInterval(() => {
+      poll().catch(err => console.error(`[QuoteService] HTTP fallback poll error: ${err.message}`));
+    }, intervalMs);
   }
 
   /**

@@ -81,6 +81,7 @@ import { UniverseScreener } from './services/UniverseScreener';
 import { DataManager } from './services/trading/DataManager';
 import { SignalTracker } from './services/SignalTracker';
 import { StrategyAllocator } from './services/trading/StrategyAllocator';
+import { FinnhubPriceProvider } from './services/trading/FinnhubPriceProvider';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -896,6 +897,17 @@ async function main(): Promise<void> {
   const tradingConfig = tradingGateway.getConfig();
   const isLiveMode = tradingConfig.trading_mode === 'live';
   const quoteToken = isLiveMode ? brokerCreds.access_token : brokerCreds.paper_access_token;
+
+  // Set up Finnhub HTTP fallback for when Longport WebSocket is unreachable
+  const finnhubKey = process.env.FINNHUB_API_KEY;
+  if (finnhubKey) {
+    const finnhubProvider = new FinnhubPriceProvider(finnhubKey);
+    quoteService.setFallbackProvider(async (symbol: string) => {
+      return finnhubProvider.getPrice(symbol);
+    });
+    console.log(`[${new Date().toISOString()}] Finnhub HTTP fallback price provider configured`);
+  }
+
   if (brokerCreds.app_key && brokerCreds.app_secret && quoteToken) {
     quoteService.configure({
       appKey: brokerCreds.app_key,
@@ -932,8 +944,17 @@ async function main(): Promise<void> {
       return quoteService.getPriceNumber(symbol);
     });
     console.log(`[${new Date().toISOString()}] QuoteService configured, StopLossManager & PositionSyncer wired to real prices`);
+  } else if (finnhubKey) {
+    // No Longport credentials but Finnhub is available — start in pure HTTP fallback mode
+    // Still wire price providers so PositionSyncer and StopLossManager get prices
+    const finnhubProvider = new FinnhubPriceProvider(finnhubKey);
+    const fallbackGetPrice = async (symbol: string) => finnhubProvider.getPrice(symbol);
+    positionSyncer.setPriceProvider(fallbackGetPrice);
+    stopLossManager.setPriceProvider(fallbackGetPrice);
+    stopLossManager.startMonitoring(30000);
+    console.log(`[${new Date().toISOString()}] QuoteService: Longport credentials missing, using Finnhub-only mode`);
   } else {
-    console.log(`[${new Date().toISOString()}] QuoteService skipped (no broker credentials)`);
+    console.log(`[${new Date().toISOString()}] QuoteService skipped (no broker credentials, no Finnhub key)`);
   }
 
   // 17. Initialize UniverseScreener — auto stock screening

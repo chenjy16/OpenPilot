@@ -25,6 +25,7 @@ import type {
 import {
   Config,
   TradeContext,
+  QuoteContext,
   Decimal as LPDecimal,
   OrderType as LPOrderType,
   OrderSide as LPOrderSide,
@@ -367,9 +368,38 @@ export class LongportAdapter implements BrokerAdapter {
               symbol: pos.symbol,
               quantity: qty,
               avg_cost: costPrice,
-              current_price: costPrice, // SDK doesn't provide real-time price here; use quote API separately
+              current_price: costPrice, // fallback; will be overwritten by quote below
               market_value: qty * costPrice,
             });
+          }
+        }
+
+        // Fetch real-time quotes to fill current_price (with 8s timeout)
+        if (positions.length > 0 && this.config) {
+          try {
+            const quoteCtx = await Promise.race([
+              QuoteContext.new(this.config),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('QuoteContext timeout (8s)')), 8000),
+              ),
+            ]);
+            const symbols = positions.map(p => p.symbol);
+            const quotes = await quoteCtx.quote(symbols);
+            const priceMap = new Map<string, number>();
+            for (const q of quotes) {
+              const price = q.lastDone?.toNumber?.() ?? 0;
+              if (price > 0) priceMap.set(q.symbol, price);
+            }
+            for (const pos of positions) {
+              const realPrice = priceMap.get(pos.symbol);
+              if (realPrice) {
+                pos.current_price = realPrice;
+                pos.market_value = pos.quantity * realPrice;
+              }
+            }
+          } catch (quoteErr: unknown) {
+            // Quote fetch failed — keep cost_price as fallback
+            console.warn(`[LongportAdapter] Quote fetch for positions failed: ${this.extractErrorMessage(quoteErr)}`);
           }
         }
 

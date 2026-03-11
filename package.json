@@ -8,12 +8,12 @@
     "copy-assets": "cp -r src/runtime/prompts dist/runtime/prompts && cp -r src/runtime/skills dist/runtime/skills",
     "ui:build": "cd frontend && npx vite build",
     "prepack": "npm run build && npm run ui:build",
-    "gateway": "node dist/index.js",
-    "gateway:dev": "npm run build && npm run ui:build && node dist/index.js",
-    "start": "node dist/index.js",
+    "gateway": "NODE_OPTIONS=--dns-result-order=ipv4first node dist/index.js",
+    "gateway:dev": "npm run build && npm run ui:build && NODE_OPTIONS=--dns-result-order=ipv4first node dist/index.js",
+    "start": "NODE_OPTIONS=--dns-result-order=ipv4first node dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev": "NODE_OPTIONS=--dns-result-order=ipv4first nodemon --exec ts-node src/index.ts",
     "init-db": "ts-node scripts/init-db.ts"
   },
   "keywords": [
