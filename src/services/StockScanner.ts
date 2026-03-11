@@ -75,6 +75,11 @@ export class StockScanner {
     this.config = { ...this.config, ...config };
   }
 
+  /** Get the current watchlist (for merging with dynamic screener results) */
+  getWatchlist(): string[] {
+    return [...this.config.watchlist];
+  }
+
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------

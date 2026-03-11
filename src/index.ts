@@ -738,6 +738,16 @@ async function main(): Promise<void> {
       }
     }
 
+    // Merge dynamic_watchlist (from universe-screen) into scanner watchlist
+    // This ensures stock-scan covers the full screened universe, not just manual picks
+    const screenedSymbols = universeScreener.getWatchlistSymbols();
+    if (screenedSymbols.length > 0) {
+      const manualWatchlist = stockScanner.getWatchlist();
+      const merged = [...new Set([...manualWatchlist, ...screenedSymbols])];
+      stockScanner.updateConfig({ watchlist: merged });
+      console.log(`[stock-scan] Merged watchlist: ${manualWatchlist.length} manual + ${screenedSymbols.length} screened = ${merged.length} total`);
+    }
+
     const result = await stockScanner.runFullScan();
 
     // Determine confidence threshold for Signal_Card push
@@ -943,6 +953,16 @@ async function main(): Promise<void> {
     const newSymbols = universeScreener.getWatchlistSymbols();
     if (newSymbols.length > 0 && quoteService.isConfigured()) {
       await quoteService.subscribe(newSymbols);
+    }
+
+    // Auto-feed screened symbols into StockScanner watchlist
+    // so the next stock-scan run analyzes the dynamically screened universe
+    if (newSymbols.length > 0) {
+      // Merge: keep any manually configured symbols + add screened symbols
+      const currentWatchlist = stockScanner.getWatchlist();
+      const merged = [...new Set([...currentWatchlist, ...newSymbols])];
+      stockScanner.updateConfig({ watchlist: merged });
+      console.log(`[${new Date().toISOString()}] Universe → StockScanner: ${newSymbols.length} screened symbols merged (total watchlist: ${merged.length})`);
     }
   });
 
