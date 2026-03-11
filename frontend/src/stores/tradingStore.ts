@@ -172,11 +172,13 @@ interface TradingState {
   stopLossRecords: StopLossRecord[];
   pipelineSignals: ProcessResult[];
   performanceMetrics: PerformanceMetrics | null;
+  tradingEvents: Array<{ type: string; data: any; timestamp: number }>;
 
   // UI state
   loading: boolean;
   error: string | null;
   pollingTimer: ReturnType<typeof setInterval> | null;
+  tradingWs: WebSocket | null;
 
   // Actions
   fetchAccount: () => Promise<void>;
@@ -199,6 +201,8 @@ interface TradingState {
   fetchAll: () => Promise<void>;
   startPolling: () => void;
   stopPolling: () => void;
+  connectTradingWs: () => void;
+  disconnectTradingWs: () => void;
 }
 
 export const useTradingStore = create<TradingState>()((set, _get) => ({
@@ -213,9 +217,11 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
   stopLossRecords: [],
   pipelineSignals: [],
   performanceMetrics: null,
+  tradingEvents: [],
   loading: false,
   error: null,
   pollingTimer: null,
+  tradingWs: null,
 
   fetchAccount: async () => {
     try {
@@ -390,6 +396,48 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
     if (store.pollingTimer) {
       clearInterval(store.pollingTimer);
       set({ pollingTimer: null });
+    }
+  },
+
+  connectTradingWs: () => {
+    const store = _get();
+    if (store.tradingWs) return;
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'trading_event') {
+          const newEvent = { type: msg.event, data: msg.data, timestamp: Date.now() };
+          const current = _get().tradingEvents;
+          // Keep last 50 events
+          set({ tradingEvents: [newEvent, ...current].slice(0, 50) });
+          // Auto-refresh relevant data on certain events
+          if (msg.event === 'order_filled' || msg.event === 'order_created' || msg.event === 'order_failed') {
+            _get().fetchOrders();
+            _get().fetchAccount();
+          }
+          if (msg.event === 'stop_loss_triggered') {
+            _get().fetchStopLossRecords();
+            _get().fetchPositions();
+          }
+        }
+      } catch { /* ignore parse errors */ }
+    };
+    ws.onclose = () => {
+      set({ tradingWs: null });
+      // Auto-reconnect after 5s
+      setTimeout(() => { _get().connectTradingWs(); }, 5000);
+    };
+    set({ tradingWs: ws });
+  },
+
+  disconnectTradingWs: () => {
+    const store = _get();
+    if (store.tradingWs) {
+      store.tradingWs.onclose = null; // prevent auto-reconnect
+      store.tradingWs.close();
+      set({ tradingWs: null });
     }
   },
 }));

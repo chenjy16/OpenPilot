@@ -96,13 +96,26 @@ export function formatRiskAlert(violations: RiskCheckResult['violations']): stri
  */
 export class TradeNotifier {
   private notificationService: NotificationService;
+  private onEvent?: (event: { type: string; data: any }) => void;
 
   constructor(notificationService: NotificationService) {
     this.notificationService = notificationService;
   }
 
+  /** Set a callback for real-time WebSocket push of trading events. */
+  setOnEvent(cb: (event: { type: string; data: any }) => void): void {
+    this.onEvent = cb;
+  }
+
+  private emitEvent(type: string, data: any): void {
+    if (this.onEvent) {
+      try { this.onEvent({ type, data }); } catch { /* ignore */ }
+    }
+  }
+
   /** 订单创建通知 */
   async notifyOrderCreated(order: TradingOrder): Promise<void> {
+    this.emitEvent('order_created', { id: order.id, symbol: order.symbol, side: order.side, quantity: order.quantity, price: order.price, mode: order.trading_mode });
     try {
       const message = formatOrderNotification(order, 'created');
       await this.notificationService.sendSystemAlert(message);
@@ -113,6 +126,7 @@ export class TradeNotifier {
 
   /** 订单成交通知 */
   async notifyOrderFilled(order: TradingOrder): Promise<void> {
+    this.emitEvent('order_filled', { id: order.id, symbol: order.symbol, side: order.side, filled_quantity: order.filled_quantity, filled_price: order.filled_price, mode: order.trading_mode });
     try {
       const message = formatOrderNotification(order, 'filled');
       await this.notificationService.sendSystemAlert(message);
@@ -123,6 +137,7 @@ export class TradeNotifier {
 
   /** 订单失败/拒绝通知 */
   async notifyOrderFailed(order: TradingOrder): Promise<void> {
+    this.emitEvent('order_failed', { id: order.id, symbol: order.symbol, side: order.side, reason: order.reject_reason, mode: order.trading_mode });
     try {
       const message = formatOrderNotification(order, 'failed');
       await this.notificationService.sendSystemAlert(message);
@@ -148,6 +163,7 @@ export class TradeNotifier {
 
   /** 止盈止损触发通知 */
   async notifyStopLossTriggered(event: StopLossTriggerEvent): Promise<void> {
+    this.emitEvent('stop_loss_triggered', { symbol: event.record.symbol, trigger_type: event.trigger_type, price: event.current_price, pnl: event.pnl_amount });
     try {
       const message = formatStopLossNotification(event);
       await this.notificationService.sendSystemAlert(message);

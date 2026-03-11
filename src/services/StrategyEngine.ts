@@ -10,6 +10,43 @@
 import type Database from 'better-sqlite3';
 import type { ExecutionSandbox } from '../runtime/sandbox';
 
+export interface OptimizationParam {
+  /** Path to the parameter, e.g. 'stop_loss_rule.value' or 'entry_conditions.conditions[0].value' */
+  path: string;
+  min: number;
+  max: number;
+  step: number;
+}
+
+export interface OptimizationRequest {
+  strategy_id: number;
+  symbol: string;
+  start: string;
+  end: string;
+  capital?: number;
+  commission?: number;
+  slippage?: number;
+  params: OptimizationParam[];
+  /** Metric to optimize: 'sharpe_ratio' | 'total_return' | 'win_rate'. Default: 'sharpe_ratio' */
+  optimize_for?: string;
+}
+
+export interface OptimizationResult {
+  best_params: Record<string, number>;
+  best_metric: number;
+  optimize_for: string;
+  total_combinations: number;
+  tested: number;
+  top_results: Array<{
+    params: Record<string, number>;
+    sharpe_ratio: number;
+    total_return: number;
+    win_rate: number;
+    max_drawdown: number;
+    total_trades: number;
+  }>;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -437,6 +474,119 @@ export class StrategyEngine {
 
   // -----------------------------------------------------------------------
   // Scan with strategy (4.4)
+  // -----------------------------------------------------------------------
+  // Parameter Optimization — grid search over parameter ranges
+  // -----------------------------------------------------------------------
+
+  /**
+   * Run grid search over parameter ranges to find optimal strategy parameters.
+   * Iterates all combinations, runs backtest for each, returns top results sorted by target metric.
+   */
+  async runParameterOptimization(req: OptimizationRequest): Promise<OptimizationResult> {
+    const strategy = this.getStrategy(req.strategy_id);
+    if (!strategy) throw new Error(`Strategy ${req.strategy_id} not found`);
+
+    const optimizeFor = req.optimize_for || 'sharpe_ratio';
+
+    // Generate all parameter value arrays
+    const paramValues: Array<{ path: string; values: number[] }> = [];
+    for (const p of req.params) {
+      const values: number[] = [];
+      for (let v = p.min; v <= p.max + p.step * 0.001; v += p.step) {
+        values.push(Math.round(v * 10000) / 10000); // avoid float drift
+      }
+      paramValues.push({ path: p.path, values });
+    }
+
+    // Compute total combinations
+    const totalCombinations = paramValues.reduce((acc, pv) => acc * pv.values.length, 1);
+    if (totalCombinations > 500) {
+      throw new Error(`Too many combinations (${totalCombinations}). Max 500. Reduce ranges or increase step.`);
+    }
+
+    // Generate all combinations via cartesian product
+    const combinations: Array<Record<string, number>> = [{}];
+    for (const pv of paramValues) {
+      const expanded: Array<Record<string, number>> = [];
+      for (const combo of combinations) {
+        for (const val of pv.values) {
+          expanded.push({ ...combo, [pv.path]: val });
+        }
+      }
+      combinations.length = 0;
+      combinations.push(...expanded);
+    }
+
+    // Run backtest for each combination
+    const results: OptimizationResult['top_results'] = [];
+
+    for (const combo of combinations) {
+      // Deep clone strategy and apply parameter overrides
+      const modified = JSON.parse(JSON.stringify(strategy)) as StrategyDefinition;
+      for (const [paramPath, value] of Object.entries(combo)) {
+        this.setNestedValue(modified, paramPath, value);
+      }
+
+      try {
+        const bt = await this.runBacktest({
+          strategy: modified,
+          symbol: req.symbol,
+          start: req.start,
+          end: req.end,
+          capital: req.capital,
+          commission: req.commission,
+          slippage: req.slippage,
+        });
+
+        results.push({
+          params: combo,
+          sharpe_ratio: bt.sharpe_ratio,
+          total_return: bt.total_return,
+          win_rate: bt.win_rate,
+          max_drawdown: bt.max_drawdown,
+          total_trades: bt.total_trades,
+        });
+      } catch {
+        // Skip failed combinations
+      }
+    }
+
+    // Sort by target metric descending
+    results.sort((a, b) => {
+      const aVal = (a as any)[optimizeFor] ?? 0;
+      const bVal = (b as any)[optimizeFor] ?? 0;
+      return bVal - aVal;
+    });
+
+    const top = results.slice(0, 10);
+    const best = top[0];
+
+    return {
+      best_params: best?.params ?? {},
+      best_metric: best ? (best as any)[optimizeFor] ?? 0 : 0,
+      optimize_for: optimizeFor,
+      total_combinations: totalCombinations,
+      tested: results.length,
+      top_results: top,
+    };
+  }
+
+  /**
+   * Set a nested value on an object using dot-path notation.
+   * Supports array indexing: 'entry_conditions.conditions[0].value'
+   */
+  private setNestedValue(obj: any, path: string, value: any): void {
+    const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+    let current = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = isNaN(Number(parts[i])) ? parts[i] : Number(parts[i]);
+      current = current[key];
+      if (current == null) return;
+    }
+    const lastKey = parts[parts.length - 1];
+    current[isNaN(Number(lastKey)) ? lastKey : Number(lastKey)] = value;
+  }
+
   // -----------------------------------------------------------------------
 
   async scanWithStrategy(strategyId: number, symbols: string[]): Promise<StrategyScanResult> {

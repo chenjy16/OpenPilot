@@ -2311,6 +2311,33 @@ export class APIServer {
       }
     });
 
+    // ----- POST /api/stocks/optimize — strategy parameter optimization (grid search) -----
+    this.app.post('/api/stocks/optimize', async (req: Request, res: Response) => {
+      if (!this.strategyEngine) {
+        res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'StrategyEngine not initialized' });
+        return;
+      }
+      const { strategy_id, symbol, start, end, capital, commission, slippage, params, optimize_for } = req.body;
+      if (!strategy_id) { validationError(res, 'strategy_id is required'); return; }
+      const sym = validateSymbol(symbol);
+      if (!sym) { validationError(res, 'symbol must be 1-10 uppercase letters'); return; }
+      if (!start || !end) { validationError(res, 'start and end dates are required'); return; }
+      if (!Array.isArray(params) || params.length === 0) { validationError(res, 'params array is required'); return; }
+      try {
+        const result = await this.strategyEngine.runParameterOptimization({
+          strategy_id: Number(strategy_id),
+          symbol: sym,
+          start, end,
+          capital, commission, slippage,
+          params,
+          optimize_for,
+        });
+        res.status(200).json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: 'INTERNAL_ERROR', message: err.message });
+      }
+    });
+
     // ----- /api/stocks/strategies CRUD -----
     this.app.get('/api/stocks/strategies', (_req: Request, res: Response) => {
       if (!this.strategyEngine) {
@@ -3371,6 +3398,20 @@ export class APIServer {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'error', data: { message } }));
     }
+  }
+
+  /**
+   * Broadcast a trading event to all connected WebSocket clients.
+   * Used for real-time push of order updates, stop-loss triggers, signal alerts, etc.
+   */
+  broadcastTradingEvent(event: { type: string; data: any }): void {
+    if (!this.wss) return;
+    const payload = JSON.stringify({ type: 'trading_event', event: event.type, data: event.data });
+    this.wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(payload);
+      }
+    });
   }
 
   getApp(): Application {

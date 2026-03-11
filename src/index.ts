@@ -800,6 +800,11 @@ async function main(): Promise<void> {
     db,
   });
 
+  // Wire real-time WebSocket push for trading events
+  tradeNotifier.setOnEvent((event) => {
+    server.broadcastTradingEvent(event);
+  });
+
   // Connect signal auto-trading (if StrategyEngine exists)
   // tradingGateway.handleSignal will be called when strategy signals are generated
 

@@ -521,10 +521,11 @@ function ManualOrderForm({ onSubmit }: { onSubmit: (req: { symbol: string; side:
 const TradingDashboardView: React.FC = () => {
   const {
     account, orders, riskRules, stats, config, credentials,
-    loading, error,
+    loading, error, tradingEvents,
     fetchAll, placeOrder, cancelOrder, updateConfig, saveCredentials, testBrokerConnection,
     startPolling, stopPolling,
     fetchStopLossRecords,
+    connectTradingWs, disconnectTradingWs,
   } = useTradingStore();
 
   const [showSettings, setShowSettings] = useState(false);
@@ -533,15 +534,17 @@ const TradingDashboardView: React.FC = () => {
   useEffect(() => {
     fetchAll();
     startPolling();
+    connectTradingWs();
     // Poll stop-loss records every 3 seconds for timely updates (Req 8.4)
     const slTimer = setInterval(() => {
       fetchStopLossRecords().catch(() => {});
     }, 3000);
     return () => {
       stopPolling();
+      disconnectTradingWs();
       clearInterval(slTimer);
     };
-  }, [fetchAll, startPolling, stopPolling, fetchStopLossRecords]);
+  }, [fetchAll, startPolling, stopPolling, fetchStopLossRecords, connectTradingWs, disconnectTradingWs]);
 
   const handleModeSwitch = async (mode: 'paper' | 'live') => {
     setSwitchError('');
@@ -621,6 +624,32 @@ const TradingDashboardView: React.FC = () => {
             <RiskStatusPanel rules={riskRules} stats={stats} />
           </section>
         </div>
+
+        {/* Real-time Event Feed */}
+        {tradingEvents.length > 0 && (
+          <section className="rounded-lg border border-gray-200 bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold text-gray-700">📡 实时事件</h2>
+            <div className="max-h-48 space-y-1 overflow-y-auto">
+              {tradingEvents.slice(0, 20).map((evt, i) => {
+                const icons: Record<string, string> = {
+                  order_created: '📋', order_filled: '✅', order_failed: '❌',
+                  stop_loss_triggered: '🛑', risk_alert: '🚨',
+                };
+                const time = new Date(evt.timestamp).toLocaleTimeString();
+                return (
+                  <div key={i} className="flex items-center gap-2 rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-50">
+                    <span>{icons[evt.type] || '📌'}</span>
+                    <span className="text-gray-400">{time}</span>
+                    <span className="font-medium">{evt.data?.symbol || ''}</span>
+                    <span>{evt.type.replace(/_/g, ' ')}</span>
+                    {evt.data?.filled_price && <span className="text-green-600">@{evt.data.filled_price}</span>}
+                    {evt.data?.reason && <span className="text-red-500 truncate max-w-xs">{evt.data.reason}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Manual Order Form */}
         <section className="rounded-lg border border-gray-200 bg-white p-4">
