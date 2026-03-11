@@ -78,6 +78,7 @@ import { AutoTradingPipeline } from './services/trading/AutoTradingPipeline';
 import { StrategyEngine } from './services/StrategyEngine';
 import { QuoteService } from './services/trading/QuoteService';
 import { UniverseScreener } from './services/UniverseScreener';
+import { DataManager } from './services/trading/DataManager';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -886,6 +887,39 @@ async function main(): Promise<void> {
 
   // Expose UniverseScreener and QuoteService to API server
   server.setScreenerServices({ universeScreener, quoteService });
+
+  // 18. Initialize DataManager — local OHLCV data cache
+  const dataManager = new DataManager(db, screenPythonPath);
+
+  // Register data-sync cron handler
+  cronScheduler.registerHandler('data-sync', async (_job) => {
+    // Sync watchlist symbols + active stop-loss symbols
+    const watchSymbols = universeScreener.getWatchlistSymbols();
+    const slSymbols = stopLossManager.getActiveRecords().map(r => r.symbol);
+    const allSyncSymbols = [...new Set([...stockWatchlist, ...watchSymbols, ...slSymbols])];
+    if (allSyncSymbols.length > 0) {
+      const result = await dataManager.syncSymbols(allSyncSymbols);
+      console.log(`[DataManager] Synced ${result.synced}/${allSyncSymbols.length} symbols, ${result.errors.length} errors`);
+    }
+  });
+
+  // Seed default data-sync cron job if none exists
+  {
+    const existingDataJobs = cronScheduler.listJobs();
+    if (!existingDataJobs.find(j => j.handler === 'data-sync')) {
+      cronScheduler.createJob({
+        id: 'data-sync-daily',
+        name: '历史数据同步',
+        schedule: '30 22 * * 1-5',
+        handler: 'data-sync',
+        enabled: true,
+      });
+    }
+  }
+
+  // Expose DataManager to API server
+  server.setDataServices({ dataManager, db });
+
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';
   let bindHost = '127.0.0.1';

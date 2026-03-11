@@ -335,6 +335,9 @@ export class APIServer {
   private universeScreener?: any;
   /** QuoteService for real-time price data */
   private quoteService?: any;
+  /** DataManager for OHLCV data cache */
+  private dataManager?: any;
+  private _dataDb?: any;
 
   constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
@@ -3046,6 +3049,66 @@ export class APIServer {
     this.universeScreener = services.universeScreener;
     this.quoteService = services.quoteService;
     this.registerScreenerRoutes();
+  }
+
+  setDataServices(services: { dataManager: any; db?: any }): void {
+    this.dataManager = services.dataManager;
+    this._dataDb = services.db;
+    this.registerDataRoutes();
+  }
+
+  private registerDataRoutes(): void {
+    // GET /api/data/ohlcv/:symbol — get cached OHLCV data
+    this.app.get('/api/data/ohlcv/:symbol', async (req: any, res: any) => {
+      if (!this.dataManager) return res.status(503).json({ error: 'DataManager not available' });
+      try {
+        const days = req.query.days ? Number(req.query.days) : 365;
+        const data = await this.dataManager.getOHLCV(req.params.symbol, days);
+        res.json(data);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // GET /api/data/stats — cache stats
+    this.app.get('/api/data/stats', (_req: any, res: any) => {
+      if (!this.dataManager) return res.status(503).json({ error: 'DataManager not available' });
+      res.json(this.dataManager.getStats());
+    });
+
+    // POST /api/data/sync — trigger manual data sync
+    this.app.post('/api/data/sync', async (req: any, res: any) => {
+      if (!this.dataManager) return res.status(503).json({ error: 'DataManager not available' });
+      try {
+        const symbols = req.body.symbols ?? [];
+        if (!Array.isArray(symbols) || symbols.length === 0) {
+          return res.status(400).json({ error: 'symbols array required' });
+        }
+        const result = await this.dataManager.syncSymbols(symbols);
+        res.json(result);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // GET /api/backtest/:strategyId — get backtest results
+    this.app.get('/api/backtest/:strategyId', (_req: any, res: any) => {
+      if (!this._dataDb) return res.status(503).json({ error: 'Database not available' });
+      try {
+        const rows = this._dataDb.prepare(
+          `SELECT * FROM backtest_results WHERE strategy_id = ? ORDER BY created_at DESC LIMIT 10`
+        ).all(Number(_req.params.strategyId));
+        const results = rows.map((r: any) => ({
+          ...r,
+          trades: r.trades_json ? JSON.parse(r.trades_json) : [],
+          equity_curve: r.equity_curve_json ? JSON.parse(r.equity_curve_json) : [],
+          config: r.config_json ? JSON.parse(r.config_json) : {},
+        }));
+        res.json(results);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
   }
 
   private registerScreenerRoutes(): void {

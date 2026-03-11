@@ -178,4 +178,49 @@ export function initTradingTables(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_pipeline_log_created ON pipeline_signal_log(created_at DESC)
   `);
+
+  // ohlcv_daily table — local cache for historical price data
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ohlcv_daily (
+      symbol TEXT NOT NULL,
+      date TEXT NOT NULL,
+      open REAL NOT NULL,
+      high REAL NOT NULL,
+      low REAL NOT NULL,
+      close REAL NOT NULL,
+      volume INTEGER NOT NULL,
+      PRIMARY KEY (symbol, date)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_ohlcv_symbol_date ON ohlcv_daily(symbol, date DESC)
+  `);
+
+  // backtest_results table — stores backtest run results
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS backtest_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      strategy_id INTEGER NOT NULL,
+      symbol TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      initial_capital REAL NOT NULL,
+      final_equity REAL NOT NULL,
+      total_return REAL NOT NULL,
+      total_trades INTEGER NOT NULL,
+      win_rate REAL NOT NULL,
+      max_drawdown REAL NOT NULL,
+      sharpe_ratio REAL,
+      trades_json TEXT,
+      equity_curve_json TEXT,
+      config_json TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (strategy_id) REFERENCES strategies(id)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_backtest_strategy ON backtest_results(strategy_id, created_at DESC)
+  `);
 }
