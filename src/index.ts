@@ -934,6 +934,47 @@ async function main(): Promise<void> {
   // Expose DataManager to API server
   server.setDataServices({ dataManager, db });
 
+  // 18a. VIX real-time monitoring — fetches VIX via Python, updates dynamic risk state,
+  //      and tightens stop-losses when VIX > 25
+  cronScheduler.registerHandler('vix-monitor', async (_job) => {
+    const venvPyPath = require('fs').existsSync(venvPy) ? venvPy : 'python3';
+    const dbPath = path.resolve(config.databasePath);
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'vix_monitor.py');
+    try {
+      execSync(`"${venvPyPath}" "${scriptPath}" --db "${dbPath}"`, { timeout: 30_000, stdio: 'pipe' });
+    } catch (err: any) {
+      console.error(`[VIX Monitor] Script failed: ${err.message}`);
+      return;
+    }
+    // Read updated state and apply risk adjustments
+    const state = tradingRiskController.getDynamicRiskState();
+    if (state.vix_level != null && state.vix_level > 25) {
+      // Tighten all stop-losses to 1× ATR when VIX is elevated
+      const tightened = stopLossManager.tightenAllStops(1.0);
+      if (tightened > 0) {
+        console.log(`[VIX Monitor] VIX=${state.vix_level}, tightened ${tightened} stop-loss records to 1×ATR`);
+        await tradeNotifier.notifyUrgentAlert(
+          `⚠️ VIX=${state.vix_level?.toFixed(1)} (${state.regime}), 已收紧 ${tightened} 个止损位至 1×ATR`,
+        );
+      }
+    }
+  });
+
+  // Seed VIX monitor cron job (every 15 minutes during US market hours, weekdays)
+  {
+    const existingVixJobs = cronScheduler.listJobs();
+    if (!existingVixJobs.find(j => j.handler === 'vix-monitor')) {
+      cronScheduler.createJob({
+        id: 'vix-monitor-periodic',
+        name: 'VIX 恐慌指数监控',
+        schedule: '*/15 13-21 * * 1-5',
+        handler: 'vix-monitor',
+        enabled: true,
+      });
+      console.log(`[${new Date().toISOString()}] VIX monitor cron job created (every 15min, market hours)`);
+    }
+  }
+
   // 19. Signal verification — auto-check pending signals against real prices
   const signalTracker = new SignalTracker(db);
   const signalPriceProvider = quoteService.isConfigured()
@@ -980,6 +1021,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: string): void => {
     console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down gracefully...`);
     autoTradingPipeline.stop();
+    tradingGateway.cancelAllTWAP();
     stopLossManager.stopMonitoring();
     quoteService.stop().catch(() => {});
     positionSyncer.stop();

@@ -76,10 +76,31 @@ export class TradingGateway {
   // Core trading operations
   // -------------------------------------------------------------------------
 
+  // ─── TWAP state ──────────────────────────────────────────────────────────
+  private twapTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+  /** TWAP threshold: orders above this USD value are auto-split */
+  private static readonly TWAP_THRESHOLD = 50000;
+  private static readonly TWAP_SLICES = 5;
+  private static readonly TWAP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
   /**
    * Place an order: create → risk check → route to engine → update status → audit.
+   * Large market orders (>$50k) are automatically split via TWAP.
    */
   async placeOrder(request: CreateOrderRequest): Promise<TradingOrder> {
+    // TWAP interception: split large market orders into time-weighted slices
+    if (!this._skipTwap) {
+      const estimatedPrice = request.price || 100;
+      const estimatedValue = request.quantity * estimatedPrice;
+      if (
+        estimatedValue > TradingGateway.TWAP_THRESHOLD &&
+        request.order_type === 'market' &&
+        request.quantity > TradingGateway.TWAP_SLICES
+      ) {
+        return this.executeTWAP(request, TradingGateway.TWAP_SLICES, TradingGateway.TWAP_INTERVAL_MS);
+      }
+    }
+
     const config = this.getConfig();
     const mode = config.trading_mode;
 
@@ -573,6 +594,87 @@ export class TradingGateway {
    */
   getBrokerAdapter(): BrokerAdapter | undefined {
     return this.brokerAdapter;
+  }
+
+  // -------------------------------------------------------------------------
+  // TWAP (Time-Weighted Average Price) execution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Split a large order into N slices executed at fixed intervals.
+   * Returns the first slice's order immediately; remaining slices run in background.
+   */
+  private async executeTWAP(
+    request: CreateOrderRequest,
+    slices: number,
+    intervalMs: number,
+  ): Promise<TradingOrder> {
+    const qtyPerSlice = Math.floor(request.quantity / slices);
+    if (qtyPerSlice < 1) {
+      // Too small to split — execute as single order
+      return this.processSingleOrder(request);
+    }
+
+    this.logAudit('twap_started', undefined, {
+      symbol: request.symbol,
+      total_quantity: request.quantity,
+      slices,
+      interval_ms: intervalMs,
+    });
+
+    // First slice: execute immediately
+    const firstOrder = await this.processSingleOrder({ ...request, quantity: qtyPerSlice });
+
+    // Remaining slices: execute in background at intervals
+    let executed = 1;
+    const twapId = `twap-${Date.now()}-${request.symbol}`;
+    const timer = setInterval(async () => {
+      if (executed >= slices) {
+        clearInterval(timer);
+        this.twapTimers.delete(twapId);
+        this.logAudit('twap_completed', undefined, { twap_id: twapId, slices_executed: executed });
+        return;
+      }
+      // Last slice gets the remainder to avoid rounding loss
+      const qty = (executed === slices - 1)
+        ? (request.quantity - qtyPerSlice * executed)
+        : qtyPerSlice;
+      try {
+        await this.processSingleOrder({ ...request, quantity: qty });
+      } catch (err: any) {
+        console.error(`[TWAP] Slice ${executed + 1}/${slices} failed for ${request.symbol}: ${err.message}`);
+      }
+      executed++;
+    }, intervalMs);
+
+    this.twapTimers.set(twapId, timer);
+    return firstOrder;
+  }
+
+  /**
+   * Execute a single order through the full pipeline (risk check → route → fill).
+   * This is the core of placeOrder without TWAP interception.
+   */
+  private async processSingleOrder(request: CreateOrderRequest): Promise<TradingOrder> {
+    // Save and restore the original placeOrder logic by calling it with a flag
+    // We temporarily set a flag to skip TWAP check to avoid infinite recursion
+    const saved = this._skipTwap;
+    this._skipTwap = true;
+    try {
+      return await this.placeOrder(request);
+    } finally {
+      this._skipTwap = saved;
+    }
+  }
+  private _skipTwap = false;
+
+  /** Cancel all pending TWAP timers (called on shutdown) */
+  cancelAllTWAP(): void {
+    for (const [id, timer] of this.twapTimers) {
+      clearInterval(timer);
+      this.logAudit('twap_cancelled', undefined, { twap_id: id });
+    }
+    this.twapTimers.clear();
   }
 
   // -------------------------------------------------------------------------
