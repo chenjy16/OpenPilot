@@ -76,6 +76,8 @@ import { StopLossManager } from './services/trading/StopLossManager';
 import { TradeNotifier } from './services/trading/TradeNotifier';
 import { AutoTradingPipeline } from './services/trading/AutoTradingPipeline';
 import { StrategyEngine } from './services/StrategyEngine';
+import { QuoteService } from './services/trading/QuoteService';
+import { UniverseScreener } from './services/UniverseScreener';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -805,6 +807,63 @@ async function main(): Promise<void> {
   positionSyncer.start();
   console.log(`[${new Date().toISOString()}] Trading module initialized (paper mode)`);
 
+  // 16. Initialize QuoteService — provides real-time price data for StopLossManager
+  const quoteService = new QuoteService();
+  const brokerCreds = tradingGateway.getBrokerCredentials();
+  const tradingConfig = tradingGateway.getConfig();
+  const isLiveMode = tradingConfig.trading_mode === 'live';
+  const quoteToken = isLiveMode ? brokerCreds.access_token : brokerCreds.paper_access_token;
+  if (brokerCreds.app_key && brokerCreds.app_secret && quoteToken) {
+    quoteService.configure({
+      appKey: brokerCreds.app_key,
+      appSecret: brokerCreds.app_secret,
+      accessToken: quoteToken,
+      region: (tradingConfig.broker_region as any) || 'hk',
+    });
+
+    // Collect symbols to subscribe: watchlist + active stop-loss symbols
+    const slSymbols = stopLossManager.getActiveRecords().map(r => r.symbol);
+    const watchlistSymbols = stockWatchlist.length > 0 ? stockWatchlist : [];
+    const allSymbols = [...new Set([...watchlistSymbols, ...slSymbols])];
+
+    if (allSymbols.length > 0) {
+      quoteService.start(allSymbols, 60000).catch(err => {
+        console.error(`[${new Date().toISOString()}] QuoteService start error: ${err.message}`);
+      });
+    }
+
+    // Wire StopLossManager to use QuoteService for real prices
+    stopLossManager.setPriceProvider(async (symbol: string) => {
+      return quoteService.getPriceNumber(symbol);
+    });
+    stopLossManager.startMonitoring(30000);
+    console.log(`[${new Date().toISOString()}] QuoteService configured, StopLossManager wired to real prices`);
+  } else {
+    console.log(`[${new Date().toISOString()}] QuoteService skipped (no broker credentials)`);
+  }
+
+  // 17. Initialize UniverseScreener — auto stock screening
+  const venvPy = path.join(__dirname, '..', 'scripts', '.venv', 'bin', 'python3');
+  const screenPythonPath = require('fs').existsSync(venvPy) ? venvPy : 'python3';
+  const universeScreener = new UniverseScreener(db, screenPythonPath);
+
+  // Register universe-screen cron handler
+  cronScheduler.registerHandler('universe-screen', async (job) => {
+    const config = job.config || {};
+    await universeScreener.runScreen({
+      pool: config.pool || 'all',
+      top: config.top || 100,
+    });
+
+    // After screening, update QuoteService subscriptions with new watchlist
+    const newSymbols = universeScreener.getWatchlistSymbols();
+    if (newSymbols.length > 0 && quoteService.isConfigured()) {
+      await quoteService.subscribe(newSymbols);
+    }
+  });
+
+  // Expose UniverseScreener and QuoteService to API server
+  server.setScreenerServices({ universeScreener, quoteService });
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';
   let bindHost = '127.0.0.1';
@@ -825,6 +884,7 @@ async function main(): Promise<void> {
     console.log(`[${new Date().toISOString()}] Received ${signal}, shutting down gracefully...`);
     autoTradingPipeline.stop();
     stopLossManager.stopMonitoring();
+    quoteService.stop().catch(() => {});
     positionSyncer.stop();
     cronScheduler.stop();
     server.stop();

@@ -331,6 +331,10 @@ export class APIServer {
   private tradingRiskController?: RiskController;
   /** OrderManager for order lifecycle */
   private tradingOrderManager?: OrderManager;
+  /** UniverseScreener for auto stock screening */
+  private universeScreener?: any;
+  /** QuoteService for real-time price data */
+  private quoteService?: any;
 
   constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
@@ -3036,6 +3040,71 @@ export class APIServer {
       stopLossManager: services.stopLossManager,
       db: services.db,
     }));
+  }
+
+  setScreenerServices(services: { universeScreener: any; quoteService: any }): void {
+    this.universeScreener = services.universeScreener;
+    this.quoteService = services.quoteService;
+    this.registerScreenerRoutes();
+  }
+
+  private registerScreenerRoutes(): void {
+    // GET /api/screener/watchlist — get dynamic watchlist
+    this.app.get('/api/screener/watchlist', (_req: any, res: any) => {
+      if (!this.universeScreener) return res.status(503).json({ error: 'Screener not available' });
+      const watchlist = this.universeScreener.getWatchlist();
+      const stats = this.universeScreener.getStats();
+      res.json({ stocks: watchlist, ...stats });
+    });
+
+    // POST /api/screener/run — trigger screening manually
+    this.app.post('/api/screener/run', async (req: any, res: any) => {
+      if (!this.universeScreener) return res.status(503).json({ error: 'Screener not available' });
+      try {
+        const config = req.body || {};
+        const results = await this.universeScreener.runScreen(config);
+        res.json({ count: results.length, stocks: results });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // GET /api/screener/symbols — get just the symbol list
+    this.app.get('/api/screener/symbols', (_req: any, res: any) => {
+      if (!this.universeScreener) return res.status(503).json({ error: 'Screener not available' });
+      const symbols = this.universeScreener.getWatchlistSymbols();
+      res.json({ symbols, count: symbols.length });
+    });
+
+    // GET /api/quotes/prices — get all cached prices
+    this.app.get('/api/quotes/prices', (_req: any, res: any) => {
+      if (!this.quoteService) return res.status(503).json({ error: 'QuoteService not available' });
+      const prices = this.quoteService.getAllPrices();
+      const result: any[] = [];
+      prices.forEach((data: any, _symbol: string) => result.push(data));
+      res.json({ prices: result, subscriptions: this.quoteService.getSubscriptionCount() });
+    });
+
+    // GET /api/quotes/price/:symbol — get price for a single symbol
+    this.app.get('/api/quotes/price/:symbol', async (req: any, res: any) => {
+      if (!this.quoteService) return res.status(503).json({ error: 'QuoteService not available' });
+      try {
+        const price = await this.quoteService.getPriceNumber(req.params.symbol);
+        const data = this.quoteService.getPrice(req.params.symbol);
+        res.json({ symbol: req.params.symbol, price, ...data });
+      } catch (err: any) {
+        res.status(404).json({ error: err.message });
+      }
+    });
+
+    // POST /api/quotes/subscribe — subscribe to additional symbols
+    this.app.post('/api/quotes/subscribe', async (req: any, res: any) => {
+      if (!this.quoteService) return res.status(503).json({ error: 'QuoteService not available' });
+      const { symbols } = req.body;
+      if (!Array.isArray(symbols)) return res.status(400).json({ error: 'symbols must be an array' });
+      await this.quoteService.subscribe(symbols);
+      res.json({ subscriptions: this.quoteService.getSubscriptionCount() });
+    });
   }
 
   // -----------------------------------------------------------------------

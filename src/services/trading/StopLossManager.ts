@@ -67,12 +67,23 @@ export class StopLossManager {
     return saved;
   }
 
+  /** Price provider callback — set by QuoteService integration */
+  private priceProvider: ((symbol: string) => Promise<number>) | null = null;
+
+  /** Set the price provider (called from index.ts after QuoteService is ready) */
+  setPriceProvider(provider: (symbol: string) => Promise<number>): void {
+    this.priceProvider = provider;
+  }
+
   /** 启动定时检查，默认 30 秒间隔 */
   startMonitoring(intervalMs: number = 30000): void {
     if (this.monitorTimer) return;
     this.monitorTimer = setInterval(() => {
-      // checkAll requires a getCurrentPrice callback; monitoring uses a no-op placeholder.
-      // In production, the caller should provide a real price fetcher via checkAll directly.
+      if (this.priceProvider && this.activeRecords.size > 0) {
+        this.checkAll(this.priceProvider).catch(err => {
+          console.error(`[StopLossManager] checkAll error: ${err.message}`);
+        });
+      }
     }, intervalMs);
   }
 
