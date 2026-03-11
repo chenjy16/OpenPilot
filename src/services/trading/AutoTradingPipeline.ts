@@ -225,12 +225,15 @@ export class AutoTradingPipeline {
       } catch { /* fallback: quantity will be 0 */ }
     }
     if (config.quantity_mode === 'volatility_parity') {
-      // Try to get ATR(14) from QuoteService cache via signal metadata or DB
+      // Try to get ATR(14) from dynamic_watchlist (UniverseScreener output) or ohlcv_daily
       try {
-        const atrRow = this.db.prepare(
-          `SELECT value FROM ohlcv_cache WHERE symbol = @symbol AND key = 'atr14' ORDER BY updated_at DESC LIMIT 1`,
-        ).get({ symbol: signal.symbol }) as { value: number } | undefined;
-        if (atrRow) atr14 = atrRow.value;
+        // dynamic_watchlist stores atr_pct (percentage); convert to absolute value
+        const wlRow = this.db.prepare(
+          `SELECT atr_pct, price FROM dynamic_watchlist WHERE symbol = ? LIMIT 1`,
+        ).get(signal.symbol) as { atr_pct: number; price: number } | undefined;
+        if (wlRow && wlRow.atr_pct > 0 && wlRow.price > 0) {
+          atr14 = wlRow.price * (wlRow.atr_pct / 100);
+        }
       } catch { /* table may not exist; atr14 stays undefined → quantity=0 */ }
     }
 

@@ -374,13 +374,13 @@ export class LongportAdapter implements BrokerAdapter {
           }
         }
 
-        // Fetch real-time quotes to fill current_price (with 8s timeout)
+        // Fetch real-time quotes to fill current_price (with 20s timeout)
         if (positions.length > 0 && this.config) {
           try {
             const quoteCtx = await Promise.race([
               QuoteContext.new(this.config),
               new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('QuoteContext timeout (8s)')), 8000),
+                setTimeout(() => reject(new Error('QuoteContext timeout (20s)')), 20_000),
               ),
             ]);
             const symbols = positions.map(p => p.symbol);
