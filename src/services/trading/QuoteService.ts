@@ -98,9 +98,9 @@ export class QuoteService extends EventEmitter {
 
     const { appKey, appSecret, accessToken, region } = this.options;
     const isCN = region === 'cn';
-    const baseUrl = isCN ? 'https://openapi.longportapp.cn' : 'https://openapi.longbridge.com';
-    const quoteWsUrl = isCN ? 'wss://openapi-quote.longportapp.cn/v2' : 'wss://openapi-quote.longbridge.com/v2';
-    const tradeWsUrl = isCN ? 'wss://openapi-trade.longportapp.cn/v2' : 'wss://openapi-trade.longbridge.com/v2';
+    const baseUrl = isCN ? 'https://openapi.longportapp.cn' : 'https://openapi.longportapp.com';
+    const quoteWsUrl = isCN ? 'wss://openapi-quote.longportapp.cn/v2' : 'wss://openapi-quote.longportapp.com/v2';
+    const tradeWsUrl = isCN ? 'wss://openapi-trade.longportapp.cn/v2' : 'wss://openapi-trade.longportapp.com/v2';
 
     this.config = new Config({
       appKey,
@@ -177,11 +177,12 @@ export class QuoteService extends EventEmitter {
       const lpSymbols = symbols.map(s => this.normalizeSymbol(s));
 
       try {
-        // Race QuoteContext creation against a 8-second timeout
+        // Race QuoteContext creation against a 20-second timeout
+        // (Longport WS from Taiwan typically takes 10-15s to connect)
         const ctx = await Promise.race([
           this.ensureContext(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('QuoteContext connection timeout (8s)')), 8000),
+            setTimeout(() => reject(new Error('QuoteContext connection timeout (20s)')), 20_000),
           ),
         ]);
 
