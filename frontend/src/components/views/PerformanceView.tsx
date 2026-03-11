@@ -4,8 +4,28 @@
  * Displays: key metrics, equity curve, strategy attribution, best/worst trades.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useTradingStore } from '../../stores/tradingStore';
+
+const API_BASE = '/api';
+
+interface BacktestResult {
+  id: number;
+  strategy_id: number;
+  strategy_name?: string;
+  symbol: string;
+  period_start: string;
+  period_end: string;
+  initial_capital: number;
+  final_equity: number;
+  total_return: number;
+  total_trades: number;
+  win_rate: number;
+  max_drawdown: number;
+  sharpe_ratio: number | null;
+  equity_curve: Array<{ date: string; equity: number }>;
+  created_at: number;
+}
 
 function MetricCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -56,15 +76,179 @@ function EquityCurve({ curve }: { curve: Array<{ date: string; equity: number; d
   );
 }
 
+function BacktestComparison({ results, loading }: { results: BacktestResult[]; loading: boolean }) {
+  if (loading) return <p className="py-8 text-center text-sm text-gray-400">加载回测数据...</p>;
+  if (results.length === 0) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
+        <p className="text-gray-400">暂无回测结果</p>
+        <p className="mt-1 text-xs text-gray-300">通过策略管理页面运行回测后，结果将在此展示</p>
+      </div>
+    );
+  }
+
+  // Sharpe Ratio bar chart (simple SVG)
+  const maxSharpe = Math.max(...results.filter(r => r.sharpe_ratio != null).map(r => Math.abs(r.sharpe_ratio!)), 1);
+
+  return (
+    <div className="space-y-6">
+      {/* Sharpe Ratio comparison */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <h3 className="mb-3 text-sm font-semibold text-gray-700">Sharpe Ratio 对比</h3>
+        <div className="space-y-2">
+          {results.slice(0, 10).map(r => {
+            const sharpe = r.sharpe_ratio ?? 0;
+            const width = Math.min(Math.abs(sharpe) / maxSharpe * 100, 100);
+            const color = sharpe >= 1 ? 'bg-green-500' : sharpe >= 0 ? 'bg-blue-400' : 'bg-red-400';
+            return (
+              <div key={r.id} className="flex items-center gap-3">
+                <span className="w-32 truncate text-xs text-gray-600">{r.strategy_name || `策略#${r.strategy_id}`}</span>
+                <span className="w-16 text-xs text-gray-500">{r.symbol}</span>
+                <div className="flex-1">
+                  <div className={`h-4 rounded ${color}`} style={{ width: `${width}%` }} />
+                </div>
+                <span className={`w-12 text-right text-xs font-medium ${sharpe >= 1 ? 'text-green-600' : sharpe >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {sharpe.toFixed(2)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Results table */}
+      <section className="rounded-lg border border-gray-200 bg-white p-4">
+        <h3 className="mb-3 text-sm font-semibold text-gray-700">回测结果明细</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b text-xs text-gray-500">
+                <th className="pb-2 pr-4">策略</th>
+                <th className="pb-2 pr-4">标的</th>
+                <th className="pb-2 pr-4">区间</th>
+                <th className="pb-2 pr-4 text-right">收益率</th>
+                <th className="pb-2 pr-4 text-right">胜率</th>
+                <th className="pb-2 pr-4 text-right">最大回撤</th>
+                <th className="pb-2 pr-4 text-right">Sharpe</th>
+                <th className="pb-2 text-right">交易数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map(r => (
+                <tr key={r.id} className="border-b border-gray-100">
+                  <td className="whitespace-nowrap py-2 pr-4 text-gray-700">{r.strategy_name || `策略#${r.strategy_id}`}</td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-gray-600">{r.symbol}</td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-xs text-gray-400">{r.period_start} ~ {r.period_end}</td>
+                  <td className={`whitespace-nowrap py-2 pr-4 text-right ${r.total_return >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {(r.total_return * 100).toFixed(2)}%
+                  </td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-right text-gray-600">{(r.win_rate * 100).toFixed(1)}%</td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-right text-red-500">{(r.max_drawdown * 100).toFixed(2)}%</td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-right text-gray-700">{r.sharpe_ratio?.toFixed(2) ?? '—'}</td>
+                  <td className="whitespace-nowrap py-2 text-right text-gray-600">{r.total_trades}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Equity curves overlay for top results */}
+      {results.filter(r => r.equity_curve && r.equity_curve.length > 0).length > 0 && (
+        <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">权益曲线对比</h3>
+          <BacktestEquityCurves results={results.filter(r => r.equity_curve && r.equity_curve.length > 1).slice(0, 5)} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+const CURVE_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+function BacktestEquityCurves({ results }: { results: BacktestResult[] }) {
+  if (results.length === 0) return <p className="py-4 text-center text-sm text-gray-400">无权益曲线数据</p>;
+
+  // Normalize all curves to percentage returns for comparison
+  const w = 100;
+  const h = 50;
+  const allReturns = results.flatMap(r => {
+    const initial = r.equity_curve[0]?.equity || 1;
+    return r.equity_curve.map(p => (p.equity / initial - 1) * 100);
+  });
+  const maxReturn = Math.max(...allReturns, 1);
+  const minReturn = Math.min(...allReturns, -1);
+  const range = maxReturn - minReturn || 1;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="h-48 w-full" preserveAspectRatio="none">
+        {/* Zero line */}
+        <line
+          x1="0" y1={h - ((0 - minReturn) / range) * h}
+          x2={w} y2={h - ((0 - minReturn) / range) * h}
+          stroke="#e5e7eb" strokeWidth="0.3" strokeDasharray="1,1"
+        />
+        {results.map((r, idx) => {
+          const initial = r.equity_curve[0]?.equity || 1;
+          const points = r.equity_curve.map((p, i) => {
+            const x = (i / (r.equity_curve.length - 1)) * w;
+            const ret = (p.equity / initial - 1) * 100;
+            const y = h - ((ret - minReturn) / range) * h;
+            return `${x},${y}`;
+          });
+          return (
+            <path
+              key={r.id}
+              d={`M ${points.join(' L ')}`}
+              fill="none"
+              stroke={CURVE_COLORS[idx % CURVE_COLORS.length]}
+              strokeWidth="0.5"
+              vectorEffect="non-scaling-stroke"
+            />
+          );
+        })}
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-3">
+        {results.map((r, idx) => (
+          <span key={r.id} className="flex items-center gap-1 text-xs text-gray-600">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: CURVE_COLORS[idx % CURVE_COLORS.length] }} />
+            {r.strategy_name || `策略#${r.strategy_id}`} ({r.symbol})
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const PerformanceView: React.FC = () => {
   const { performanceMetrics, fetchPerformance } = useTradingStore();
   const [period, setPeriod] = useState(30);
   const [loading, setLoading] = useState(false);
+  const [backtestResults, setBacktestResults] = useState<BacktestResult[]>([]);
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'live' | 'backtest'>('live');
 
   useEffect(() => {
     setLoading(true);
     fetchPerformance(period).finally(() => setLoading(false));
   }, [period, fetchPerformance]);
+
+  const fetchBacktests = useCallback(async () => {
+    setBacktestLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/backtest`);
+      if (res.ok) {
+        const data = await res.json();
+        setBacktestResults(data);
+      }
+    } catch { /* ignore */ }
+    setBacktestLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'backtest') fetchBacktests();
+  }, [activeTab, fetchBacktests]);
 
   const m = performanceMetrics;
 
@@ -75,21 +259,44 @@ const PerformanceView: React.FC = () => {
   return (
     <div className="h-full overflow-y-auto p-6">
       <div className="mx-auto max-w-[1600px] space-y-6">
-        {/* Header */}
+        {/* Header with tabs */}
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">交易绩效</h1>
-          <div className="flex gap-1">
-            {[7, 30, 90, 365].map(d => (
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold text-gray-900">交易绩效</h1>
+            <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5">
               <button
-                key={d}
-                onClick={() => setPeriod(d)}
-                className={`rounded px-3 py-1 text-sm ${period === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                onClick={() => setActiveTab('live')}
+                className={`rounded-md px-3 py-1 text-sm ${activeTab === 'live' ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-500'}`}
               >
-                {d === 365 ? '1年' : `${d}天`}
+                实盘绩效
               </button>
-            ))}
+              <button
+                onClick={() => setActiveTab('backtest')}
+                className={`rounded-md px-3 py-1 text-sm ${activeTab === 'backtest' ? 'bg-white font-medium text-gray-900 shadow-sm' : 'text-gray-500'}`}
+              >
+                回测对比
+              </button>
+            </div>
           </div>
+          {activeTab === 'live' && (
+            <div className="flex gap-1">
+              {[7, 30, 90, 365].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setPeriod(d)}
+                  className={`rounded px-3 py-1 text-sm ${period === d ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  {d === 365 ? '1年' : `${d}天`}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {activeTab === 'backtest' ? (
+          <BacktestComparison results={backtestResults} loading={backtestLoading} />
+        ) : (
+        <>
 
         {!m || m.total_trades === 0 ? (
           <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
@@ -197,6 +404,8 @@ const PerformanceView: React.FC = () => {
               )}
             </div>
           </>
+        )}
+        </>
         )}
       </div>
     </div>

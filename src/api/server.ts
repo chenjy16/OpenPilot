@@ -3118,6 +3118,27 @@ export class APIServer {
       }
     });
 
+    // GET /api/backtest — get all backtest results (for comparison dashboard)
+    this.app.get('/api/backtest', (_req: any, res: any) => {
+      if (!this._dataDb) return res.status(503).json({ error: 'Database not available' });
+      try {
+        const rows = this._dataDb.prepare(
+          `SELECT br.*, s.name as strategy_name FROM backtest_results br
+           LEFT JOIN strategies s ON br.strategy_id = s.id
+           ORDER BY br.created_at DESC LIMIT 50`
+        ).all();
+        const results = rows.map((r: any) => ({
+          ...r,
+          trades: r.trades_json ? JSON.parse(r.trades_json) : [],
+          equity_curve: r.equity_curve_json ? JSON.parse(r.equity_curve_json) : [],
+          config: r.config_json ? JSON.parse(r.config_json) : {},
+        }));
+        res.json(results);
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // GET /api/backtest/:strategyId — get backtest results
     this.app.get('/api/backtest/:strategyId', (_req: any, res: any) => {
       if (!this._dataDb) return res.status(503).json({ error: 'Database not available' });

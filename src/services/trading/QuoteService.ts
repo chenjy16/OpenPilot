@@ -1,5 +1,5 @@
 /**
- * QuoteService — Real-time quote data via Longport QuoteContext.
+ * QuoteService — Real-time quote data via pluggable providers.
  *
  * Provides:
  * - PriceCache: in-memory latest price for each subscribed symbol
@@ -8,8 +8,8 @@
  * - onPriceUpdate callback: notify listeners of price changes
  * - Feeds StopLossManager.checkAll with real prices
  *
- * On free Longport accounts, US stock quotes have ~15-minute delay.
- * This is acceptable for daily-level strategies and stop-loss monitoring.
+ * Default provider: Longport (free accounts have ~15-minute delay for US stocks).
+ * Provider interface allows future switching to Alpaca, Polygon, etc.
  */
 
 import { EventEmitter } from 'events';
@@ -37,6 +37,21 @@ export interface QuoteServiceOptions {
   appSecret: string;
   accessToken: string;
   region?: 'hk' | 'sg' | 'cn';
+}
+
+/**
+ * QuoteProvider interface — abstraction for pluggable quote data sources.
+ * Implement this to add Alpaca, Polygon, or other providers.
+ */
+export interface QuoteProvider {
+  readonly name: string;
+  configure(options: Record<string, any>): void;
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  subscribe(symbols: string[]): Promise<void>;
+  unsubscribe(symbols: string[]): Promise<void>;
+  getQuotes(symbols: string[]): Promise<PriceData[]>;
+  onPrice(callback: (data: PriceData) => void): void;
 }
 
 export class QuoteService extends EventEmitter {
