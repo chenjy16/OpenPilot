@@ -196,6 +196,45 @@ export class TradingGateway {
     this.logAudit('cancel_order', cancelled.id, { orderId }, { status: 'cancelled' });
     return cancelled;
   }
+  /**
+   * Sync order statuses with broker for all submitted orders.
+   * Polls the broker for each submitted order and updates local status if filled/cancelled/failed.
+   * Returns the number of orders that changed status.
+   */
+  async syncOrderStatuses(): Promise<number> {
+    if (!this.brokerAdapter) return 0;
+    this.syncAdapterCredentials();
+
+    const submittedOrders = this.orderManager.listOrders({ status: 'submitted' });
+    let changed = 0;
+
+    for (const order of submittedOrders) {
+      if (!order.broker_order_id) continue;
+
+      try {
+        const result = await this.brokerAdapter.getOrderStatus(order.broker_order_id);
+
+        if (result.filled_quantity && result.filled_quantity > 0 && result.filled_price) {
+          this.orderManager.updateOrderStatus(order.id!, 'filled', {
+            filled_quantity: result.filled_quantity,
+            filled_price: result.filled_price,
+          });
+          this.logAudit('order_sync_filled', order.id, { broker_order_id: order.broker_order_id }, result);
+          changed++;
+        } else if (result.status === 'failed' || result.status === 'rejected') {
+          this.orderManager.updateOrderStatus(order.id!, 'failed', {
+            reject_reason: result.message || 'Order failed/rejected by broker',
+          });
+          this.logAudit('order_sync_failed', order.id, { broker_order_id: order.broker_order_id }, result);
+          changed++;
+        }
+      } catch {
+        // Skip this order, retry next cycle
+      }
+    }
+
+    return changed;
+  }
 
   /**
    * Get a single order by ID.

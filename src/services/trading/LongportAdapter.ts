@@ -120,27 +120,23 @@ export class LongportAdapter implements BrokerAdapter {
 
   /**
    * Update credentials at runtime (e.g. from UI settings).
-   * Resets the existing connection so the next call re-initializes with new creds.
+   * Only resets the existing connection if credentials actually changed.
    */
-  /**
-     * Update credentials at runtime (e.g. from UI settings).
-     * Only resets the existing connection if credentials actually changed.
-     */
-    updateCredentials(options: LongportAdapterOptions): void {
-      const changed =
-        options.appKey !== this.options.appKey ||
-        options.appSecret !== this.options.appSecret ||
-        options.accessToken !== this.options.accessToken ||
-        options.region !== this.options.region;
+  updateCredentials(options: LongportAdapterOptions): void {
+    const changed =
+      options.appKey !== this.options.appKey ||
+      options.appSecret !== this.options.appSecret ||
+      options.accessToken !== this.options.accessToken ||
+      options.region !== this.options.region;
 
-      this.options = { ...this.options, ...options };
+    this.options = { ...this.options, ...options };
 
-      if (changed) {
-        // Reset connection so next call uses new credentials
-        this.tradeCtx = null;
-        this.config = null;
-      }
+    if (changed) {
+      // Reset connection so next call uses new credentials
+      this.tradeCtx = null;
+      this.config = null;
     }
+  }
 
   /**
    * Lazily initialize the Longport Config and TradeContext.

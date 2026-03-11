@@ -64,15 +64,29 @@ export class StopLossManager {
     };
 
     this.activeRecords.set(saved.id!, saved);
+
+    // Notify listener (e.g. QuoteService) to subscribe to this symbol
+    if (this.onNewSymbol) {
+      try { this.onNewSymbol(record.symbol); } catch { /* non-fatal */ }
+    }
+
     return saved;
   }
 
   /** Price provider callback — set by QuoteService integration */
   private priceProvider: ((symbol: string) => Promise<number>) | null = null;
 
+  /** Callback invoked when a new symbol is registered for stop-loss monitoring */
+  private onNewSymbol: ((symbol: string) => void) | null = null;
+
   /** Set the price provider (called from index.ts after QuoteService is ready) */
   setPriceProvider(provider: (symbol: string) => Promise<number>): void {
     this.priceProvider = provider;
+  }
+
+  /** Set callback for when a new symbol is registered (used to subscribe to QuoteService) */
+  setOnNewSymbol(callback: (symbol: string) => void): void {
+    this.onNewSymbol = callback;
   }
 
   /** 启动定时检查，默认 30 秒间隔 */

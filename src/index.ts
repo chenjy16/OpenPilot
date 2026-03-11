@@ -836,6 +836,12 @@ async function main(): Promise<void> {
     stopLossManager.setPriceProvider(async (symbol: string) => {
       return quoteService.getPriceNumber(symbol);
     });
+    // When a new stop-loss symbol is registered, auto-subscribe to QuoteService
+    stopLossManager.setOnNewSymbol((symbol: string) => {
+      quoteService.subscribe([symbol]).catch(err => {
+        console.error(`[QuoteService] Auto-subscribe for ${symbol} failed: ${err.message}`);
+      });
+    });
     stopLossManager.startMonitoring(30000);
     console.log(`[${new Date().toISOString()}] QuoteService configured, StopLossManager wired to real prices`);
   } else {
@@ -861,6 +867,22 @@ async function main(): Promise<void> {
       await quoteService.subscribe(newSymbols);
     }
   });
+
+  // Seed default universe-screen cron job if none exists
+  {
+    const existingScreenJobs = cronScheduler.listJobs();
+    if (!existingScreenJobs.find(j => j.handler === 'universe-screen')) {
+      cronScheduler.createJob({
+        id: 'universe-screen-daily',
+        name: '股票池自动筛选',
+        schedule: '0 22 * * 1-5',
+        handler: 'universe-screen',
+        enabled: true,
+        config: { pool: 'all', top: 100 },
+      });
+      console.log(`[${new Date().toISOString()}] Universe screener cron job created (weekdays 22:00 UTC)`);
+    }
+  }
 
   // Expose UniverseScreener and QuoteService to API server
   server.setScreenerServices({ universeScreener, quoteService });

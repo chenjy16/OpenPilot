@@ -42,13 +42,24 @@ export class PositionSyncer {
 
   /**
    * Execute a single sync cycle.
-   * 1. Fetch broker positions via TradingGateway (routes by mode)
-   * 2. Fetch local positions from PortfolioManager
-   * 3. Compare and reconcile: broker data is source of truth
-   * 4. Sync account-level info
+   * 1. Sync order statuses with broker (submitted → filled/failed)
+   * 2. Fetch broker positions via TradingGateway (routes by mode)
+   * 3. Fetch local positions from PortfolioManager
+   * 4. Compare and reconcile: broker data is source of truth
+   * 5. Sync account-level info
    * Returns array of SyncDiff describing changes made.
    */
   async sync(): Promise<SyncDiff[]> {
+    // Sync order statuses first (submitted orders may have been filled)
+    try {
+      const changed = await this.tradingGateway.syncOrderStatuses();
+      if (changed > 0) {
+        console.log(`[PositionSyncer] Order status sync: ${changed} orders updated`);
+      }
+    } catch (error) {
+      console.error('[PositionSyncer] Order status sync failed:', error);
+    }
+
     let brokerPositions: BrokerPosition[];
     try {
       brokerPositions = await this.tradingGateway.getPositions();
