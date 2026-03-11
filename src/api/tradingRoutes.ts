@@ -274,8 +274,8 @@ export function createTradingRoutes(
             fixed_quantity_value: pipelineConfig.fixed_quantity_value,
             fixed_amount_value: pipelineConfig.fixed_amount_value,
           },
-          sl_tp_check_interval: 30000,
-          sl_tp_enabled: true,
+          sl_tp_check_interval: pipelineConfig.sl_tp_check_interval,
+          sl_tp_enabled: pipelineConfig.sl_tp_enabled,
           debate_enabled: pipelineConfig.debate_enabled,
           debate_model: pipelineConfig.debate_model,
         });
@@ -339,6 +339,8 @@ export function createTradingRoutes(
         }
         if (config.debate_enabled !== undefined) pipelineUpdates.debate_enabled = config.debate_enabled;
         if (config.debate_model !== undefined) pipelineUpdates.debate_model = config.debate_model;
+        if (config.sl_tp_enabled !== undefined) pipelineUpdates.sl_tp_enabled = config.sl_tp_enabled;
+        if (config.sl_tp_check_interval !== undefined) pipelineUpdates.sl_tp_check_interval = config.sl_tp_check_interval;
 
         if (Object.keys(pipelineUpdates).length > 0) {
           pipeline.updateConfig(pipelineUpdates);
@@ -365,8 +367,8 @@ export function createTradingRoutes(
             fixed_quantity_value: pipelineConfig.fixed_quantity_value,
             fixed_amount_value: pipelineConfig.fixed_amount_value,
           },
-          sl_tp_check_interval: 30000,
-          sl_tp_enabled: true,
+          sl_tp_check_interval: pipelineConfig.sl_tp_check_interval,
+          sl_tp_enabled: pipelineConfig.sl_tp_enabled,
           debate_enabled: pipelineConfig.debate_enabled,
           debate_model: pipelineConfig.debate_model,
         });

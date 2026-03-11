@@ -167,6 +167,10 @@ export interface PipelineConfig {
   debate_enabled: boolean;
   /** Model to use for the final arbiter in debate mode */
   debate_model: string;
+  /** Enable stop-loss / take-profit monitoring */
+  sl_tp_enabled: boolean;
+  /** Stop-loss check interval in milliseconds */
+  sl_tp_check_interval: number;
 }
 
 export interface ProcessResult {

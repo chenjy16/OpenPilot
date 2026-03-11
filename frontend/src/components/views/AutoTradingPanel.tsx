@@ -15,14 +15,19 @@ function reasonLabel(r: ProcessResult): string {
   if (r.action === 'order_created') return '已下单';
   switch (r.reason) {
     case 'confidence_below_threshold': return '置信度不足跳过';
+    case 'skipped_confidence': return '置信度不足跳过';
+    case 'skipped_debate': return '辩论否决';
     case 'duplicate_signal': return '去重跳过';
+    case 'skipped_dedup': return '去重跳过';
     case 'skipped_risk':
     case 'risk_rejected': return '风控拒绝';
     case 'skipped_quantity':
     case 'quantity_insufficient': return '数量不足跳过';
-    case 'action_hold': return 'Hold 信号跳过';
+    case 'action_hold':
+    case 'skipped_hold': return 'Hold 信号跳过';
     case 'skipped_disabled': return '自动交易未启用';
-    case 'missing_price': return '缺少价格跳过';
+    case 'missing_price':
+    case 'skipped_missing_price': return '缺少价格跳过';
     default: return r.reason ?? '跳过';
   }
 }
@@ -30,8 +35,11 @@ function reasonLabel(r: ProcessResult): string {
 function reasonBadgeColor(r: ProcessResult): string {
   if (r.action === 'order_created') return 'bg-green-100 text-green-700';
   switch (r.reason) {
-    case 'confidence_below_threshold': return 'bg-yellow-100 text-yellow-700';
-    case 'duplicate_signal': return 'bg-gray-100 text-gray-700';
+    case 'confidence_below_threshold':
+    case 'skipped_confidence': return 'bg-yellow-100 text-yellow-700';
+    case 'skipped_debate': return 'bg-orange-100 text-orange-700';
+    case 'duplicate_signal':
+    case 'skipped_dedup': return 'bg-gray-100 text-gray-700';
     case 'skipped_risk':
     case 'risk_rejected': return 'bg-red-100 text-red-700';
     default: return 'bg-gray-100 text-gray-600';
@@ -419,6 +427,11 @@ function ActiveStopLossList({ records }: { records: StopLossRecord[] }) {
                 {r.trailing_percent ? (
                   <span className="inline-flex items-center gap-1 text-xs">
                     <span className="rounded bg-purple-100 px-1.5 py-0.5 font-medium text-purple-700">{r.trailing_percent}%</span>
+                    {r.highest_price && <span className="text-gray-400">峰值 {r.highest_price.toFixed(2)}</span>}
+                  </span>
+                ) : r.trailing_atr_multiplier && r.atr_value ? (
+                  <span className="inline-flex items-center gap-1 text-xs">
+                    <span className="rounded bg-indigo-100 px-1.5 py-0.5 font-medium text-indigo-700">ATR×{r.trailing_atr_multiplier}</span>
                     {r.highest_price && <span className="text-gray-400">峰值 {r.highest_price.toFixed(2)}</span>}
                   </span>
                 ) : (

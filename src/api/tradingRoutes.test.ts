@@ -64,6 +64,10 @@ function createMockPipeline(overrides?: Partial<AutoTradingPipeline>): AutoTradi
       fixed_quantity_value: 100,
       fixed_amount_value: 10000,
       signal_poll_interval_ms: 5000,
+      debate_enabled: false,
+      debate_model: 'deepseek/deepseek-reasoner',
+      sl_tp_enabled: true,
+      sl_tp_check_interval: 30000,
     }),
     updateConfig: jest.fn(),
     getStatus: jest.fn().mockReturnValue({

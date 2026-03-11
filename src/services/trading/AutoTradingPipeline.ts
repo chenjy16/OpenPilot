@@ -53,6 +53,8 @@ const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   signal_poll_interval_ms: 5000,
   debate_enabled: false,
   debate_model: 'deepseek/deepseek-reasoner',
+  sl_tp_enabled: true,
+  sl_tp_check_interval: 30000,
 };
 
 const CONFIG_KEYS: (keyof PipelineConfig)[] = [
@@ -65,6 +67,8 @@ const CONFIG_KEYS: (keyof PipelineConfig)[] = [
   'signal_poll_interval_ms',
   'debate_enabled',
   'debate_model',
+  'sl_tp_enabled',
+  'sl_tp_check_interval',
 ];
 
 // ─── AutoTradingPipeline Class ──────────────────────────────────────────────
@@ -196,7 +200,7 @@ export class AutoTradingPipeline {
             reason: debateResult.reason,
             confidence: debateResult.confidence,
           });
-          return this.logAndReturn(signal, 'skipped', 'skipped_confidence', 'quant_analyst');
+          return this.logAndReturn(signal, 'skipped', 'skipped_debate', 'quant_analyst');
         }
         this.logAudit('debate_approved', undefined, {
           signal_id: signal.id,
@@ -211,6 +215,25 @@ export class AutoTradingPipeline {
     }
 
     // 4. Calculate order quantity
+    //    For volatility_parity mode, we need total_assets and atr14
+    let totalAssets: number | undefined;
+    let atr14: number | undefined;
+    if (config.quantity_mode === 'volatility_parity' || config.quantity_mode === 'kelly_formula') {
+      try {
+        const account = await this.tradingGateway.getAccount();
+        totalAssets = account.total_assets;
+      } catch { /* fallback: quantity will be 0 */ }
+    }
+    if (config.quantity_mode === 'volatility_parity') {
+      // Try to get ATR(14) from QuoteService cache via signal metadata or DB
+      try {
+        const atrRow = this.db.prepare(
+          `SELECT value FROM ohlcv_cache WHERE symbol = @symbol AND key = 'atr14' ORDER BY updated_at DESC LIMIT 1`,
+        ).get({ symbol: signal.symbol }) as { value: number } | undefined;
+        if (atrRow) atr14 = atrRow.value;
+      } catch { /* table may not exist; atr14 stays undefined → quantity=0 */ }
+    }
+
     const quantity = calculateOrderQuantity({
       mode: config.quantity_mode,
       fixed_quantity_value: config.fixed_quantity_value,
@@ -218,6 +241,8 @@ export class AutoTradingPipeline {
       entry_price: signal.entry_price!,
       stop_loss: signal.stop_loss ?? undefined,
       take_profit: signal.take_profit ?? undefined,
+      total_assets: totalAssets,
+      atr14,
     });
 
     if (quantity === 0) {
@@ -261,6 +286,9 @@ export class AutoTradingPipeline {
           entry_price: signal.entry_price!,
           stop_loss: signal.stop_loss,
           take_profit: signal.take_profit,
+          // Chandelier Exit: pass ATR trailing params if available
+          trailing_atr_multiplier: atr14 ? 2.0 : undefined,
+          atr_value: atr14,
         });
       } catch (err: any) {
         console.warn(`[AutoTradingPipeline] StopLoss registration failed:`, err);
@@ -440,6 +468,11 @@ export class AutoTradingPipeline {
       signal_poll_interval_ms: Number.isNaN(parsedPollInterval) ? DEFAULT_PIPELINE_CONFIG.signal_poll_interval_ms : parsedPollInterval,
       debate_enabled: map.get('debate_enabled') === 'true',
       debate_model: map.get('debate_model') || DEFAULT_PIPELINE_CONFIG.debate_model,
+      sl_tp_enabled: map.has('sl_tp_enabled') ? map.get('sl_tp_enabled') === 'true' : DEFAULT_PIPELINE_CONFIG.sl_tp_enabled,
+      sl_tp_check_interval: (() => {
+        const v = parseInt(map.get('sl_tp_check_interval') ?? '', 10);
+        return Number.isNaN(v) ? DEFAULT_PIPELINE_CONFIG.sl_tp_check_interval : v;
+      })(),
     };
   }
 
@@ -466,6 +499,8 @@ export class AutoTradingPipeline {
     if (config.signal_poll_interval_ms !== undefined) entries.push({ key: 'signal_poll_interval_ms', value: String(config.signal_poll_interval_ms) });
     if (config.debate_enabled !== undefined) entries.push({ key: 'debate_enabled', value: String(config.debate_enabled) });
     if (config.debate_model !== undefined) entries.push({ key: 'debate_model', value: config.debate_model });
+    if (config.sl_tp_enabled !== undefined) entries.push({ key: 'sl_tp_enabled', value: String(config.sl_tp_enabled) });
+    if (config.sl_tp_check_interval !== undefined) entries.push({ key: 'sl_tp_check_interval', value: String(config.sl_tp_check_interval) });
 
     if (entries.length > 0) {
       updateTxn(entries);

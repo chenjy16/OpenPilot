@@ -40,6 +40,8 @@ export interface CreateOrderRequest {
   quantity: number;
   price?: number;
   stop_price?: number;
+  strategy_id?: number;
+  signal_id?: number;
 }
 
 export interface BrokerAccount {
@@ -124,11 +126,13 @@ export interface StopLossRecord {
   id?: number;
   order_id: number;
   symbol: string;
-  side: 'buy';
+  side: 'buy' | 'sell';
   entry_price: number;
   stop_loss: number;
   take_profit: number;
   trailing_percent?: number;
+  trailing_atr_multiplier?: number;
+  atr_value?: number;
   highest_price?: number;
   status: 'active' | 'triggered_sl' | 'triggered_tp' | 'cancelled';
   triggered_at?: number;
