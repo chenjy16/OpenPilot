@@ -79,6 +79,7 @@ import { StrategyEngine } from './services/StrategyEngine';
 import { QuoteService } from './services/trading/QuoteService';
 import { UniverseScreener } from './services/UniverseScreener';
 import { DataManager } from './services/trading/DataManager';
+import { SignalTracker } from './services/SignalTracker';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -888,6 +889,11 @@ async function main(): Promise<void> {
   // Expose UniverseScreener and QuoteService to API server
   server.setScreenerServices({ universeScreener, quoteService });
 
+  // Wire sector data from UniverseScreener → RiskController
+  universeScreener.setOnSectorData((mappings) => {
+    tradingRiskController.setSectorMappings(mappings);
+  });
+
   // 18. Initialize DataManager — local OHLCV data cache
   const dataManager = new DataManager(db, screenPythonPath);
 
@@ -919,6 +925,33 @@ async function main(): Promise<void> {
 
   // Expose DataManager to API server
   server.setDataServices({ dataManager, db });
+
+  // 19. Signal verification — auto-check pending signals against real prices
+  const signalTracker = new SignalTracker(db);
+  const signalPriceProvider = quoteService.isConfigured()
+    ? async (symbol: string) => quoteService.getPriceNumber(symbol)
+    : undefined;
+
+  cronScheduler.registerHandler('signal-verify', async (_job) => {
+    const updated = await signalTracker.checkAndUpdateOutcomes(signalPriceProvider);
+    if (updated > 0) {
+      console.log(`[SignalTracker] Verified ${updated} signals`);
+    }
+  });
+
+  // Seed signal-verify cron job (every 30 minutes during market hours)
+  {
+    const existingVerifyJobs = cronScheduler.listJobs();
+    if (!existingVerifyJobs.find(j => j.handler === 'signal-verify')) {
+      cronScheduler.createJob({
+        id: 'signal-verify-periodic',
+        name: '信号回溯验证',
+        schedule: '*/30 * * * 1-5',
+        handler: 'signal-verify',
+        enabled: true,
+      });
+    }
+  }
 
   // Resolve bind host from gateway config (OpenClaw bind modes)
   const bindMode = appConfig.gateway?.bind ?? 'loopback';

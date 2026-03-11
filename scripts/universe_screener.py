@@ -138,6 +138,9 @@ def screen_symbol(symbol: str) -> dict | None:
         rs = gain.iloc[-1] / loss.iloc[-1] if loss.iloc[-1] != 0 else 100
         rsi = float(100 - (100 / (1 + rs)))
 
+        # Sector classification
+        sector = info.get("sector", "Unknown")
+
         return {
             "symbol": symbol,
             "price": round(current_price, 2),
@@ -148,6 +151,7 @@ def screen_symbol(symbol: str) -> dict | None:
             "returns_20d": round(returns_20d, 2),
             "rsi": round(rsi, 1),
             "above_sma20": above_sma20,
+            "sector": sector,
         }
     except Exception:
         return None

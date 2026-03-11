@@ -223,4 +223,17 @@ export function initTradingTables(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_backtest_strategy ON backtest_results(strategy_id, created_at DESC)
   `);
+
+  // symbol_sectors table — maps symbols to sectors for risk control
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS symbol_sectors (
+      symbol TEXT PRIMARY KEY,
+      sector TEXT NOT NULL,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_symbol_sectors_sector ON symbol_sectors(sector)
+  `);
 }

@@ -21,6 +21,7 @@ export interface ScreenedStock {
   returns_20d: number;
   rsi: number;
   above_sma20: boolean;
+  sector?: string;
 }
 
 export interface ScreenerConfig {
@@ -47,12 +48,21 @@ export class UniverseScreener {
   private db: Database.Database;
   private pythonPath: string;
   private scriptPath: string;
+  private onSectorData?: (mappings: Array<{ symbol: string; sector: string }>) => void;
 
   constructor(db: Database.Database, pythonPath?: string) {
     this.db = db;
     this.pythonPath = pythonPath || 'python3';
     this.scriptPath = path.resolve(__dirname, '../../scripts/universe_screener.py');
     this.initTable();
+  }
+
+  /**
+   * Set a callback to receive sector mappings after screening.
+   * Used by RiskController to maintain symbol_sectors table.
+   */
+  setOnSectorData(cb: (mappings: Array<{ symbol: string; sector: string }>) => void): void {
+    this.onSectorData = cb;
   }
 
   private initTable(): void {
@@ -153,6 +163,17 @@ export class UniverseScreener {
     });
 
     transaction();
+
+    // Push sector mappings to RiskController if callback is set
+    if (this.onSectorData) {
+      const mappings = results
+        .filter(r => r.sector && r.sector !== 'Unknown')
+        .map(r => ({ symbol: r.symbol, sector: r.sector! }));
+      if (mappings.length > 0) {
+        this.onSectorData(mappings);
+        console.log(`[UniverseScreener] Pushed ${mappings.length} sector mappings`);
+      }
+    }
   }
 
   /**

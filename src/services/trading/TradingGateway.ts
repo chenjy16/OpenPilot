@@ -95,6 +95,21 @@ export class TradingGateway {
       return failed;
     }
 
+    // 2b. Sector exposure check
+    const orderAmount = order.quantity * (order.price || 0);
+    if (order.side === 'buy' && orderAmount > 0) {
+      const sectorViolation = this.riskController.checkSectorExposure(
+        order.symbol, orderAmount, positions, account.total_assets,
+      );
+      if (sectorViolation) {
+        const failed = this.orderManager.updateOrderStatus(order.id!, 'failed', {
+          reject_reason: sectorViolation,
+        });
+        this.logAudit('place_order_rejected', failed.id, request, { reason: sectorViolation });
+        return failed;
+      }
+    }
+
     // 3. Route to execution engine
     //    Paper mode with broker credentials → use broker adapter (Longport simulated API)
     //    Paper mode without credentials → fallback to local paper engine

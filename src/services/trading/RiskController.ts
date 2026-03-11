@@ -239,4 +239,78 @@ export class RiskController {
 
     insertAll();
   }
+
+  // ─── Sector Exposure Check ──────────────────────────────────────────────
+
+  /**
+   * Check if adding a position in the given symbol would exceed sector concentration limits.
+   * Returns violation message or null if OK.
+   * Default max sector exposure: 40% of total assets.
+   */
+  checkSectorExposure(
+    symbol: string,
+    orderAmount: number,
+    positions: BrokerPosition[],
+    totalAssets: number,
+    maxSectorPct: number = 0.4,
+  ): string | null {
+    if (totalAssets <= 0) return null;
+
+    const sectorRow = this.db.prepare(
+      `SELECT sector FROM symbol_sectors WHERE symbol = ?`
+    ).get(symbol) as { sector: string } | undefined;
+
+    if (!sectorRow) return null; // No sector data, skip check
+
+    const sector = sectorRow.sector;
+
+    // Get all symbols in the same sector
+    const sectorSymbols = this.db.prepare(
+      `SELECT symbol FROM symbol_sectors WHERE sector = ?`
+    ).all(sector) as Array<{ symbol: string }>;
+    const sectorSymbolSet = new Set(sectorSymbols.map(s => s.symbol));
+
+    // Sum current exposure in this sector
+    let sectorExposure = 0;
+    for (const pos of positions) {
+      if (sectorSymbolSet.has(pos.symbol)) {
+        sectorExposure += pos.market_value;
+      }
+    }
+
+    const newExposure = sectorExposure + orderAmount;
+    const ratio = newExposure / totalAssets;
+
+    if (ratio > maxSectorPct) {
+      return `Sector ${sector} exposure ${(ratio * 100).toFixed(1)}% would exceed limit ${(maxSectorPct * 100).toFixed(0)}% (current: $${sectorExposure.toFixed(0)}, order: $${orderAmount.toFixed(0)})`;
+    }
+
+    return null;
+  }
+
+  /**
+   * Update sector mapping for a symbol.
+   */
+  setSectorMapping(symbol: string, sector: string): void {
+    this.db.prepare(`
+      INSERT INTO symbol_sectors (symbol, sector, updated_at)
+      VALUES (@symbol, @sector, unixepoch())
+      ON CONFLICT(symbol) DO UPDATE SET sector = @sector, updated_at = unixepoch()
+    `).run({ symbol, sector });
+  }
+
+  /**
+   * Bulk update sector mappings.
+   */
+  setSectorMappings(mappings: Array<{ symbol: string; sector: string }>): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO symbol_sectors (symbol, sector, updated_at)
+      VALUES (@symbol, @sector, unixepoch())
+      ON CONFLICT(symbol) DO UPDATE SET sector = @sector, updated_at = unixepoch()
+    `);
+    const txn = this.db.transaction((rows: typeof mappings) => {
+      for (const row of rows) stmt.run(row);
+    });
+    txn(mappings);
+  }
 }

@@ -130,17 +130,13 @@ export class SignalTracker {
   }
 
   /**
-   * Check pending signals and update their outcomes.
+   * Check pending signals and update their outcomes using real prices.
    *
+   * - Fetches current price for each pending signal via priceProvider
+   * - Checks if TP or SL has been hit
    * - Signals older than 30 days that are still pending → expired
-   * - For remaining pending signals, the caller would normally fetch current
-   *   prices; here we mark expired ones and return the count of updates.
-   *
-   * In a production system, checkAndUpdateOutcomes would fetch live prices
-   * via yfinance/sandbox. For testability the price-checking logic is in
-   * the pure `determineOutcome` helper.
    */
-  async checkAndUpdateOutcomes(): Promise<number> {
+  async checkAndUpdateOutcomes(priceProvider?: (symbol: string) => Promise<number>): Promise<number> {
     const now = Math.floor(Date.now() / 1000);
     const expiryThreshold = now - EXPIRY_DAYS * 24 * 60 * 60;
 
@@ -151,7 +147,41 @@ export class SignalTracker {
       WHERE outcome = 'pending' AND created_at < @threshold
     `).run({ now, threshold: expiryThreshold });
 
-    return expireResult.changes;
+    let priceUpdates = 0;
+
+    // Check pending signals against current prices
+    if (priceProvider) {
+      const pendingSignals = this.db.prepare(`
+        SELECT id, symbol, action, entry_price, stop_loss, take_profit
+        FROM stock_signals
+        WHERE outcome = 'pending' AND entry_price IS NOT NULL
+          AND stop_loss IS NOT NULL AND take_profit IS NOT NULL
+      `).all() as Array<{
+        id: number; symbol: string; action: string;
+        entry_price: number; stop_loss: number; take_profit: number;
+      }>;
+
+      for (const signal of pendingSignals) {
+        try {
+          const currentPrice = await priceProvider(signal.symbol);
+          const outcome = determineOutcome(
+            signal.action,
+            signal.entry_price,
+            signal.take_profit,
+            signal.stop_loss,
+            [currentPrice],
+          );
+          if (outcome !== 'pending') {
+            this.updateSignalOutcome(signal.id, outcome);
+            priceUpdates++;
+          }
+        } catch {
+          // Price not available, skip
+        }
+      }
+    }
+
+    return expireResult.changes + priceUpdates;
   }
 
   /**
