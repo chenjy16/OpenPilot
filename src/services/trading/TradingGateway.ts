@@ -615,7 +615,11 @@ export class TradingGateway {
       return this.processSingleOrder(request);
     }
 
+    const twapId = `twap-${Date.now()}-${request.symbol}`;
+    const sliceOrderIds: number[] = [];
+
     this.logAudit('twap_started', undefined, {
+      twap_id: twapId,
       symbol: request.symbol,
       total_quantity: request.quantity,
       slices,
@@ -624,15 +628,19 @@ export class TradingGateway {
 
     // First slice: execute immediately
     const firstOrder = await this.processSingleOrder({ ...request, quantity: qtyPerSlice });
+    if (firstOrder.id) sliceOrderIds.push(firstOrder.id);
 
     // Remaining slices: execute in background at intervals
     let executed = 1;
-    const twapId = `twap-${Date.now()}-${request.symbol}`;
     const timer = setInterval(async () => {
       if (executed >= slices) {
         clearInterval(timer);
         this.twapTimers.delete(twapId);
-        this.logAudit('twap_completed', undefined, { twap_id: twapId, slices_executed: executed });
+        this.logAudit('twap_completed', undefined, {
+          twap_id: twapId,
+          slices_executed: executed,
+          order_ids: sliceOrderIds,
+        });
         return;
       }
       // Last slice gets the remainder to avoid rounding loss
@@ -640,7 +648,8 @@ export class TradingGateway {
         ? (request.quantity - qtyPerSlice * executed)
         : qtyPerSlice;
       try {
-        await this.processSingleOrder({ ...request, quantity: qty });
+        const sliceOrder = await this.processSingleOrder({ ...request, quantity: qty });
+        if (sliceOrder.id) sliceOrderIds.push(sliceOrder.id);
       } catch (err: any) {
         console.error(`[TWAP] Slice ${executed + 1}/${slices} failed for ${request.symbol}: ${err.message}`);
       }

@@ -164,9 +164,16 @@ export class StopLossManager {
       const triggerType = checkStopLossTrigger(currentPrice, record.stop_loss, record.take_profit);
       if (!triggerType) continue;
 
-      // Estimate quantity from the original order
+      // Get quantity from current position (preferred) or fall back to original order
       const originalOrder = this.tradingGateway.getOrder(record.order_id);
-      const quantity = originalOrder?.filled_quantity || originalOrder?.quantity || 1;
+      let quantity: number;
+      try {
+        const positions = await this.tradingGateway.getPositions();
+        const pos = positions.find(p => p.symbol === record.symbol && p.quantity > 0);
+        quantity = pos?.quantity || originalOrder?.filled_quantity || originalOrder?.quantity || 1;
+      } catch {
+        quantity = originalOrder?.filled_quantity || originalOrder?.quantity || 1;
+      }
       // PnL direction depends on position side: long (buy) = current - entry, short (sell) = entry - current
       const pnlAmount = record.side === 'sell'
         ? (record.entry_price - currentPrice) * quantity
