@@ -29,6 +29,7 @@ export class PositionSyncer {
   private syncIntervalMs: number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastAccountSync: AccountSyncInfo | null = null;
+  private priceProvider: ((symbol: string) => Promise<number>) | null = null;
 
   constructor(
     portfolioManager: PortfolioManager,
@@ -38,6 +39,14 @@ export class PositionSyncer {
     this.portfolioManager = portfolioManager;
     this.tradingGateway = tradingGateway;
     this.syncIntervalMs = syncIntervalMs;
+  }
+
+  /**
+   * Set a real-time price provider (e.g. QuoteService.getPriceNumber).
+   * When set, sync() will use it to fill current_price instead of broker's cost_price fallback.
+   */
+  setPriceProvider(provider: (symbol: string) => Promise<number>): void {
+    this.priceProvider = provider;
   }
 
   /**
@@ -66,6 +75,22 @@ export class PositionSyncer {
     } catch (error) {
       console.error('[PositionSyncer] Failed to fetch broker positions, keeping local data unchanged:', error);
       return [];
+    }
+
+    // Enrich broker positions with real-time prices from QuoteService
+    // Longport stockPositions() doesn't return real-time prices, so current_price == avg_cost
+    if (this.priceProvider) {
+      for (const pos of brokerPositions) {
+        try {
+          const realPrice = await this.priceProvider(pos.symbol);
+          if (realPrice > 0) {
+            pos.current_price = realPrice;
+            pos.market_value = pos.quantity * realPrice;
+          }
+        } catch {
+          // Keep broker's fallback (cost_price) if quote unavailable
+        }
+      }
     }
 
     // Sync account-level info

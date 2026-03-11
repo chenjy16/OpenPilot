@@ -916,7 +916,12 @@ async function main(): Promise<void> {
       });
     });
     stopLossManager.startMonitoring(30000);
-    console.log(`[${new Date().toISOString()}] QuoteService configured, StopLossManager wired to real prices`);
+    // Wire PositionSyncer to use QuoteService for real-time prices
+    // (Longport stockPositions() doesn't return real-time prices)
+    positionSyncer.setPriceProvider(async (symbol: string) => {
+      return quoteService.getPriceNumber(symbol);
+    });
+    console.log(`[${new Date().toISOString()}] QuoteService configured, StopLossManager & PositionSyncer wired to real prices`);
   } else {
     console.log(`[${new Date().toISOString()}] QuoteService skipped (no broker credentials)`);
   }
