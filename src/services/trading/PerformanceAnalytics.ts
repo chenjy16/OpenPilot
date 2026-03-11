@@ -260,14 +260,13 @@ export class PerformanceAnalytics {
     let peak = curve[0].equity;
     let maxDD = 0;
     let maxDDPct = 0;
-    let ddStartIdx = 0;
     let recoveryDays: number | null = null;
     let maxDDEndIdx = 0;
+    let maxDDPeak = peak; // the peak value when max drawdown occurred
 
     for (let i = 0; i < curve.length; i++) {
       if (curve[i].equity > peak) {
         peak = curve[i].equity;
-        ddStartIdx = i;
       }
       const dd = peak - curve[i].equity;
       const ddPct = peak > 0 ? (dd / peak) * 100 : 0;
@@ -275,12 +274,13 @@ export class PerformanceAnalytics {
         maxDD = dd;
         maxDDPct = ddPct;
         maxDDEndIdx = i;
+        maxDDPeak = peak;
       }
     }
 
-    // Find recovery: first time equity >= peak after max drawdown trough
+    // Find recovery: first time equity >= the peak that caused max drawdown
     for (let i = maxDDEndIdx + 1; i < curve.length; i++) {
-      if (curve[i].equity >= peak) {
+      if (curve[i].equity >= maxDDPeak) {
         recoveryDays = i - maxDDEndIdx;
         break;
       }

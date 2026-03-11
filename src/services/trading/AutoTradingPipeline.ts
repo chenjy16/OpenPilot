@@ -123,11 +123,18 @@ export class AutoTradingPipeline {
         )
         .all(since) as SignalCard[];
 
-      for (const signal of rows) {
-        this.processSignal(signal).catch((err) => {
-          console.error(`[AutoTradingPipeline] processSignal error for signal ${signal.id}:`, err);
-        });
-      }
+      // Process signals sequentially to avoid race conditions with dedup checks
+      (async () => {
+        for (const signal of rows) {
+          try {
+            await this.processSignal(signal);
+          } catch (err) {
+            console.error(`[AutoTradingPipeline] processSignal error for signal ${signal.id}:`, err);
+          }
+        }
+      })().catch((err) => {
+        console.error('[AutoTradingPipeline] signal processing loop error:', err);
+      });
     } catch (err) {
       console.error('[AutoTradingPipeline] pollNewSignals error:', err);
     }

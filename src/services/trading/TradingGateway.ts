@@ -90,6 +90,17 @@ export class TradingGateway {
     const account = await this.getAccount();
     const positions = await this.getPositions();
     const todayStats = this.orderManager.getStats(mode);
+
+    // For market orders without price, estimate from request.price or current position price
+    // This ensures risk checks aren't bypassed for market orders
+    if (!order.price && request.price) {
+      order.price = request.price;
+    }
+    if (!order.price) {
+      const pos = positions.find(p => p.symbol === order.symbol);
+      if (pos) order.price = pos.current_price;
+    }
+
     const riskResult = this.riskController.checkOrder(order, account, positions, todayStats);
 
     if (!riskResult.passed) {

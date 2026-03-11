@@ -205,7 +205,7 @@ export interface StopLossRecord {
   id?: number;
   order_id: number;
   symbol: string;
-  side: 'buy';
+  side: 'buy' | 'sell';
   entry_price: number;
   stop_loss: number;
   take_profit: number;

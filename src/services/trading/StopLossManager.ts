@@ -151,7 +151,10 @@ export class StopLossManager {
       // Estimate quantity from the original order
       const originalOrder = this.tradingGateway.getOrder(record.order_id);
       const quantity = originalOrder?.filled_quantity || originalOrder?.quantity || 1;
-      const pnlAmount = (currentPrice - record.entry_price) * quantity;
+      // PnL direction depends on position side: long (buy) = current - entry, short (sell) = entry - current
+      const pnlAmount = record.side === 'sell'
+        ? (record.entry_price - currentPrice) * quantity
+        : (currentPrice - record.entry_price) * quantity;
 
       const event: StopLossTriggerEvent = {
         record,
