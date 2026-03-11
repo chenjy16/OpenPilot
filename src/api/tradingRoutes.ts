@@ -503,5 +503,57 @@ export function createTradingRoutes(
     }
   });
 
+  // GET /strategy-allocations — list all strategy capital allocations
+  router.get('/strategy-allocations', (_req: Request, res: Response) => {
+    try {
+      if (!db) return errorResponse(res, 503, 'SERVICE_UNAVAILABLE', 'Database not configured');
+      const { StrategyAllocator } = require('../services/trading/StrategyAllocator');
+      const allocator = new StrategyAllocator(db);
+      res.status(200).json(allocator.getSummary());
+    } catch (err: any) {
+      errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
+    }
+  });
+
+  // PUT /strategy-allocations — set capital allocation for a strategy
+  router.put('/strategy-allocations', (req: Request, res: Response) => {
+    try {
+      if (!db) return errorResponse(res, 503, 'SERVICE_UNAVAILABLE', 'Database not configured');
+      const { strategy_id, allocated_capital, enabled } = req.body;
+      if (!strategy_id) return errorResponse(res, 400, 'VALIDATION_ERROR', 'strategy_id is required');
+      const { StrategyAllocator } = require('../services/trading/StrategyAllocator');
+      const allocator = new StrategyAllocator(db);
+      if (allocated_capital !== undefined) allocator.setAllocation(strategy_id, allocated_capital);
+      if (enabled !== undefined) allocator.toggleAllocation(strategy_id, enabled);
+      res.status(200).json(allocator.getAllocation(strategy_id));
+    } catch (err: any) {
+      errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
+    }
+  });
+
+  // GET /dynamic-risk — get current dynamic risk state
+  router.get('/dynamic-risk', (_req: Request, res: Response) => {
+    try {
+      const state = riskController.getDynamicRiskState();
+      res.status(200).json(state);
+    } catch (err: any) {
+      errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
+    }
+  });
+
+  // POST /dynamic-risk/update — manually update dynamic risk state
+  router.post('/dynamic-risk/update', (_req: Request, res: Response) => {
+    try {
+      const { portfolio_drawdown, vix_level } = _req.body;
+      if (portfolio_drawdown === undefined) {
+        return errorResponse(res, 400, 'VALIDATION_ERROR', 'portfolio_drawdown is required');
+      }
+      const result = riskController.updateDynamicRisk(portfolio_drawdown, vix_level);
+      res.status(200).json(result);
+    } catch (err: any) {
+      errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
+    }
+  });
+
   return router;
 }

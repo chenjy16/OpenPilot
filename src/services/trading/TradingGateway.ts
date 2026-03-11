@@ -25,6 +25,7 @@ import type {
 import { OrderManager } from './OrderManager';
 import { RiskController } from './RiskController';
 import { PaperTradingEngine } from './PaperTradingEngine';
+import type { StrategyAllocator } from './StrategyAllocator';
 
 // ---------------------------------------------------------------------------
 // Default config values
@@ -50,6 +51,7 @@ export class TradingGateway {
   private riskController: RiskController;
   private paperEngine: PaperTradingEngine;
   private brokerAdapter?: BrokerAdapter;
+  private strategyAllocator?: StrategyAllocator;
 
   constructor(
     db: Database.Database,
@@ -63,6 +65,11 @@ export class TradingGateway {
     this.riskController = riskController;
     this.paperEngine = paperEngine;
     this.brokerAdapter = brokerAdapter;
+  }
+
+  /** Set the strategy allocator for multi-strategy capital management. */
+  setStrategyAllocator(allocator: StrategyAllocator): void {
+    this.strategyAllocator = allocator;
   }
 
   // -------------------------------------------------------------------------
@@ -110,6 +117,18 @@ export class TradingGateway {
       }
     }
 
+    // 2c. Strategy allocation check (multi-strategy capital management)
+    if (this.strategyAllocator && order.strategy_id && order.side === 'buy') {
+      const allocViolation = this.strategyAllocator.checkAllocation(order.strategy_id, orderAmount);
+      if (allocViolation) {
+        const failed = this.orderManager.updateOrderStatus(order.id!, 'failed', {
+          reject_reason: allocViolation,
+        });
+        this.logAudit('place_order_rejected', failed.id, request, { reason: allocViolation });
+        return failed;
+      }
+    }
+
     // 3. Route to execution engine
     //    Paper mode with broker credentials → use broker adapter (Longport simulated API)
     //    Paper mode without credentials → fallback to local paper engine
@@ -147,6 +166,7 @@ export class TradingGateway {
           filled_price: result.filled_price,
         });
         this.logAudit('place_order_filled', filled.id, request, result);
+        this.recordStrategyUsage(filled);
         return filled;
       }
 
@@ -175,6 +195,7 @@ export class TradingGateway {
           filled_price: result.filled_price,
         });
         this.logAudit('place_order_filled', filled.id, request, result);
+        this.recordStrategyUsage(filled);
         return filled;
       }
 
@@ -600,5 +621,13 @@ export class TradingGateway {
   private hasPaperCredentials(): boolean {
     const masked = this.getBrokerCredentialsMasked();
     return masked.app_key_set && masked.app_secret_set && masked.paper_access_token_set;
+  }
+
+  /** Record strategy capital usage when an order is filled. */
+  private recordStrategyUsage(order: TradingOrder): void {
+    if (!this.strategyAllocator || !order.strategy_id) return;
+    if (order.side === 'buy' && order.filled_quantity && order.filled_price) {
+      this.strategyAllocator.recordUsage(order.strategy_id, order.filled_quantity * order.filled_price);
+    }
   }
 }

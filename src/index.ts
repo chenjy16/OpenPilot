@@ -80,6 +80,7 @@ import { QuoteService } from './services/trading/QuoteService';
 import { UniverseScreener } from './services/UniverseScreener';
 import { DataManager } from './services/trading/DataManager';
 import { SignalTracker } from './services/SignalTracker';
+import { StrategyAllocator } from './services/trading/StrategyAllocator';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -770,6 +771,8 @@ async function main(): Promise<void> {
   const signalEvaluator = new SignalEvaluator(db);
   const stopLossManager = new StopLossManager(db, tradingGateway, tradeNotifier);
   const strategyEngine = new StrategyEngine(db, sandbox);
+  const strategyAllocator = new StrategyAllocator(db);
+  tradingGateway.setStrategyAllocator(strategyAllocator);
   const autoTradingPipeline = new AutoTradingPipeline(
     db,
     tradingGateway,

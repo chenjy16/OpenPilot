@@ -236,4 +236,31 @@ export function initTradingTables(db: Database.Database): void {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_symbol_sectors_sector ON symbol_sectors(sector)
   `);
+
+  // strategy_allocations table — per-strategy capital allocation and P&L tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS strategy_allocations (
+      strategy_id INTEGER PRIMARY KEY,
+      allocated_capital REAL NOT NULL DEFAULT 0,
+      used_capital REAL NOT NULL DEFAULT 0,
+      realized_pnl REAL NOT NULL DEFAULT 0,
+      max_drawdown REAL NOT NULL DEFAULT 0,
+      peak_equity REAL NOT NULL DEFAULT 0,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (strategy_id) REFERENCES strategies(id)
+    )
+  `);
+
+  // dynamic_risk_state table — tracks market regime for dynamic risk adjustment
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dynamic_risk_state (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      regime TEXT NOT NULL DEFAULT 'normal' CHECK(regime IN ('low_vol', 'normal', 'high_vol', 'crisis')),
+      vix_level REAL,
+      portfolio_drawdown REAL NOT NULL DEFAULT 0,
+      risk_multiplier REAL NOT NULL DEFAULT 1.0,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
 }

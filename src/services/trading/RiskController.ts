@@ -61,19 +61,22 @@ export class RiskController {
   ): RiskCheckResult {
     const rules = this.listRules().filter((r) => r.enabled);
     const violations: RiskCheckResult['violations'] = [];
+    const dynamicState = this.getDynamicRiskState();
 
     const orderAmount = order.quantity * (order.price || 0);
 
     for (const rule of rules) {
+      // Apply dynamic risk multiplier to threshold
+      const threshold = rule.threshold * dynamicState.risk_multiplier;
       switch (rule.rule_type) {
         case 'max_order_amount': {
-          if (orderAmount > rule.threshold) {
+          if (orderAmount > threshold) {
             violations.push({
               rule_type: rule.rule_type,
               rule_name: rule.rule_name,
-              threshold: rule.threshold,
+              threshold,
               current_value: orderAmount,
-              message: `Order amount ${orderAmount} exceeds limit ${rule.threshold}`,
+              message: `Order amount ${orderAmount} exceeds limit ${threshold}`,
             });
           }
           break;
@@ -81,13 +84,13 @@ export class RiskController {
 
         case 'max_daily_amount': {
           const dailyTotal = todayStats.total_filled_amount + orderAmount;
-          if (dailyTotal > rule.threshold) {
+          if (dailyTotal > threshold) {
             violations.push({
               rule_type: rule.rule_type,
               rule_name: rule.rule_name,
-              threshold: rule.threshold,
+              threshold,
               current_value: dailyTotal,
-              message: `Daily amount ${dailyTotal} exceeds limit ${rule.threshold}`,
+              message: `Daily amount ${dailyTotal} exceeds limit ${threshold}`,
             });
           }
           break;
@@ -98,13 +101,13 @@ export class RiskController {
             const position = positions.find((p) => p.symbol === order.symbol);
             const positionValue = position ? position.market_value : 0;
             const ratio = positionValue / account.total_assets;
-            if (ratio > rule.threshold) {
+            if (ratio > threshold) {
               violations.push({
                 rule_type: rule.rule_type,
                 rule_name: rule.rule_name,
-                threshold: rule.threshold,
+                threshold,
                 current_value: ratio,
-                message: `Position ratio ${(ratio * 100).toFixed(1)}% exceeds limit ${(rule.threshold * 100).toFixed(1)}%`,
+                message: `Position ratio ${(ratio * 100).toFixed(1)}% exceeds limit ${(threshold * 100).toFixed(1)}%`,
               });
             }
           }
@@ -124,26 +127,26 @@ export class RiskController {
           const totalPositionValue = positions.reduce((sum, p) => sum + p.market_value, 0);
           const totalPositionCost = positions.reduce((sum, p) => sum + p.avg_cost * p.quantity, 0);
           const unrealizedLoss = Math.max(0, totalPositionCost - totalPositionValue);
-          if (unrealizedLoss > rule.threshold) {
+          if (unrealizedLoss > threshold) {
             violations.push({
               rule_type: rule.rule_type,
               rule_name: rule.rule_name,
-              threshold: rule.threshold,
+              threshold,
               current_value: unrealizedLoss,
-              message: `Daily loss ${unrealizedLoss} exceeds limit ${rule.threshold}`,
+              message: `Daily loss ${unrealizedLoss} exceeds limit ${threshold}`,
             });
           }
           break;
         }
 
         case 'max_daily_trades': {
-          if (todayStats.total_orders >= rule.threshold) {
+          if (todayStats.total_orders >= threshold) {
             violations.push({
               rule_type: rule.rule_type,
               rule_name: rule.rule_name,
-              threshold: rule.threshold,
+              threshold,
               current_value: todayStats.total_orders,
-              message: `Daily trades ${todayStats.total_orders} reached limit ${rule.threshold}`,
+              message: `Daily trades ${todayStats.total_orders} reached limit ${threshold}`,
             });
           }
           break;
@@ -312,5 +315,71 @@ export class RiskController {
       for (const row of rows) stmt.run(row);
     });
     txn(mappings);
+  }
+
+  // ─── Dynamic Risk Adjustment ────────────────────────────────────────────
+
+  /**
+   * Get the current dynamic risk state (market regime + risk multiplier).
+   */
+  getDynamicRiskState(): { regime: string; vix_level: number | null; portfolio_drawdown: number; risk_multiplier: number } {
+    const row = this.db.prepare('SELECT * FROM dynamic_risk_state WHERE id = 1').get() as any;
+    if (!row) {
+      return { regime: 'normal', vix_level: null, portfolio_drawdown: 0, risk_multiplier: 1.0 };
+    }
+    return {
+      regime: row.regime,
+      vix_level: row.vix_level,
+      portfolio_drawdown: row.portfolio_drawdown,
+      risk_multiplier: row.risk_multiplier,
+    };
+  }
+
+  /**
+   * Update dynamic risk state based on market conditions.
+   * Adjusts risk_multiplier: crisis=0.25, high_vol=0.5, normal=1.0, low_vol=1.5
+   *
+   * @param portfolioDrawdown - current portfolio drawdown as fraction (0-1)
+   * @param vixLevel - optional VIX level for volatility regime detection
+   */
+  updateDynamicRisk(portfolioDrawdown: number, vixLevel?: number): { regime: string; risk_multiplier: number } {
+    let regime: string;
+    let multiplier: number;
+
+    // Determine regime from drawdown and VIX
+    if (portfolioDrawdown > 0.15 || (vixLevel != null && vixLevel > 35)) {
+      regime = 'crisis';
+      multiplier = 0.25;
+    } else if (portfolioDrawdown > 0.08 || (vixLevel != null && vixLevel > 25)) {
+      regime = 'high_vol';
+      multiplier = 0.5;
+    } else if (portfolioDrawdown < 0.02 && (vixLevel == null || vixLevel < 15)) {
+      regime = 'low_vol';
+      multiplier = 1.5;
+    } else {
+      regime = 'normal';
+      multiplier = 1.0;
+    }
+
+    this.db.prepare(`
+      INSERT INTO dynamic_risk_state (id, regime, vix_level, portfolio_drawdown, risk_multiplier, updated_at)
+      VALUES (1, @regime, @vix, @dd, @mult, unixepoch())
+      ON CONFLICT(id) DO UPDATE SET
+        regime = @regime, vix_level = @vix, portfolio_drawdown = @dd,
+        risk_multiplier = @mult, updated_at = unixepoch()
+    `).run({ regime, vix: vixLevel ?? null, dd: portfolioDrawdown, mult: multiplier });
+
+    return { regime, risk_multiplier: multiplier };
+  }
+
+  /**
+   * Get the effective threshold for a risk rule, adjusted by the dynamic risk multiplier.
+   * For loss/amount limits: threshold * multiplier (lower in crisis = tighter limits)
+   * For trade count: threshold * multiplier (fewer trades in crisis)
+   */
+  getAdjustedThreshold(ruleType: string, baseThreshold: number): number {
+    const state = this.getDynamicRiskState();
+    // In crisis mode, reduce thresholds (tighter risk). In low_vol, relax them.
+    return baseThreshold * state.risk_multiplier;
   }
 }
