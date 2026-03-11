@@ -176,43 +176,59 @@ export class QuoteService extends EventEmitter {
       // Normalize symbols to Longport format
       const lpSymbols = symbols.map(s => this.normalizeSymbol(s));
 
-      try {
-        // Race QuoteContext creation against a 20-second timeout
-        // (Longport WS from Taiwan typically takes 10-15s to connect)
-        const ctx = await Promise.race([
-          this.ensureContext(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('QuoteContext connection timeout (20s)')), 20_000),
-          ),
-        ]);
+      // Try connecting with retries (Longport SDK init is heavy, Taiwan network needs extra time)
+      const maxRetries = 2;
+      let lastError: Error | null = null;
 
-        this.wsConnected = true;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const timeoutMs = 30_000; // 30s per attempt
+          const ctx = await Promise.race([
+            this.ensureContext(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`QuoteContext connection timeout (${timeoutMs / 1000}s)`)), timeoutMs),
+            ),
+          ]);
 
-        if (lpSymbols.length > 0) {
-          // Subscribe to quote push
-          await ctx.subscribe(lpSymbols, [SubType.Quote]);
-          for (const s of lpSymbols) this.subscribedSymbols.add(s);
-          console.log(`[QuoteService] Subscribed to ${lpSymbols.length} symbols`);
-        }
+          this.wsConnected = true;
 
-        // Initial fetch of all prices
-        await this.refreshPrices(lpSymbols);
-
-        // Start periodic polling (for free accounts with delayed data, polling ensures freshness)
-        this.pollTimer = setInterval(() => {
-          const syms = Array.from(this.subscribedSymbols);
-          if (syms.length > 0) {
-            this.refreshPrices(syms).catch(err => {
-              console.error(`[QuoteService] Poll error: ${err.message}`);
-            });
+          if (lpSymbols.length > 0) {
+            // Subscribe to quote push
+            await ctx.subscribe(lpSymbols, [SubType.Quote]);
+            for (const s of lpSymbols) this.subscribedSymbols.add(s);
+            console.log(`[QuoteService] Subscribed to ${lpSymbols.length} symbols`);
           }
-        }, pollIntervalMs);
 
-        console.log(`[QuoteService] Started (${lpSymbols.length} symbols, poll every ${pollIntervalMs / 1000}s)`);
-      } catch (err: any) {
-        console.warn(`[QuoteService] WebSocket connection failed: ${err.message}`);
+          // Initial fetch of all prices
+          await this.refreshPrices(lpSymbols);
+
+          // Start periodic polling (for free accounts with delayed data, polling ensures freshness)
+          this.pollTimer = setInterval(() => {
+            const syms = Array.from(this.subscribedSymbols);
+            if (syms.length > 0) {
+              this.refreshPrices(syms).catch(err => {
+                console.error(`[QuoteService] Poll error: ${err.message}`);
+              });
+            }
+          }, pollIntervalMs);
+
+          console.log(`[QuoteService] Started (${lpSymbols.length} symbols, poll every ${pollIntervalMs / 1000}s)`);
+          lastError = null;
+          break; // Success — exit retry loop
+        } catch (err: any) {
+          lastError = err;
+          console.warn(`[QuoteService] WS connect attempt ${attempt}/${maxRetries} failed: ${err.message}`);
+          // Reset broken context before retry
+          this.quoteCtx = null;
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 2000)); // 2s delay before retry
+          }
+        }
+      }
+
+      if (lastError) {
+        console.warn(`[QuoteService] WebSocket connection failed after ${maxRetries} attempts, degrading to HTTP fallback`);
         this.wsConnected = false;
-        // Reset broken context so it doesn't block future attempts
         this.quoteCtx = null;
 
         // Track symbols even though WS failed — HTTP fallback needs them
