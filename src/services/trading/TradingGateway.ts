@@ -52,6 +52,7 @@ export class TradingGateway {
   private paperEngine: PaperTradingEngine;
   private brokerAdapter?: BrokerAdapter;
   private strategyAllocator?: StrategyAllocator;
+  private priceProvider: ((symbol: string) => Promise<number>) | null = null;
 
   constructor(
     db: Database.Database,
@@ -70,6 +71,14 @@ export class TradingGateway {
   /** Set the strategy allocator for multi-strategy capital management. */
   setStrategyAllocator(allocator: StrategyAllocator): void {
     this.strategyAllocator = allocator;
+  }
+
+  /**
+   * Set a real-time price provider (e.g. QuoteService.getPriceNumber).
+   * Used to enrich positions with real-time prices for accurate risk checks.
+   */
+  setPriceProvider(provider: (symbol: string) => Promise<number>): void {
+    this.priceProvider = provider;
   }
 
   // -------------------------------------------------------------------------
@@ -320,27 +329,49 @@ export class TradingGateway {
 
   /**
    * Get positions — routed by trading mode.
+   * Enriches positions with real-time prices when a price provider is available,
+   * ensuring accurate market_value for risk checks (max_position_ratio, max_daily_loss).
    */
   async getPositions(): Promise<BrokerPosition[]> {
     const config = this.getConfig();
+    let positions: BrokerPosition[];
+
     if (config.trading_mode === 'paper') {
       // Use real broker API with paper token when credentials are available
       if (this.brokerAdapter && this.hasPaperCredentials()) {
         this.syncAdapterCredentials();
         try {
-          return await this.brokerAdapter.getPositions();
+          positions = await this.brokerAdapter.getPositions();
         } catch {
           // Fall back to local paper engine on error
-          return this.paperEngine.getPositions();
+          positions = this.paperEngine.getPositions();
+        }
+      } else {
+        positions = this.paperEngine.getPositions();
+      }
+    } else if (this.brokerAdapter) {
+      this.syncAdapterCredentials();
+      positions = await this.brokerAdapter.getPositions();
+    } else {
+      positions = [];
+    }
+
+    // Enrich with real-time prices for accurate risk checks
+    if (this.priceProvider && positions.length > 0) {
+      for (const pos of positions) {
+        try {
+          const realPrice = await this.priceProvider(pos.symbol);
+          if (realPrice > 0) {
+            pos.current_price = realPrice;
+            pos.market_value = pos.quantity * realPrice;
+          }
+        } catch {
+          // Keep fallback price (avg_cost) if quote unavailable
         }
       }
-      return this.paperEngine.getPositions();
     }
-    if (this.brokerAdapter) {
-      this.syncAdapterCredentials();
-      return this.brokerAdapter.getPositions();
-    }
-    return [];
+
+    return positions;
   }
 
   /**

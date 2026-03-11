@@ -943,6 +943,10 @@ async function main(): Promise<void> {
     positionSyncer.setPriceProvider(async (symbol: string) => {
       return quoteService.getPriceNumber(symbol);
     });
+    // Wire TradingGateway to use QuoteService for real-time prices in risk checks
+    tradingGateway.setPriceProvider(async (symbol: string) => {
+      return quoteService.getPriceNumber(symbol);
+    });
     console.log(`[${new Date().toISOString()}] QuoteService configured, StopLossManager & PositionSyncer wired to real prices`);
   } else if (finnhubKey) {
     // No Longport credentials but Finnhub is available — start in pure HTTP fallback mode
@@ -951,6 +955,7 @@ async function main(): Promise<void> {
     const fallbackGetPrice = async (symbol: string) => finnhubProvider.getPrice(symbol);
     positionSyncer.setPriceProvider(fallbackGetPrice);
     stopLossManager.setPriceProvider(fallbackGetPrice);
+    tradingGateway.setPriceProvider(fallbackGetPrice);
     stopLossManager.startMonitoring(30000);
     console.log(`[${new Date().toISOString()}] QuoteService: Longport credentials missing, using Finnhub-only mode`);
   } else {
