@@ -98,9 +98,9 @@ export class QuoteService extends EventEmitter {
 
     const { appKey, appSecret, accessToken, region } = this.options;
     const isCN = region === 'cn';
-    const baseUrl = isCN ? 'https://openapi.longportapp.cn' : 'https://openapi.longportapp.com';
-    const quoteWsUrl = isCN ? 'wss://openapi-quote.longportapp.cn/v2' : 'wss://openapi-quote.longportapp.com/v2';
-    const tradeWsUrl = isCN ? 'wss://openapi-trade.longportapp.cn/v2' : 'wss://openapi-trade.longportapp.com/v2';
+    const baseUrl = isCN ? 'https://openapi.longportapp.cn' : 'https://openapi.longbridge.com';
+    const quoteWsUrl = isCN ? 'wss://openapi-quote.longportapp.cn/v2' : 'wss://openapi-quote.longbridge.com/v2';
+    const tradeWsUrl = isCN ? 'wss://openapi-trade.longportapp.cn/v2' : 'wss://openapi-trade.longbridge.com/v2';
 
     this.config = new Config({
       appKey,
