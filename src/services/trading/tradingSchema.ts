@@ -149,6 +149,13 @@ export function initTradingTables(db: Database.Database): void {
   try {
     db.exec(`ALTER TABLE stop_loss_records ADD COLUMN highest_price REAL`);
   } catch { /* column already exists */ }
+  // Migration: add Chandelier Exit (ATR-based trailing) columns
+  try {
+    db.exec(`ALTER TABLE stop_loss_records ADD COLUMN trailing_atr_multiplier REAL`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE stop_loss_records ADD COLUMN atr_value REAL`);
+  } catch { /* column already exists */ }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_stop_loss_status ON stop_loss_records(status)

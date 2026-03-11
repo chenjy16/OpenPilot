@@ -59,6 +59,17 @@ export function calculateOrderQuantity(params: QuantityParams): number {
       result = Math.floor(kellyFraction * total_assets / entry_price);
       break;
     }
+    case 'volatility_parity': {
+      // 波动率平价仓位: 单笔最大亏损 = 账户总资金 × 1%, 止损宽容度 = 2 × ATR
+      const { total_assets: assets, atr14 } = params;
+      if (!atr14 || atr14 <= 0 || !assets || assets <= 0 || entry_price <= 0) return 0;
+      const maxRiskAmount = assets * 0.01;
+      const riskPerShare = 2 * atr14;
+      // 防止 ATR 极小导致买入过多: 下限为股价的 1%
+      const adjustedRisk = Math.max(riskPerShare, entry_price * 0.01);
+      result = Math.floor(maxRiskAmount / adjustedRisk);
+      break;
+    }
     default:
       return 0;
   }

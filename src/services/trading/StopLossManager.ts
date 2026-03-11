@@ -43,9 +43,11 @@ export class StopLossManager {
   /** 注册止盈止损监控，写入 stop_loss_records 表 */
   register(record: Omit<StopLossRecord, 'id' | 'status' | 'created_at'>): StopLossRecord {
     const now = Math.floor(Date.now() / 1000);
+    const hasTrailing = (record.trailing_percent && record.trailing_percent > 0)
+      || (record.trailing_atr_multiplier && record.trailing_atr_multiplier > 0 && record.atr_value && record.atr_value > 0);
     const result = this.db.prepare(`
-      INSERT INTO stop_loss_records (order_id, symbol, side, entry_price, stop_loss, take_profit, trailing_percent, highest_price, status, created_at)
-      VALUES (@order_id, @symbol, @side, @entry_price, @stop_loss, @take_profit, @trailing_percent, @highest_price, 'active', @created_at)
+      INSERT INTO stop_loss_records (order_id, symbol, side, entry_price, stop_loss, take_profit, trailing_percent, trailing_atr_multiplier, atr_value, highest_price, status, created_at)
+      VALUES (@order_id, @symbol, @side, @entry_price, @stop_loss, @take_profit, @trailing_percent, @trailing_atr_multiplier, @atr_value, @highest_price, 'active', @created_at)
     `).run({
       order_id: record.order_id,
       symbol: record.symbol,
@@ -54,14 +56,16 @@ export class StopLossManager {
       stop_loss: record.stop_loss,
       take_profit: record.take_profit,
       trailing_percent: record.trailing_percent ?? null,
-      highest_price: record.trailing_percent ? record.entry_price : null,
+      trailing_atr_multiplier: record.trailing_atr_multiplier ?? null,
+      atr_value: record.atr_value ?? null,
+      highest_price: hasTrailing ? record.entry_price : null,
       created_at: now,
     });
 
     const saved: StopLossRecord = {
       id: Number(result.lastInsertRowid),
       ...record,
-      highest_price: record.trailing_percent ? record.entry_price : undefined,
+      highest_price: hasTrailing ? record.entry_price : undefined,
       status: 'active',
       created_at: now,
     };
@@ -128,12 +132,24 @@ export class StopLossManager {
         continue;
       }
 
-      // Trailing stop: if price made new high, raise stop_loss
-      if (record.trailing_percent && record.trailing_percent > 0) {
+      // Trailing stop: percentage-based or ATR-based (Chandelier Exit)
+      const hasPercentTrailing = record.trailing_percent && record.trailing_percent > 0;
+      const hasAtrTrailing = record.trailing_atr_multiplier && record.trailing_atr_multiplier > 0 && record.atr_value && record.atr_value > 0;
+
+      if (hasPercentTrailing || hasAtrTrailing) {
         const prevHighest = record.highest_price ?? record.entry_price;
         if (currentPrice > prevHighest) {
           record.highest_price = currentPrice;
-          const newStopLoss = currentPrice * (1 - record.trailing_percent / 100);
+
+          let newStopLoss: number;
+          if (hasAtrTrailing) {
+            // Chandelier Exit: highest_price - multiplier × ATR
+            newStopLoss = currentPrice - (record.trailing_atr_multiplier! * record.atr_value!);
+          } else {
+            // Percentage-based trailing
+            newStopLoss = currentPrice * (1 - record.trailing_percent! / 100);
+          }
+
           // Only raise stop_loss, never lower it
           if (newStopLoss > record.stop_loss) {
             record.stop_loss = Math.round(newStopLoss * 100) / 100;
@@ -228,7 +244,8 @@ export class StopLossManager {
   restoreFromDb(): StopLossRecord[] {
     const rows = this.db.prepare(`
       SELECT id, order_id, symbol, side, entry_price, stop_loss, take_profit,
-             trailing_percent, highest_price, status, triggered_at, triggered_price, created_at
+             trailing_percent, trailing_atr_multiplier, atr_value, highest_price,
+             status, triggered_at, triggered_price, created_at
       FROM stop_loss_records
       WHERE status = 'active'
     `).all() as StopLossRecord[];
@@ -253,6 +270,43 @@ export class StopLossManager {
     `).run({ id: recordId });
 
     this.activeRecords.delete(recordId);
+  }
+
+  /**
+   * 收紧所有活跃止损记录的止损位 (用于 VIX 飙升等紧急风控场景)。
+   * 对 ATR 模式: 将 multiplier 缩小到 newMultiplier (如从 2.0 → 1.0)
+   * 对百分比模式: 将 trailing_percent 缩小到 newPercent
+   * 止损位只升不降。
+   */
+  tightenAllStops(newAtrMultiplier?: number, newPercent?: number): number {
+    let tightened = 0;
+    for (const record of this.activeRecords.values()) {
+      const highest = record.highest_price ?? record.entry_price;
+      let newStopLoss: number | null = null;
+
+      if (newAtrMultiplier != null && record.trailing_atr_multiplier && record.atr_value) {
+        // Tighten ATR-based trailing
+        record.trailing_atr_multiplier = Math.min(record.trailing_atr_multiplier, newAtrMultiplier);
+        newStopLoss = highest - (record.trailing_atr_multiplier * record.atr_value);
+      } else if (newPercent != null && record.trailing_percent) {
+        record.trailing_percent = Math.min(record.trailing_percent, newPercent);
+        newStopLoss = highest * (1 - record.trailing_percent / 100);
+      }
+
+      if (newStopLoss != null && newStopLoss > record.stop_loss) {
+        record.stop_loss = Math.round(newStopLoss * 100) / 100;
+        this.db.prepare(`
+          UPDATE stop_loss_records SET stop_loss = @sl, trailing_atr_multiplier = @tam, trailing_percent = @tp WHERE id = @id
+        `).run({
+          sl: record.stop_loss,
+          tam: record.trailing_atr_multiplier ?? null,
+          tp: record.trailing_percent ?? null,
+          id: record.id,
+        });
+        tightened++;
+      }
+    }
+    return tightened;
   }
 
   /** 写入审计日志 */

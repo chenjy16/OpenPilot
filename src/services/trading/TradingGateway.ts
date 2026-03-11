@@ -640,5 +640,20 @@ export class TradingGateway {
     if (order.side === 'buy' && order.filled_quantity && order.filled_price) {
       this.strategyAllocator.recordUsage(order.strategy_id, order.filled_quantity * order.filled_price);
     }
+    // Sell fill → record realized PnL and release capital
+    if (order.side === 'sell' && order.filled_quantity && order.filled_price) {
+      const releasedCapital = order.filled_quantity * order.filled_price;
+      // Estimate PnL from current position avg_cost (sync call to paper positions or cached)
+      try {
+        const positions = this.paperEngine.getPositions();
+        const pos = positions.find(p => p.symbol === order.symbol);
+        const avgCost = pos?.avg_cost ?? order.filled_price;
+        const pnl = (order.filled_price - avgCost) * order.filled_quantity;
+        this.strategyAllocator.recordPnl(order.strategy_id, pnl, releasedCapital);
+      } catch {
+        // Fallback: record zero PnL but still release capital
+        this.strategyAllocator.recordPnl(order.strategy_id, 0, releasedCapital);
+      }
+    }
   }
 }

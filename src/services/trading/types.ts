@@ -189,7 +189,7 @@ export interface EvaluationResult {
   reason?: 'confidence_below_threshold' | 'duplicate_signal' | 'action_hold' | 'missing_price';
 }
 
-export type QuantityMode = 'fixed_quantity' | 'fixed_amount' | 'kelly_formula';
+export type QuantityMode = 'fixed_quantity' | 'fixed_amount' | 'kelly_formula' | 'volatility_parity';
 
 export interface QuantityParams {
   mode: QuantityMode;
@@ -199,6 +199,8 @@ export interface QuantityParams {
   stop_loss?: number;
   take_profit?: number;
   total_assets?: number;
+  /** ATR(14) value for volatility_parity mode */
+  atr14?: number;
 }
 
 export interface StopLossRecord {
@@ -210,6 +212,10 @@ export interface StopLossRecord {
   stop_loss: number;
   take_profit: number;
   trailing_percent?: number;
+  /** ATR multiplier for Chandelier Exit (e.g. 2.0 = 2×ATR) */
+  trailing_atr_multiplier?: number;
+  /** ATR(14) value at time of registration, used with trailing_atr_multiplier */
+  atr_value?: number;
   highest_price?: number;
   status: 'active' | 'triggered_sl' | 'triggered_tp' | 'cancelled';
   triggered_at?: number;
