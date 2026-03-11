@@ -237,6 +237,35 @@ QuoteService
 3. Finnhub HTTP 回退 (如果 Longport 不可用)
 4. 抛出错误 (所有通道都失败)
 
+### 价格源实时性分析（仅美股）
+
+| 特性 | Longport WS (主通道) | Finnhub HTTP (回退通道) |
+|------|---------------------|----------------------|
+| 美股实时性 | Nasdaq Basic，~15 分钟延迟（免费版） | 实时报价 |
+| 更新方式 | WebSocket 推送 + 60s 轮询 | HTTP 请求，30s 缓存 TTL |
+| 调用限制 | 无（推送模式，订阅上限 500 只） | 60 次/分钟 |
+| 港股支持 | LV1 实时 | 不支持 |
+
+#### 当前策略：Longport WS 为主，Finnhub 为补充
+
+`getPriceNumber()` 优先级：缓存 → Longport WS → Finnhub HTTP
+
+选择 Longport WS 为主通道的原因：
+- **无调用次数限制**：推送模式，symbol 数量增长不受限（500 只以内）
+- **Finnhub 容量不足**：StopLoss 每 30s × N 个 symbol + PositionSyncer 每 60s × N 个持仓，20+ symbol 时接近 60 次/分钟上限
+- **架构统一**：交易下单、持仓查询、行情数据均走 Longport，减少跨平台 symbol 格式转换问题
+
+#### 15 分钟延迟的影响评估
+
+| 功能模块 | 影响程度 | 说明 |
+|---------|---------|------|
+| 止盈止损 (StopLossManager) | ⚠️ 中等 | 止损可能晚触发 ~15 分钟，极端行情下可能造成额外亏损 |
+| 风控检查 (RiskController) | 🟢 低 | `max_position_ratio` / `max_daily_loss` 基于市值，15 分钟偏差对日线级交易影响有限 |
+| 持仓同步 (PositionSyncer) | 🟢 低 | 显示市值略有偏差，不影响交易逻辑 |
+| 信号扫描 (StockScanner) | 🟢 无 | 使用 Python yfinance 独立获取历史数据，不走 QuoteService |
+
+**结论**：对于 Swing Trading（持仓数天~数周）策略，15 分钟延迟可接受。止损场景下最坏情况是晚触发 15 分钟，但 ATR-based trailing stop 本身就有较宽的容忍度。如果未来需要日内交易级别的实时性，升级 Longport LV2 行情（付费）是最干净的方案。
+
 ### 关键文件
 - `src/services/trading/QuoteService.ts`
 - `src/services/trading/FinnhubPriceProvider.ts`
@@ -244,7 +273,7 @@ QuoteService
 ### 运行状态: ✅ 可跑通
 - 台湾网络环境下 Longport WebSocket 超时问题已通过 Finnhub HTTP 回退解决
 - `setFallbackProvider()` 在 `main()` 步骤 16 中配置
-- StopLossManager 和 PositionSyncer 均已接入 `QuoteService.getPriceNumber()`
+- StopLossManager、PositionSyncer、TradingGateway 均已接入 `QuoteService.getPriceNumber()`
 - 即使 Longport 凭证缺失，也可以纯 Finnhub 模式运行
 
 ---
@@ -474,9 +503,10 @@ QuoteService
 
 ## 已知限制与注意事项
 
-1. **Longport 免费行情为 Nasdaq Basic (LV1 实时)** — 免费订阅上限约 500 只股票，港股/A股通也是实时 LV1
-2. **Finnhub 免费 tier 限制 60 次/分钟** — 监控 symbol 数量过多时需注意速率
-3. **双智能体辩论延迟 15-45 秒** — 三次 LLM 串行调用，对日线级交易可接受
-4. **VWAP 拆单不可行** — 缺少分钟级成交量数据，仅实现 TWAP
-5. **VIX 数据延迟 ~15 分钟** — yfinance 免费数据，对 VIX 级别判断 (>25 vs <15) 足够
-6. **PaperTradingEngine 条件单** — Stop/Stop-Limit 订单仅返回 `submitted`，不模拟触发
+1. **Longport 免费美股行情为 Nasdaq Basic (~15 分钟延迟)** — 对 Swing Trading 可接受；止损最坏情况晚触发 ~15 分钟。升级 LV2 行情（付费）可获得实时数据
+2. **Finnhub 免费 tier 限制 60 次/分钟** — 仅作为 Longport WS 断线时的回退通道，不作为主力价格源（symbol 多时容量不足）
+3. **目前仅支持美股** — 港股/A股通相关代码保留但短期内不启用
+4. **双智能体辩论延迟 15-45 秒** — 三次 LLM 串行调用，对日线级交易可接受
+5. **VWAP 拆单不可行** — 缺少分钟级成交量数据，仅实现 TWAP
+6. **VIX 数据延迟 ~15 分钟** — yfinance 免费数据，对 VIX 级别判断 (>25 vs <15) 足够
+7. **PaperTradingEngine 条件单** — Stop/Stop-Limit 订单仅返回 `submitted`，不模拟触发
