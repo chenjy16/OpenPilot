@@ -163,6 +163,10 @@ export interface PipelineConfig {
   fixed_quantity_value: number; // 固定数量模式参数
   fixed_amount_value: number; // 固定金额模式参数
   signal_poll_interval_ms: number; // 默认 5000
+  /** Enable dual-agent (bull/bear) debate before order placement */
+  debate_enabled: boolean;
+  /** Model to use for the final arbiter in debate mode */
+  debate_model: string;
 }
 
 export interface ProcessResult {

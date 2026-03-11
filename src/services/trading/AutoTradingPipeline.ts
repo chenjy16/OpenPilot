@@ -36,6 +36,11 @@ export interface StrategyScanMatch {
   indicator_values: Record<string, number | null>;
 }
 
+/** Minimal interface for AIRuntime dependency (dual-agent debate) */
+export interface AIRuntimeLike {
+  execute(request: { sessionId: string; message: string; model: string; agentId?: string }): Promise<{ text: string }>;
+}
+
 // ─── Default config values ──────────────────────────────────────────────────
 
 const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
@@ -46,6 +51,8 @@ const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
   fixed_quantity_value: 100,
   fixed_amount_value: 10000,
   signal_poll_interval_ms: 5000,
+  debate_enabled: false,
+  debate_model: 'deepseek/deepseek-reasoner',
 };
 
 const CONFIG_KEYS: (keyof PipelineConfig)[] = [
@@ -56,6 +63,8 @@ const CONFIG_KEYS: (keyof PipelineConfig)[] = [
   'fixed_quantity_value',
   'fixed_amount_value',
   'signal_poll_interval_ms',
+  'debate_enabled',
+  'debate_model',
 ];
 
 // ─── AutoTradingPipeline Class ──────────────────────────────────────────────
@@ -67,6 +76,7 @@ export class AutoTradingPipeline {
   private stopLossManager: StopLossManager;
   private tradeNotifier: TradeNotifier;
   private strategyEngine: StrategyEngineLike;
+  private aiRuntime: AIRuntimeLike | null = null;
 
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastProcessedAt: number | null = null;
@@ -89,6 +99,11 @@ export class AutoTradingPipeline {
   }
 
   // ─── start / stop ───────────────────────────────────────────────────────
+
+  /** Set AIRuntime for dual-agent debate (optional, called from index.ts) */
+  setAIRuntime(runtime: AIRuntimeLike): void {
+    this.aiRuntime = runtime;
+  }
 
   /** Start polling stock_signals for new signals */
   start(): void {
@@ -170,7 +185,32 @@ export class AutoTradingPipeline {
       return this.logAndReturn(signal, 'skipped', logResult, 'quant_analyst');
     }
 
-    // 3. Calculate order quantity
+    // 3. Dual-agent debate (if enabled): Bull vs Bear analysis before order placement
+    if (config.debate_enabled && this.aiRuntime && signal.action === 'buy') {
+      try {
+        const debateResult = await this.runDebate(signal, config);
+        if (!debateResult.approved) {
+          this.logAudit('debate_rejected', undefined, {
+            signal_id: signal.id,
+            symbol: signal.symbol,
+            reason: debateResult.reason,
+            confidence: debateResult.confidence,
+          });
+          return this.logAndReturn(signal, 'skipped', 'skipped_confidence', 'quant_analyst');
+        }
+        this.logAudit('debate_approved', undefined, {
+          signal_id: signal.id,
+          symbol: signal.symbol,
+          confidence: debateResult.confidence,
+          reason: debateResult.reason,
+        });
+      } catch (err: any) {
+        // Debate failure is non-fatal — proceed without debate
+        console.warn(`[AutoTradingPipeline] Debate failed for ${signal.symbol}: ${err.message}`);
+      }
+    }
+
+    // 4. Calculate order quantity
     const quantity = calculateOrderQuantity({
       mode: config.quantity_mode,
       fixed_quantity_value: config.fixed_quantity_value,
@@ -184,7 +224,7 @@ export class AutoTradingPipeline {
       return this.logAndReturn(signal, 'skipped', 'skipped_quantity', 'quant_analyst');
     }
 
-    // 4. Construct CreateOrderRequest
+    // 5. Construct CreateOrderRequest
     const orderRequest: CreateOrderRequest = {
       symbol: signal.symbol,
       side: signal.action as 'buy' | 'sell',
@@ -194,7 +234,7 @@ export class AutoTradingPipeline {
       signal_id: signal.id,
     };
 
-    // 5. Place order via TradingGateway
+    // 6. Place order via TradingGateway
     let order;
     try {
       order = await this.tradingGateway.placeOrder(orderRequest);
@@ -211,7 +251,7 @@ export class AutoTradingPipeline {
       return this.logAndReturn(signal, 'skipped', 'skipped_risk', 'quant_analyst');
     }
 
-    // 6. Register stop-loss if buy order and SL/TP present
+    // 7. Register stop-loss if buy order and SL/TP present
     if (signal.action === 'buy' && signal.stop_loss != null && signal.take_profit != null) {
       try {
         this.stopLossManager.register({
@@ -227,12 +267,12 @@ export class AutoTradingPipeline {
       }
     }
 
-    // 7. Notify via TradeNotifier
+    // 8. Notify via TradeNotifier
     try {
       await this.tradeNotifier.notifyOrderCreated(order);
     } catch { /* notification errors are non-fatal */ }
 
-    // 8. Log to pipeline_signal_log and return
+    // 9. Log to pipeline_signal_log and return
     return this.logAndReturn(signal, 'order_created', 'order_created', 'quant_analyst', order.id);
   }
 
@@ -398,6 +438,8 @@ export class AutoTradingPipeline {
       fixed_quantity_value: Number.isNaN(parsedFixedQty) ? DEFAULT_PIPELINE_CONFIG.fixed_quantity_value : parsedFixedQty,
       fixed_amount_value: Number.isNaN(parsedFixedAmt) ? DEFAULT_PIPELINE_CONFIG.fixed_amount_value : parsedFixedAmt,
       signal_poll_interval_ms: Number.isNaN(parsedPollInterval) ? DEFAULT_PIPELINE_CONFIG.signal_poll_interval_ms : parsedPollInterval,
+      debate_enabled: map.get('debate_enabled') === 'true',
+      debate_model: map.get('debate_model') || DEFAULT_PIPELINE_CONFIG.debate_model,
     };
   }
 
@@ -422,10 +464,105 @@ export class AutoTradingPipeline {
     if (config.fixed_quantity_value !== undefined) entries.push({ key: 'fixed_quantity_value', value: String(config.fixed_quantity_value) });
     if (config.fixed_amount_value !== undefined) entries.push({ key: 'fixed_amount_value', value: String(config.fixed_amount_value) });
     if (config.signal_poll_interval_ms !== undefined) entries.push({ key: 'signal_poll_interval_ms', value: String(config.signal_poll_interval_ms) });
+    if (config.debate_enabled !== undefined) entries.push({ key: 'debate_enabled', value: String(config.debate_enabled) });
+    if (config.debate_model !== undefined) entries.push({ key: 'debate_model', value: config.debate_model });
 
     if (entries.length > 0) {
       updateTxn(entries);
     }
+  }
+
+  // ─── Dual-Agent Debate ────────────────────────────────────────────────────
+
+  /**
+   * Run bull/bear debate for a buy signal.
+   * 1. Bull agent argues for buying
+   * 2. Bear agent argues against buying
+   * 3. Arbiter (strongest model) makes final decision
+   */
+  private async runDebate(
+    signal: SignalCard,
+    config: PipelineConfig,
+  ): Promise<{ approved: boolean; confidence: number; reason: string }> {
+    if (!this.aiRuntime) {
+      return { approved: true, confidence: 1, reason: 'No AI runtime — debate skipped' };
+    }
+
+    const model = config.debate_model || DEFAULT_PIPELINE_CONFIG.debate_model;
+    const sessionPrefix = `debate-${signal.id}-${Date.now()}`;
+
+    const signalContext = [
+      `标的: ${signal.symbol}`,
+      `建议操作: ${signal.action}`,
+      `入场价: ${signal.entry_price}`,
+      `止损位: ${signal.stop_loss ?? 'N/A'}`,
+      `止盈位: ${signal.take_profit ?? 'N/A'}`,
+      `置信度: ${signal.confidence ?? 'N/A'}`,
+    ].join('\n');
+
+    // Run bull and bear agents in parallel
+    const [bullResult, bearResult] = await Promise.all([
+      this.aiRuntime.execute({
+        sessionId: `${sessionPrefix}:bull`,
+        message: `你是多头分析师(Bull Analyst)。请为以下标的找出所有利好因素和买入理由，用中文简洁回答（200字以内）：\n\n${signalContext}`,
+        model,
+        agentId: 'quant-analyst',
+      }).catch(() => ({ text: '无法获取多头分析' })),
+      this.aiRuntime.execute({
+        sessionId: `${sessionPrefix}:bear`,
+        message: `你是空头分析师(Bear Analyst)。请为以下标的找出所有利空因素和不买入的理由，用中文简洁回答（200字以内）：\n\n${signalContext}`,
+        model,
+        agentId: 'quant-analyst',
+      }).catch(() => ({ text: '无法获取空头分析' })),
+    ]);
+
+    // Arbiter: final decision
+    const arbiterPrompt = [
+      `你是首席风控官。请基于多空双方论点做出最终裁决。`,
+      ``,
+      `标的: ${signal.symbol}`,
+      `多头论点: ${bullResult.text}`,
+      `空头论点: ${bearResult.text}`,
+      ``,
+      `请严格输出以下 JSON 格式（不要输出其他内容）:`,
+      `{"action":"buy"或"hold","confidence":0到1的数字,"reason":"一句话理由"}`,
+    ].join('\n');
+
+    const arbiterResult = await this.aiRuntime.execute({
+      sessionId: `${sessionPrefix}:arbiter`,
+      message: arbiterPrompt,
+      model,
+    });
+
+    // Parse arbiter JSON response
+    try {
+      const jsonMatch = arbiterResult.text.match(/\{[^}]+\}/);
+      if (jsonMatch) {
+        const decision = JSON.parse(jsonMatch[0]);
+        const confidence = typeof decision.confidence === 'number' ? decision.confidence : 0;
+        return {
+          approved: decision.action === 'buy' && confidence >= config.confidence_threshold,
+          confidence,
+          reason: decision.reason || 'No reason provided',
+        };
+      }
+    } catch { /* parse error */ }
+
+    // If parsing fails, default to approved (don't block on AI failure)
+    return { approved: true, confidence: 0.5, reason: 'Debate arbiter response unparseable — defaulting to approve' };
+  }
+
+  /** Write to trading_audit_log */
+  private logAudit(operation: string, orderId?: number, details?: any): void {
+    this.db.prepare(`
+      INSERT INTO trading_audit_log (timestamp, operation, order_id, request_params, response_result)
+      VALUES (@timestamp, @operation, @order_id, @request_params, NULL)
+    `).run({
+      timestamp: Math.floor(Date.now() / 1000),
+      operation,
+      order_id: orderId ?? null,
+      request_params: details ? JSON.stringify(details) : null,
+    });
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────

@@ -785,6 +785,9 @@ async function main(): Promise<void> {
   // Restore active stop-loss monitoring from database (Requirement 4.8)
   stopLossManager.restoreFromDb();
 
+  // Wire AIRuntime into AutoTradingPipeline for dual-agent debate
+  autoTradingPipeline.setAIRuntime(aiRuntime);
+
   // Start auto-trading pipeline if enabled (Requirements 7.3, 7.4)
   const pipelineConfig = autoTradingPipeline.getConfig();
   if (pipelineConfig.auto_trade_enabled) {
@@ -936,6 +939,76 @@ async function main(): Promise<void> {
 
   // 18a. VIX real-time monitoring — fetches VIX via Python, updates dynamic risk state,
   //      and tightens stop-losses when VIX > 25
+
+  // 18b. AI Weekly Review — analyzes losing trades and generates a reflection report
+  cronScheduler.registerHandler('weekly-review', async (_job) => {
+    // Gather this week's losing trades from trading_audit_log
+    const oneWeekAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+    const losingTrades = db.prepare(`
+      SELECT tal.*, tor.symbol, tor.side, tor.filled_price, tor.filled_quantity, tor.strategy_id
+      FROM trading_audit_log tal
+      LEFT JOIN trading_orders tor ON tal.order_id = tor.id
+      WHERE tal.timestamp > ? AND tal.operation IN ('stop_loss_triggered', 'order_sync_filled')
+      ORDER BY tal.timestamp DESC
+      LIMIT 20
+    `).all(oneWeekAgo) as any[];
+
+    if (losingTrades.length === 0) {
+      console.log('[Weekly Review] No trades to review this week');
+      return;
+    }
+
+    const tradeSummary = losingTrades.map((t: any) => {
+      const params = t.request_params ? JSON.parse(t.request_params) : {};
+      return `${t.operation}: ${t.symbol || 'unknown'} ${t.side || ''} @ ${t.filled_price || 'N/A'}, PnL: ${params.pnl_amount ?? 'N/A'}`;
+    }).join('\n');
+
+    const reviewPrompt = [
+      '你是量化交易系统的首席策略师。请分析本周的交易记录，重点关注亏损交易。',
+      '',
+      '本周交易记录:',
+      tradeSummary,
+      '',
+      '请输出《本周败局反思报告》，包含:',
+      '1. 亏损交易的共性问题',
+      '2. 信号质量评估',
+      '3. 风控执行评估',
+      '4. 下周改进建议',
+      '',
+      '用中文回答，控制在 500 字以内。',
+    ].join('\n');
+
+    try {
+      const defaultModel = appConfig.agents?.defaults?.model?.primary || 'deepseek/deepseek-reasoner';
+      const result = await aiRuntime.execute({
+        sessionId: `weekly-review-${Date.now()}`,
+        message: reviewPrompt,
+        model: defaultModel,
+      });
+
+      // Push report via notification
+      await tradeNotifier.notifyUrgentAlert(`📊 本周交易复盘报告\n\n${result.text}`);
+      console.log('[Weekly Review] Report generated and sent');
+    } catch (err: any) {
+      console.error(`[Weekly Review] Failed: ${err.message}`);
+    }
+  });
+
+  // Seed weekly review cron job (Saturday 2:00 UTC)
+  {
+    const existingReviewJobs = cronScheduler.listJobs();
+    if (!existingReviewJobs.find(j => j.handler === 'weekly-review')) {
+      cronScheduler.createJob({
+        id: 'weekly-review-saturday',
+        name: 'AI 周末复盘报告',
+        schedule: '0 2 * * 6',
+        handler: 'weekly-review',
+        enabled: true,
+      });
+      console.log(`[${new Date().toISOString()}] Weekly review cron job created (Saturday 02:00 UTC)`);
+    }
+  }
+
   cronScheduler.registerHandler('vix-monitor', async (_job) => {
     const venvPyPath = require('fs').existsSync(venvPy) ? venvPy : 'python3';
     const dbPath = path.resolve(config.databasePath);
