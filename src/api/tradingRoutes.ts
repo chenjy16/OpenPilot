@@ -28,6 +28,22 @@ import type { CreateOrderRequest, OrderFilter, OrderStatus, TradingMode } from '
 // Validation helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Simple in-memory cache for broker API calls (avoid Longport 429 rate limits)
+// ---------------------------------------------------------------------------
+interface CacheEntry<T> { data: T; ts: number }
+const apiCache = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_MS = 15_000; // 15 seconds
+
+function getCached<T>(key: string): T | null {
+  const entry = apiCache.get(key);
+  if (entry && Date.now() - entry.ts < CACHE_TTL_MS) return entry.data as T;
+  return null;
+}
+function setCache<T>(key: string, data: T): void {
+  apiCache.set(key, { data, ts: Date.now() });
+}
+
 const VALID_SIDES = ['buy', 'sell'] as const;
 const VALID_ORDER_TYPES = ['market', 'limit', 'stop', 'stop_limit'] as const;
 const VALID_STATUSES: OrderStatus[] = [
@@ -191,20 +207,26 @@ export function createTradingRoutes(
     }
   });
 
-  // GET /account — account info
+  // GET /account — account info (cached 15s to avoid Longport 429)
   router.get('/account', async (_req: Request, res: Response) => {
     try {
+      const cached = getCached<any>('account');
+      if (cached) return res.status(200).json(cached);
       const account = await gateway.getAccount();
+      setCache('account', account);
       res.status(200).json(account);
     } catch (err: any) {
       errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
     }
   });
 
-  // GET /positions — positions
+  // GET /positions — positions (cached 15s to avoid Longport 429)
   router.get('/positions', async (_req: Request, res: Response) => {
     try {
+      const cached = getCached<any>('positions');
+      if (cached) return res.status(200).json(cached);
       const positions = await gateway.getPositions();
+      setCache('positions', positions);
       res.status(200).json(positions);
     } catch (err: any) {
       errorResponse(res, 500, 'INTERNAL_ERROR', err.message);

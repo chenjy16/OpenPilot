@@ -394,7 +394,7 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
       } catch {
         // Silently ignore polling errors
       }
-    }, 3000);
+    }, 15000);
     set({ pollingTimer: timer });
   },
 

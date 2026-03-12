@@ -131,16 +131,20 @@ export class PositionSyncer {
           localPos.current_price !== brokerPos.current_price;
 
         if (needsUpdate) {
-          const diff: SyncDiff = {
-            symbol: brokerPos.symbol,
-            local_quantity: localPos.quantity,
-            broker_quantity: brokerPos.quantity,
-            action: 'update',
-          };
-          diffs.push(diff);
-          console.log(
-            `[PositionSyncer] Update: symbol=${diff.symbol}, local_qty=${diff.local_quantity}, broker_qty=${diff.broker_quantity}, action=update`,
-          );
+          // Only log when quantity or cost changed (price-only updates are routine)
+          const substantiveChange = localPos.quantity !== brokerPos.quantity || localPos.cost_price !== brokerPos.avg_cost;
+          if (substantiveChange) {
+            const diff: SyncDiff = {
+              symbol: brokerPos.symbol,
+              local_quantity: localPos.quantity,
+              broker_quantity: brokerPos.quantity,
+              action: 'update',
+            };
+            diffs.push(diff);
+            console.log(
+              `[PositionSyncer] Update: symbol=${diff.symbol}, local_qty=${diff.local_quantity}, broker_qty=${diff.broker_quantity}, action=update`,
+            );
+          }
 
           this.portfolioManager.updatePosition(localPos.id!, {
             quantity: brokerPos.quantity,

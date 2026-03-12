@@ -583,10 +583,10 @@ const TradingDashboardView: React.FC = () => {
     fetchAll();
     startPolling();
     connectTradingWs();
-    // Poll stop-loss records every 3 seconds for timely updates (Req 8.4)
+    // Poll stop-loss records every 15 seconds (aligned with main polling interval)
     const slTimer = setInterval(() => {
       fetchStopLossRecords().catch(() => {});
-    }, 3000);
+    }, 15000);
     return () => {
       stopPolling();
       disconnectTradingWs();

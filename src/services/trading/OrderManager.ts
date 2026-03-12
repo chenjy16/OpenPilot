@@ -201,10 +201,25 @@ export class OrderManager {
   /**
    * Get order statistics: total, filled, cancelled counts and total filled amount.
    * Optionally filtered by trading mode.
+   * When todayOnly is true (default), only counts orders created today (UTC).
    */
-  getStats(tradingMode?: TradingMode): OrderStats {
-    const modeCondition = tradingMode ? 'WHERE trading_mode = @trading_mode' : '';
-    const params: Record<string, any> = tradingMode ? { trading_mode: tradingMode } : {};
+  getStats(tradingMode?: TradingMode, todayOnly: boolean = true): OrderStats {
+    const conditions: string[] = [];
+    const params: Record<string, any> = {};
+
+    if (tradingMode) {
+      conditions.push('trading_mode = @trading_mode');
+      params.trading_mode = tradingMode;
+    }
+    if (todayOnly) {
+      // Start of today in UTC (unix timestamp)
+      const now = new Date();
+      const todayStart = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 1000);
+      conditions.push('created_at >= @today_start');
+      params.today_start = todayStart;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const row = this.db.prepare(`
       SELECT
@@ -213,7 +228,7 @@ export class OrderManager {
         COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) as cancelled_orders,
         COALESCE(SUM(CASE WHEN status = 'filled' THEN filled_quantity * filled_price ELSE 0 END), 0) as total_filled_amount
       FROM trading_orders
-      ${modeCondition}
+      ${whereClause}
     `).get(params) as any;
 
     return {

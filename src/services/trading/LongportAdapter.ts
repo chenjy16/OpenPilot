@@ -114,6 +114,11 @@ export class LongportAdapter implements BrokerAdapter {
   private config: Config | null = null;
   private options: LongportAdapterOptions;
 
+  // ── Response cache to avoid Longport 429 rate limits ──
+  private static readonly CACHE_TTL_MS = 30_000; // 30s
+  private accountCache: { data: BrokerAccount; ts: number } | null = null;
+  private positionsCache: { data: BrokerPosition[]; ts: number } | null = null;
+
   constructor(options?: LongportAdapterOptions) {
     this.options = options ?? {};
   }
@@ -183,6 +188,7 @@ export class LongportAdapter implements BrokerAdapter {
 
   /**
    * Execute an async operation with retry logic for query operations.
+   * Does NOT retry on 429 rate-limit errors (retrying would make it worse).
    */
   private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
     let lastError: unknown;
@@ -191,6 +197,8 @@ export class LongportAdapter implements BrokerAdapter {
         return await fn();
       } catch (err) {
         lastError = err;
+        // Don't retry on rate-limit errors — it only makes things worse
+        if (err instanceof Error && err.message.includes('429')) throw err;
         if (attempt < this.maxRetries) {
           await sleep(this.retryDelayMs);
         }
@@ -312,8 +320,12 @@ export class LongportAdapter implements BrokerAdapter {
   }
 
   async getAccount(): Promise<BrokerAccount> {
+    // Return cached data if fresh (avoid Longport 429 rate limits)
+    if (this.accountCache && Date.now() - this.accountCache.ts < LongportAdapter.CACHE_TTL_MS) {
+      return this.accountCache.data;
+    }
     try {
-      return await this.withRetry(async () => {
+      const result = await this.withRetry(async () => {
         const ctx = await this.ensureContext();
         const balances = await ctx.accountBalance();
 
@@ -343,16 +355,24 @@ export class LongportAdapter implements BrokerAdapter {
           currency,
         };
       });
+      this.accountCache = { data: result, ts: Date.now() };
+      return result;
     } catch (err: unknown) {
-      // Never throw — return zeroed account
+      // On error, return stale cache if available, otherwise zeroed account
+      if (this.accountCache) return this.accountCache.data;
       console.error(`[LongportAdapter] getAccount error: ${this.extractErrorMessage(err)}`);
       return { total_assets: 0, available_cash: 0, frozen_cash: 0, currency: 'HKD' };
     }
   }
 
   async getPositions(): Promise<BrokerPosition[]> {
+    // Return cached data if fresh (avoid Longport 429 rate limits)
+    if (this.positionsCache && Date.now() - this.positionsCache.ts < LongportAdapter.CACHE_TTL_MS) {
+      // Return deep copy so callers can mutate (e.g. price enrichment) without affecting cache
+      return this.positionsCache.data.map(p => ({ ...p }));
+    }
     try {
-      return await this.withRetry(async () => {
+      const result = await this.withRetry(async () => {
         const ctx = await this.ensureContext();
         const resp = await ctx.stockPositions();
         const positions: BrokerPosition[] = [];
@@ -367,21 +387,20 @@ export class LongportAdapter implements BrokerAdapter {
               symbol: pos.symbol,
               quantity: qty,
               avg_cost: costPrice,
-              current_price: costPrice, // fallback; will be overwritten by quote below
+              current_price: costPrice,
               market_value: qty * costPrice,
             });
           }
         }
 
-        // Note: current_price is set to costPrice as fallback here.
-        // PositionSyncer enriches positions with real-time prices from
-        // QuoteService (which already maintains a WS connection + Finnhub
-        // HTTP fallback), so we don't create a separate QuoteContext here.
-
         return positions;
       });
+      this.positionsCache = { data: result, ts: Date.now() };
+      // Return copy so price enrichment doesn't pollute cache
+      return result.map(p => ({ ...p }));
     } catch (err: unknown) {
-      // Never throw — return empty positions
+      // On error, return stale cache if available, otherwise empty
+      if (this.positionsCache) return this.positionsCache.data.map(p => ({ ...p }));
       console.error(`[LongportAdapter] getPositions error: ${this.extractErrorMessage(err)}`);
       return [];
     }
