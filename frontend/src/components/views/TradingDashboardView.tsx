@@ -272,10 +272,12 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
 }
 
 function AccountOverview({ account, stats }: { account: BrokerAccount | null; stats: OrderStats | null }) {
+  const currencySymbol = account?.currency === 'USD' ? '$' : account?.currency === 'HKD' ? 'HK$' : '¥';
+  const fmtMoney = (v: number) => `${currencySymbol}${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
   const cards = [
-    { label: '总资产', value: account?.total_assets ?? 0, fmt: (v: number) => `¥${v.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` },
-    { label: '可用资金', value: account?.available_cash ?? 0, fmt: (v: number) => `¥${v.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` },
-    { label: '冻结资金', value: account?.frozen_cash ?? 0, fmt: (v: number) => `¥${v.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}` },
+    { label: '总资产', value: account?.total_assets ?? 0, fmt: fmtMoney },
+    { label: '可用资金', value: account?.available_cash ?? 0, fmt: fmtMoney },
+    { label: '冻结资金', value: account?.frozen_cash ?? 0, fmt: fmtMoney },
     { label: '当日交易笔数', value: stats?.total_orders ?? 0, fmt: (v: number) => String(v) },
   ];
 
@@ -372,17 +374,62 @@ function ActiveOrdersTable({ orders, onCancel }: { orders: TradingOrder[]; onCan
 function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSymbol, setFilterSymbol] = useState('');
-  const filtered = orders.filter((o) => {
-    if (filterStatus && o.status !== filterStatus) return false;
-    if (filterSymbol && !o.symbol.toLowerCase().includes(filterSymbol.toLowerCase())) return false;
-    return true;
-  });
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(20);
+  const [paginatedOrders, setPaginatedOrders] = useState<TradingOrder[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loadingPage, setLoadingPage] = useState(false);
+
+  // Fetch paginated orders from API
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPage = async () => {
+      setLoadingPage(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', String(pageSize));
+        params.set('offset', String(page * pageSize));
+        if (filterStatus) params.set('status', filterStatus);
+        if (filterSymbol) params.set('symbol', filterSymbol);
+        const resp = await fetch(`/api/trading/orders?${params.toString()}`);
+        if (!resp.ok) throw new Error('Failed to fetch orders');
+        const data = await resp.json();
+        if (!cancelled) {
+          setPaginatedOrders(data.orders);
+          setTotal(data.total);
+        }
+      } catch {
+        // fallback to store orders on error
+        if (!cancelled) {
+          const filtered = orders.filter((o) => {
+            if (filterStatus && o.status !== filterStatus) return false;
+            if (filterSymbol && !o.symbol.toLowerCase().includes(filterSymbol.toLowerCase())) return false;
+            return true;
+          });
+          setPaginatedOrders(filtered.slice(page * pageSize, (page + 1) * pageSize));
+          setTotal(filtered.length);
+        }
+      } finally {
+        if (!cancelled) setLoadingPage(false);
+      }
+    };
+    fetchPage();
+    return () => { cancelled = true; };
+  }, [page, pageSize, filterStatus, filterSymbol, orders]);
+
+  // Reset to page 0 when filters change
+  const handleFilterChange = (setter: (v: string) => void, value: string) => {
+    setter(value);
+    setPage(0);
+  };
+
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div>
-      <div className="mb-3 flex gap-2">
-        <input className="rounded border border-gray-300 px-2 py-1 text-sm" placeholder="股票代码" value={filterSymbol} onChange={(e) => setFilterSymbol(e.target.value)} />
-        <select className="rounded border border-gray-300 px-2 py-1 text-sm" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+      <div className="mb-3 flex items-center gap-2">
+        <input className="rounded border border-gray-300 px-2 py-1 text-sm" placeholder="股票代码" value={filterSymbol} onChange={(e) => handleFilterChange(setFilterSymbol, e.target.value)} />
+        <select className="rounded border border-gray-300 px-2 py-1 text-sm" value={filterStatus} onChange={(e) => handleFilterChange(setFilterStatus, e.target.value)}>
           <option value="">全部状态</option>
           <option value="filled">已成交</option>
           <option value="cancelled">已撤销</option>
@@ -391,8 +438,11 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
           <option value="pending">待提交</option>
           <option value="submitted">已提交</option>
         </select>
+        <span className="ml-auto text-xs text-gray-400">共 {total} 条</span>
       </div>
-      {filtered.length === 0 ? (
+      {loadingPage ? (
+        <p className="py-4 text-center text-sm text-gray-400">加载中...</p>
+      ) : paginatedOrders.length === 0 ? (
         <p className="py-4 text-center text-sm text-gray-400">暂无交易记录</p>
       ) : (
         <div className="overflow-x-auto">
@@ -408,7 +458,7 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o) => (
+              {paginatedOrders.map((o) => (
                 <tr key={o.id ?? o.local_order_id} className="border-b border-gray-100">
                   <td className="whitespace-nowrap py-2 pr-3 font-medium">{o.symbol}</td>
                   <td className={`whitespace-nowrap py-2 pr-3 ${o.side === 'buy' ? 'text-red-600' : 'text-green-600'}`}>{o.side === 'buy' ? '买入' : '卖出'}</td>
@@ -426,6 +476,42 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
           </table>
         </div>
       )}
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+          <span>第 {page + 1} / {totalPages} 页</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage(0)}
+              disabled={page === 0}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              首页
+            </button>
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={page === 0}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              上一页
+            </button>
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              下一页
+            </button>
+            <button
+              onClick={() => setPage(totalPages - 1)}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              末页
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -436,21 +522,32 @@ function RiskStatusPanel({ rules, stats }: { rules: RiskRule[]; stats: OrderStat
     max_daily_amount: stats?.total_filled_amount ?? 0,
     max_daily_trades: stats?.total_orders ?? 0,
   };
+  // Rules that are per-order checks (no meaningful cumulative "current value")
+  const perOrderRules = new Set(['max_order_amount', 'max_position_ratio', 'max_daily_loss']);
 
   return (
     <div className="space-y-3">
       {rules.map((r) => {
+        const isPerOrder = perOrderRules.has(r.rule_type);
         const current = currentValues[r.rule_type] ?? 0;
-        const pct = r.threshold > 0 ? Math.min((current / r.threshold) * 100, 100) : 0;
+        const pct = !isPerOrder && r.threshold > 0 ? Math.min((current / r.threshold) * 100, 100) : 0;
+        // Format threshold display
+        const isRatio = r.rule_type === 'max_position_ratio';
+        const thresholdDisplay = isRatio ? `${(r.threshold * 100).toFixed(0)}%` : r.threshold.toLocaleString();
+        const currentDisplay = isPerOrder
+          ? (isRatio ? '单股检查' : '单笔检查')
+          : current.toLocaleString();
         return (
           <div key={r.id ?? r.rule_type} className="rounded border border-gray-200 bg-white p-3">
             <div className="flex items-center justify-between text-sm">
               <span className={r.enabled ? 'text-gray-800' : 'text-gray-400 line-through'}>{r.rule_name}</span>
-              <span className="text-xs text-gray-500">{current.toLocaleString()} / {r.threshold.toLocaleString()}</span>
+              <span className="text-xs text-gray-500">{currentDisplay} / {thresholdDisplay}</span>
             </div>
-            <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100">
-              <div className={`h-1.5 rounded-full transition-all ${pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
-            </div>
+            {!isPerOrder && (
+              <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100">
+                <div className={`h-1.5 rounded-full transition-all ${pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${pct}%` }} />
+              </div>
+            )}
           </div>
         );
       })}

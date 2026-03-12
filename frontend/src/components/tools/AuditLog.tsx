@@ -21,12 +21,15 @@ const AuditLog: React.FC = () => {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const pageSize = 30;
 
   useEffect(() => {
     fetchAuditLogs();
   }, [fetchAuditLogs]);
 
   const handleFilter = () => {
+    setPage(0);
     fetchAuditLogs({
       startTime: startTime || undefined,
       endTime: endTime || undefined,
@@ -38,11 +41,15 @@ const AuditLog: React.FC = () => {
     setStartTime('');
     setEndTime('');
     setActionFilter('');
+    setPage(0);
     fetchAuditLogs();
   };
 
   // Derive unique action types for the dropdown
   const actionTypes = Array.from(new Set(auditLogs.map((l) => l.action)));
+
+  const totalPages = Math.ceil(auditLogs.length / pageSize);
+  const paged = auditLogs.slice(page * pageSize, (page + 1) * pageSize);
 
   return (
     <div className="flex h-full flex-col gap-3 p-3">
@@ -111,8 +118,9 @@ const AuditLog: React.FC = () => {
         ) : auditLogs.length === 0 ? (
           <p className="py-4 text-center text-xs text-gray-400">暂无日志记录</p>
         ) : (
+          <>
           <ul className="flex flex-col gap-2">
-            {auditLogs.map((entry) => (
+            {paged.map((entry) => (
               <li
                 key={entry.id}
                 className="rounded-lg border border-gray-200 bg-white p-2 text-xs"
@@ -136,6 +144,17 @@ const AuditLog: React.FC = () => {
               </li>
             ))}
           </ul>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+              <span>第 {page + 1} / {totalPages} 页 (共 {auditLogs.length} 条)</span>
+              <div className="flex gap-1">
+                <button onClick={() => setPage(page - 1)} disabled={page === 0} className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-40">上一页</button>
+                <button onClick={() => setPage(page + 1)} disabled={page >= totalPages - 1} className="rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-40">下一页</button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

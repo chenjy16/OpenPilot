@@ -133,7 +133,7 @@ export function createTradingRoutes(
     }
   });
 
-  // GET /orders — list orders with optional filters
+  // GET /orders — list orders with optional filters and pagination
   router.get('/orders', (req: Request, res: Response) => {
     try {
       const filter: OrderFilter = {};
@@ -163,6 +163,25 @@ export function createTradingRoutes(
         filter.end_date = ed;
       }
 
+      // Pagination params
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      const offset = req.query.offset ? Number(req.query.offset) : undefined;
+      if (limit !== undefined && (isNaN(limit) || limit < 1 || limit > 500)) {
+        return errorResponse(res, 400, 'VALIDATION_ERROR', 'limit must be a number between 1 and 500');
+      }
+      if (offset !== undefined && (isNaN(offset) || offset < 0)) {
+        return errorResponse(res, 400, 'VALIDATION_ERROR', 'offset must be a non-negative number');
+      }
+
+      if (limit !== undefined) {
+        filter.limit = limit;
+        filter.offset = offset ?? 0;
+        const total = gateway.countOrders(filter);
+        const orders = gateway.listOrders(filter);
+        return res.status(200).json({ orders, total });
+      }
+
+      // Backward compatible: no limit → return array directly
       const orders = gateway.listOrders(filter);
       res.status(200).json(orders);
     } catch (err: any) {

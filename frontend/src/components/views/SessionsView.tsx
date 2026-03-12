@@ -10,6 +10,8 @@ const SessionsView: React.FC = () => {
   const setMessages = useChatStore((s) => s.setMessages);
   const setActiveTab = useUIStore((s) => s.setActiveTab);
   const [filter, setFilter] = useState('');
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
 
   useEffect(() => {
     fetchSessions();
@@ -18,6 +20,15 @@ const SessionsView: React.FC = () => {
   const filtered = sessions.filter((s) =>
     !filter || s.title?.toLowerCase().includes(filter.toLowerCase()) || s.id.includes(filter)
   );
+
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paged = filtered.slice(page * pageSize, (page + 1) * pageSize);
+
+  // Reset page when filter changes
+  const handleFilterChange = (value: string) => {
+    setFilter(value);
+    setPage(0);
+  };
 
   const handleOpenChat = async (session: SessionSummary) => {
     await setActiveSession(session.id);
@@ -37,7 +48,7 @@ const SessionsView: React.FC = () => {
     <div className="mx-auto max-w-5xl p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-800">会话管理</h2>
-        <span className="text-sm text-gray-500">{sessions.length} 个会话</span>
+        <span className="text-sm text-gray-500">{filtered.length} / {sessions.length} 个会话</span>
       </div>
 
       {/* Filters */}
@@ -46,7 +57,7 @@ const SessionsView: React.FC = () => {
           type="text"
           placeholder="搜索会话..."
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => handleFilterChange(e.target.value)}
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
         />
       </div>
@@ -62,7 +73,7 @@ const SessionsView: React.FC = () => {
       )}
 
       {/* Sessions table */}
-      {filtered.length > 0 && (
+      {paged.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
@@ -75,7 +86,7 @@ const SessionsView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((s) => (
+              {paged.map((s) => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <button
@@ -103,6 +114,43 @@ const SessionsView: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+          <span>第 {page + 1} / {totalPages} 页</span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage(0)}
+              disabled={page === 0}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              首页
+            </button>
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={page === 0}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              上一页
+            </button>
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              下一页
+            </button>
+            <button
+              onClick={() => setPage(totalPages - 1)}
+              disabled={page >= totalPages - 1}
+              className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+            >
+              末页
+            </button>
+          </div>
         </div>
       )}
     </div>

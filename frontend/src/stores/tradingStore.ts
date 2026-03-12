@@ -241,8 +241,9 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
 
   fetchOrders: async () => {
     try {
-      const data = await get<TradingOrder[]>('/trading/orders');
-      set({ orders: data });
+      // Only fetch recent 50 orders for active display; history table uses its own pagination
+      const resp = await get<{ orders: TradingOrder[]; total: number }>('/trading/orders?limit=50&offset=0');
+      set({ orders: resp.orders });
     } catch (err) {
       set({ error: (err as Error).message });
     }
@@ -365,16 +366,16 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
   fetchAll: async () => {
     set({ loading: true, error: null });
     try {
-      const [account, orders, positions, riskRules, stats, config, credentials] = await Promise.all([
+      const [account, ordersResp, positions, riskRules, stats, config, credentials] = await Promise.all([
         get<BrokerAccount>('/trading/account'),
-        get<TradingOrder[]>('/trading/orders'),
+        get<{ orders: TradingOrder[]; total: number }>('/trading/orders?limit=50&offset=0'),
         get<BrokerPosition[]>('/trading/positions'),
         get<RiskRule[]>('/trading/risk-rules'),
         get<OrderStats>('/trading/stats'),
         get<TradingConfig>('/trading/config'),
         get<BrokerCredentialsMasked>('/trading/broker-credentials'),
       ]);
-      set({ account, orders, positions, riskRules, stats, config, credentials, loading: false });
+      set({ account, orders: ordersResp.orders, positions, riskRules, stats, config, credentials, loading: false });
     } catch (err) {
       set({ error: (err as Error).message, loading: false });
     }
@@ -385,12 +386,12 @@ export const useTradingStore = create<TradingState>()((set, _get) => ({
     if (store.pollingTimer) return;
     const timer = setInterval(async () => {
       try {
-        const [orders, account, stats] = await Promise.all([
-          get<TradingOrder[]>('/trading/orders'),
+        const [ordersResp, account, stats] = await Promise.all([
+          get<{ orders: TradingOrder[]; total: number }>('/trading/orders?limit=50&offset=0'),
           get<BrokerAccount>('/trading/account'),
           get<OrderStats>('/trading/stats'),
         ]);
-        set({ orders, account, stats });
+        set({ orders: ordersResp.orders, account, stats });
       } catch {
         // Silently ignore polling errors
       }

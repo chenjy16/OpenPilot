@@ -328,6 +328,13 @@ export class TradingGateway {
   }
 
   /**
+   * Count orders matching the given filter (for pagination).
+   */
+  countOrders(filter?: OrderFilter): number {
+    return this.orderManager.countOrders(filter);
+  }
+
+  /**
    * Get positions — routed by trading mode.
    * Enriches positions with real-time prices when a price provider is available,
    * ensuring accurate market_value for risk checks (max_position_ratio, max_daily_loss).

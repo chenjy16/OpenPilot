@@ -41,6 +41,8 @@ export interface OrderFilter {
   start_date?: number;
   end_date?: number;
   trading_mode?: TradingMode;
+  limit?: number;
+  offset?: number;
 }
 
 export interface OrderStats {

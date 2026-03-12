@@ -192,10 +192,52 @@ export class OrderManager {
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM trading_orders ${whereClause} ORDER BY created_at DESC`;
+    let sql = `SELECT * FROM trading_orders ${whereClause} ORDER BY created_at DESC`;
+
+    if (filter?.limit !== undefined) {
+      sql += ` LIMIT @limit`;
+      params.limit = filter.limit;
+      if (filter?.offset !== undefined) {
+        sql += ` OFFSET @offset`;
+        params.offset = filter.offset;
+      }
+    }
 
     const rows = this.db.prepare(sql).all(params) as any[];
     return rows.map(rowToOrder);
+  }
+
+  /**
+   * Count orders matching the given filter (for pagination).
+   */
+  countOrders(filter?: OrderFilter): number {
+    const conditions: string[] = [];
+    const params: Record<string, any> = {};
+
+    if (filter?.status) {
+      conditions.push('status = @status');
+      params.status = filter.status;
+    }
+    if (filter?.symbol) {
+      conditions.push('symbol = @symbol');
+      params.symbol = filter.symbol;
+    }
+    if (filter?.start_date !== undefined) {
+      conditions.push('created_at >= @start_date');
+      params.start_date = filter.start_date;
+    }
+    if (filter?.end_date !== undefined) {
+      conditions.push('created_at <= @end_date');
+      params.end_date = filter.end_date;
+    }
+    if (filter?.trading_mode) {
+      conditions.push('trading_mode = @trading_mode');
+      params.trading_mode = filter.trading_mode;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const row = this.db.prepare(`SELECT COUNT(*) as cnt FROM trading_orders ${whereClause}`).get(params) as any;
+    return row.cnt;
   }
 
   /**
