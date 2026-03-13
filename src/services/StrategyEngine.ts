@@ -9,6 +9,7 @@
 
 import type Database from 'better-sqlite3';
 import type { ExecutionSandbox } from '../runtime/sandbox';
+import type { Strategy, StrategyRegistration } from './trading/types';
 
 export interface OptimizationParam {
   /** Path to the parameter, e.g. 'stop_loss_rule.value' or 'entry_conditions.conditions[0].value' */
@@ -282,6 +283,13 @@ function evaluateConditionGroup(
   return group.conditions.some(c => evaluateCondition(c, indicators));
 }
 
+/** Default strategy weights */
+const DEFAULT_STRATEGY_WEIGHTS: Record<string, number> = {
+  momentum_breakout: 0.4,
+  mean_reversion: 0.3,
+  news_momentum: 0.3,
+};
+
 // ---------------------------------------------------------------------------
 // StrategyEngine
 // ---------------------------------------------------------------------------
@@ -289,6 +297,7 @@ function evaluateConditionGroup(
 export class StrategyEngine {
   private db: Database.Database;
   private sandbox: ExecutionSandbox;
+  private registeredStrategies: Map<string, StrategyRegistration> = new Map();
 
   constructor(db: Database.Database, sandbox: ExecutionSandbox) {
     this.db = db;
@@ -656,5 +665,175 @@ export class StrategyEngine {
       matches,
       errors,
     };
+  }
+
+  // -----------------------------------------------------------------------
+  // Multi-Strategy Registration & Weight Management (Requirements 4.2, 4.3, 13.1-13.4)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Register a strategy with weight and enabled state.
+   * Validates that the strategy implements the Strategy interface.
+   */
+  registerStrategy(registration: StrategyRegistration): void {
+    const { strategy, weight, enabled } = registration;
+
+    // Validate Strategy interface
+    if (
+      !strategy ||
+      typeof strategy.name !== 'string' ||
+      !strategy.name ||
+      typeof strategy.generateSignal !== 'function'
+    ) {
+      throw new Error('Strategy must implement the Strategy interface with a name and generateSignal method');
+    }
+
+    if (weight < 0 || weight > 1) {
+      throw new Error(`Weight must be between 0 and 1, got ${weight}`);
+    }
+
+    this.registeredStrategies.set(strategy.name, { strategy, weight, enabled });
+
+    // Persist weight to trading_config table
+    this.db.prepare(
+      `INSERT OR REPLACE INTO trading_config (key, value, updated_at) VALUES (?, ?, unixepoch())`,
+    ).run(`strategy_weight_${strategy.name}`, String(weight));
+  }
+
+  /**
+   * Update the weight for a registered strategy by name.
+   */
+  setStrategyWeight(strategyName: string, weight: number): void {
+    const reg = this.registeredStrategies.get(strategyName);
+    if (!reg) {
+      throw new Error(`Strategy '${strategyName}' is not registered`);
+    }
+
+    if (weight < 0 || weight > 1) {
+      throw new Error(`Weight must be between 0 and 1, got ${weight}`);
+    }
+
+    reg.weight = weight;
+    this.registeredStrategies.set(strategyName, reg);
+
+    // Persist to trading_config
+    this.db.prepare(
+      `INSERT OR REPLACE INTO trading_config (key, value, updated_at) VALUES (?, ?, unixepoch())`,
+    ).run(`strategy_weight_${strategyName}`, String(weight));
+  }
+
+  /**
+   * Get all registered strategy weights as a Map of strategyName → weight.
+   */
+  getStrategyWeights(): Map<string, number> {
+    const weights = new Map<string, number>();
+    for (const [name, reg] of this.registeredStrategies) {
+      weights.set(name, reg.weight);
+    }
+    return weights;
+  }
+
+  /**
+   * Validate that enabled strategy weights sum to 1.0 (±0.01 tolerance).
+   */
+  validateWeights(): { valid: boolean; sum: number; message?: string } {
+    let sum = 0;
+    let enabledCount = 0;
+
+    for (const [, reg] of this.registeredStrategies) {
+      if (reg.enabled) {
+        sum += reg.weight;
+        enabledCount++;
+      }
+    }
+
+    // Round to avoid floating point drift
+    sum = Math.round(sum * 1000) / 1000;
+
+    if (enabledCount === 0) {
+      return { valid: true, sum: 0, message: 'No enabled strategies' };
+    }
+
+    const valid = Math.abs(sum - 1.0) <= 0.01;
+    return {
+      valid,
+      sum,
+      message: valid
+        ? undefined
+        : `Enabled strategy weights sum to ${sum}, expected 1.0 (±0.01). Please redistribute weights.`,
+    };
+  }
+
+  /**
+   * Get all registered strategies.
+   */
+  getRegisteredStrategies(): Map<string, StrategyRegistration> {
+    return new Map(this.registeredStrategies);
+  }
+
+  /**
+   * Disable a strategy and return a redistribution prompt.
+   * The caller is responsible for actually redistributing weights.
+   */
+  disableStrategy(strategyName: string): { disabled: boolean; message: string; remainingStrategies: string[] } {
+    const reg = this.registeredStrategies.get(strategyName);
+    if (!reg) {
+      throw new Error(`Strategy '${strategyName}' is not registered`);
+    }
+
+    reg.enabled = false;
+    this.registeredStrategies.set(strategyName, reg);
+
+    const remaining = Array.from(this.registeredStrategies.entries())
+      .filter(([, r]) => r.enabled)
+      .map(([name]) => name);
+
+    return {
+      disabled: true,
+      message: `Strategy '${strategyName}' disabled (weight was ${reg.weight}). Please redistribute its weight among remaining enabled strategies: ${remaining.join(', ')}.`,
+      remainingStrategies: remaining,
+    };
+  }
+
+  /**
+   * Enable a strategy.
+   */
+  enableStrategy(strategyName: string): void {
+    const reg = this.registeredStrategies.get(strategyName);
+    if (!reg) {
+      throw new Error(`Strategy '${strategyName}' is not registered`);
+    }
+    reg.enabled = true;
+    this.registeredStrategies.set(strategyName, reg);
+  }
+
+  /**
+   * Load strategy weights from the trading_config table.
+   * Falls back to DEFAULT_STRATEGY_WEIGHTS for missing entries.
+   */
+  loadWeightsFromConfig(): void {
+    for (const [name, reg] of this.registeredStrategies) {
+      const row = this.db.prepare(
+        `SELECT value FROM trading_config WHERE key = ?`,
+      ).get(`strategy_weight_${name}`) as { value: string } | undefined;
+
+      if (row) {
+        reg.weight = parseFloat(row.value);
+      } else if (DEFAULT_STRATEGY_WEIGHTS[name] !== undefined) {
+        reg.weight = DEFAULT_STRATEGY_WEIGHTS[name];
+      }
+    }
+  }
+
+  /**
+   * Initialize default weights in trading_config if not already present.
+   */
+  initDefaultWeights(): void {
+    const stmt = this.db.prepare(
+      `INSERT OR IGNORE INTO trading_config (key, value, updated_at) VALUES (?, ?, unixepoch())`,
+    );
+    for (const [name, weight] of Object.entries(DEFAULT_STRATEGY_WEIGHTS)) {
+      stmt.run(`strategy_weight_${name}`, String(weight));
+    }
   }
 }

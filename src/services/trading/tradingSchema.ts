@@ -18,7 +18,7 @@ export function initTradingTables(db: Database.Database): void {
       broker_order_id TEXT,
       symbol TEXT NOT NULL,
       side TEXT NOT NULL CHECK(side IN ('buy', 'sell')),
-      order_type TEXT NOT NULL CHECK(order_type IN ('market', 'limit', 'stop', 'stop_limit')),
+      order_type TEXT NOT NULL CHECK(order_type IN ('market', 'limit', 'stop', 'stop_limit', 'moo')),
       quantity REAL NOT NULL CHECK(quantity > 0),
       price REAL,
       stop_price REAL,
@@ -58,7 +58,7 @@ export function initTradingTables(db: Database.Database): void {
     CREATE TABLE IF NOT EXISTS risk_rules (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       rule_type TEXT NOT NULL UNIQUE
-        CHECK(rule_type IN ('max_order_amount', 'max_daily_amount', 'max_position_ratio', 'max_daily_loss', 'max_daily_trades')),
+        CHECK(rule_type IN ('max_order_amount', 'max_daily_amount', 'max_position_ratio', 'max_daily_loss', 'max_daily_trades', 'max_positions', 'max_weekly_loss')),
       rule_name TEXT NOT NULL,
       threshold REAL NOT NULL,
       enabled INTEGER NOT NULL DEFAULT 1,
@@ -270,4 +270,41 @@ export function initTradingTables(db: Database.Database): void {
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+
+  // weekly_loss_tracker table (single-row) — tracks cumulative weekly loss for max_weekly_loss risk rule
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS weekly_loss_tracker (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      week_start INTEGER NOT NULL,
+      cumulative_loss REAL NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  // trade_journal table — records closed trade details for review and AI weekly recap
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trade_journal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL,
+      strategy_name TEXT NOT NULL,
+      entry_price REAL NOT NULL,
+      exit_price REAL NOT NULL,
+      entry_time INTEGER NOT NULL,
+      exit_time INTEGER NOT NULL,
+      pnl REAL NOT NULL,
+      pnl_pct REAL NOT NULL,
+      hold_days INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_trade_journal_strategy ON trade_journal(strategy_name)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_trade_journal_time ON trade_journal(exit_time DESC)
+  `);
 }
+

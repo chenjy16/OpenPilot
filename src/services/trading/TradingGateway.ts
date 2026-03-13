@@ -26,6 +26,9 @@ import { OrderManager } from './OrderManager';
 import { RiskController } from './RiskController';
 import { PaperTradingEngine } from './PaperTradingEngine';
 import type { StrategyAllocator } from './StrategyAllocator';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('TradingGateway');
 
 // ---------------------------------------------------------------------------
 // Default config values
@@ -112,6 +115,21 @@ export class TradingGateway {
 
     const config = this.getConfig();
     const mode = config.trading_mode;
+
+    // ─── MOO interception ────────────────────────────────────────────────
+    // MOO orders stay in 'pending' status with expected execution time = next market open.
+    // They are executed later via executePendingMOO().
+    if (request.order_type === 'moo') {
+      const order = this.orderManager.createOrder(request, mode);
+      const nextOpen = TradingGateway.getNextMarketOpen();
+      this.setConfigValue(`moo_expected_exec_${order.id}`, String(nextOpen));
+      this.logAudit('place_moo_order', order.id, request, {
+        status: 'pending',
+        expected_execution_time: nextOpen,
+      });
+      logger.info(`MOO order ${order.id} created for ${request.symbol}, expected execution at ${new Date(nextOpen * 1000).toISOString()}`);
+      return order;
+    }
 
     // 1. Create order (pending)
     const order = this.orderManager.createOrder(request, mode);
@@ -722,6 +740,154 @@ export class TradingGateway {
       this.logAudit('twap_cancelled', undefined, { twap_id: id });
     }
     this.twapTimers.clear();
+  }
+
+  // -------------------------------------------------------------------------
+  // MOO (Market on Open) order execution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Compute the next US market open as a unix timestamp (seconds).
+   * US market opens at 09:30 ET (Eastern Time).
+   * If called before 09:30 ET on a weekday, returns today's open.
+   * Otherwise returns the next weekday's open.
+   */
+  static getNextMarketOpen(now?: Date): number {
+    const d = now ? new Date(now) : new Date();
+    // Convert to Eastern Time offset (approximate: UTC-5 for EST, UTC-4 for EDT)
+    // Use a simple heuristic: March–November → EDT (UTC-4), else EST (UTC-5)
+    const month = d.getUTCMonth(); // 0-indexed
+    const etOffset = (month >= 2 && month <= 10) ? -4 : -5; // hours
+    const etHour = d.getUTCHours() + etOffset;
+    const etMinute = d.getUTCMinutes();
+    const etTimeInMinutes = etHour * 60 + etMinute;
+    const marketOpenMinutes = 9 * 60 + 30; // 09:30
+
+    const dayOfWeek = d.getUTCDay(); // 0=Sun, 6=Sat
+
+    // Determine how many days to advance
+    let daysToAdd = 0;
+    if (dayOfWeek === 6) {
+      // Saturday → next Monday
+      daysToAdd = 2;
+    } else if (dayOfWeek === 0) {
+      // Sunday → next Monday
+      daysToAdd = 1;
+    } else if (etTimeInMinutes >= marketOpenMinutes) {
+      // After market open on a weekday → next weekday
+      daysToAdd = dayOfWeek === 5 ? 3 : 1; // Friday → Monday, else next day
+    }
+    // else: before market open on a weekday → today (daysToAdd = 0)
+
+    const target = new Date(d);
+    target.setUTCDate(target.getUTCDate() + daysToAdd);
+    // Set to 09:30 ET → convert to UTC
+    target.setUTCHours(9 - etOffset, 30, 0, 0);
+
+    return Math.floor(target.getTime() / 1000);
+  }
+
+  /**
+   * Execute all pending MOO orders by converting them to market orders.
+   * If the broker doesn't support MOO natively, this acts as the fallback:
+   * orders are executed as market orders (within 1 minute of open).
+   *
+   * @param brokerSupportsMOO - Whether the broker natively supports MOO orders.
+   *   When true, submits as MOO to the broker. When false (default), converts to market orders.
+   * @returns Array of executed orders
+   */
+  async executePendingMOO(brokerSupportsMOO: boolean = false): Promise<TradingOrder[]> {
+    // Query all pending MOO orders
+    const pendingOrders = this.orderManager.listOrders({ status: 'pending' })
+      .filter(o => o.order_type === 'moo');
+
+    if (pendingOrders.length === 0) {
+      logger.info('No pending MOO orders to execute');
+      return [];
+    }
+
+    logger.info(`Executing ${pendingOrders.length} pending MOO order(s)`);
+    const results: TradingOrder[] = [];
+
+    for (const mooOrder of pendingOrders) {
+      try {
+        if (brokerSupportsMOO) {
+          // Broker supports MOO natively — submit as-is
+          const result = await this.executeMOOViaBroker(mooOrder);
+          results.push(result);
+        } else {
+          // Fallback: convert to market order and execute
+          logger.info(`Broker does not support MOO, converting order ${mooOrder.id} to market order`);
+          const marketRequest: CreateOrderRequest = {
+            symbol: mooOrder.symbol,
+            side: mooOrder.side,
+            order_type: 'market',
+            quantity: mooOrder.quantity,
+            price: mooOrder.price,
+            strategy_id: mooOrder.strategy_id,
+            signal_id: mooOrder.signal_id,
+          };
+
+          // Mark the original MOO order as failed (superseded by market order)
+          this.orderManager.updateOrderStatus(mooOrder.id!, 'failed', {
+            reject_reason: 'Converted to market order (broker does not support MOO)',
+          });
+
+          const marketOrder = await this.placeOrder(marketRequest);
+          this.logAudit('moo_fallback_market', marketOrder.id, {
+            original_moo_order_id: mooOrder.id,
+          }, { status: marketOrder.status });
+          results.push(marketOrder);
+        }
+      } catch (err: any) {
+        logger.error(`Failed to execute MOO order ${mooOrder.id}: ${err.message}`);
+        this.orderManager.updateOrderStatus(mooOrder.id!, 'failed', {
+          reject_reason: `MOO execution failed: ${err.message}`,
+        });
+        this.logAudit('moo_execution_failed', mooOrder.id, undefined, { error: err.message });
+        results.push(this.orderManager.getOrder(mooOrder.id!)!);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Submit a MOO order to the broker adapter directly.
+   */
+  private async executeMOOViaBroker(order: TradingOrder): Promise<TradingOrder> {
+    if (!this.brokerAdapter) {
+      throw new Error('No broker adapter configured for MOO execution');
+    }
+    this.syncAdapterCredentials();
+
+    const result = await this.brokerAdapter.submitOrder(order);
+
+    if (result.status === 'failed' || result.status === 'rejected') {
+      const updated = this.orderManager.updateOrderStatus(order.id!, 'failed', {
+        broker_order_id: result.broker_order_id,
+        reject_reason: result.message,
+      });
+      this.logAudit('moo_broker_failed', updated.id, undefined, result);
+      return updated;
+    }
+
+    const submitted = this.orderManager.updateOrderStatus(order.id!, 'submitted', {
+      broker_order_id: result.broker_order_id,
+    });
+
+    if (result.filled_quantity && result.filled_quantity > 0) {
+      const filled = this.orderManager.updateOrderStatus(submitted.id!, 'filled', {
+        filled_quantity: result.filled_quantity,
+        filled_price: result.filled_price,
+      });
+      this.logAudit('moo_broker_filled', filled.id, undefined, result);
+      this.recordStrategyUsage(filled);
+      return filled;
+    }
+
+    this.logAudit('moo_broker_submitted', submitted.id, undefined, result);
+    return submitted;
   }
 
   // -------------------------------------------------------------------------

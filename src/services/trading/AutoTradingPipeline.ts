@@ -12,7 +12,11 @@ import type { TradingGateway } from './TradingGateway';
 import type { SignalEvaluator } from './SignalEvaluator';
 import type { StopLossManager } from './StopLossManager';
 import type { TradeNotifier } from './TradeNotifier';
+import type { RiskController } from './RiskController';
+import { SignalAggregator } from './SignalAggregator';
+import type { AggregatedSignal } from './SignalAggregator';
 import { calculateOrderQuantity } from './QuantityCalculator';
+import { createLogger } from '../../logger';
 import type {
   SignalCard,
   PipelineConfig,
@@ -20,7 +24,11 @@ import type {
   PipelineStatus,
   CreateOrderRequest,
   QuantityMode,
+  StrategySignal,
+  TradingOrder,
 } from './types';
+
+const logger = createLogger('AutoTradingPipeline');
 
 /** Minimal interface for StrategyEngine dependency */
 export interface StrategyEngineLike {
@@ -39,6 +47,26 @@ export interface StrategyScanMatch {
 /** Minimal interface for AIRuntime dependency (dual-agent debate) */
 export interface AIRuntimeLike {
   execute(request: { sessionId: string; message: string; model: string; agentId?: string }): Promise<{ text: string }>;
+}
+
+/** Minimal interface for RiskController dependency */
+export interface RiskControllerLike {
+  checkOrder(
+    order: TradingOrder,
+    account: { total_assets: number; available_cash: number; frozen_cash: number; currency: string },
+    positions: Array<{ symbol: string; quantity: number; avg_cost: number; current_price: number; market_value: number }>,
+    todayStats: { total_orders: number; filled_orders: number; cancelled_orders: number; total_filled_amount: number },
+  ): { passed: boolean; violations: Array<{ rule_type: string; rule_name: string; threshold: number; current_value: number; message: string }> };
+}
+
+/** Result of multi-strategy pipeline processing */
+export interface MultiStrategyResult {
+  symbol: string;
+  action: 'order_created' | 'skipped';
+  reason?: string;
+  order_id?: number;
+  composite_score?: number;
+  ai_filter_result?: string;
 }
 
 // ─── Default config values ──────────────────────────────────────────────────
@@ -81,6 +109,8 @@ export class AutoTradingPipeline {
   private tradeNotifier: TradeNotifier;
   private strategyEngine: StrategyEngineLike;
   private aiRuntime: AIRuntimeLike | null = null;
+  private riskController: RiskControllerLike | null = null;
+  private signalAggregator: SignalAggregator;
 
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastProcessedAt: number | null = null;
@@ -100,6 +130,7 @@ export class AutoTradingPipeline {
     this.stopLossManager = stopLossManager;
     this.tradeNotifier = tradeNotifier;
     this.strategyEngine = strategyEngine;
+    this.signalAggregator = new SignalAggregator();
   }
 
   // ─── start / stop ───────────────────────────────────────────────────────
@@ -107,6 +138,11 @@ export class AutoTradingPipeline {
   /** Set AIRuntime for dual-agent debate (optional, called from index.ts) */
   setAIRuntime(runtime: AIRuntimeLike): void {
     this.aiRuntime = runtime;
+  }
+
+  /** Set RiskController for multi-strategy risk checks */
+  setRiskController(controller: RiskControllerLike): void {
+    this.riskController = controller;
   }
 
   /** Start polling stock_signals for new signals */
@@ -434,6 +470,282 @@ export class AutoTradingPipeline {
 
     // No entry or exit signal
     return this.logStrategyResult(match, strategyId, 'skipped', 'skipped_confidence');
+  }
+
+  // ─── Multi-Strategy Aggregation Flow ──────────────────────────────────────
+
+  /**
+   * Process signals from multiple strategies through the full pipeline:
+   *   1. Aggregate via SignalAggregator (score ≥ 0.7, top 3)
+   *   2. AI risk filter (dual-agent debate) — skip if not HIGH_PROBABILITY
+   *   3. Risk control check (all rules including max_positions, max_weekly_loss)
+   *   4. Position sizing (risk_budget mode)
+   *   5. Create MOO orders (for after-hours signals)
+   *
+   * Requirements: 6.1, 6.2, 6.3, 6.4, 9.2, 10.1, 10.2
+   */
+  async processMultiStrategySignals(
+    strategySignals: Map<string, StrategySignal[]>,
+  ): Promise<MultiStrategyResult[]> {
+    const config = this.getConfig();
+    const results: MultiStrategyResult[] = [];
+
+    // 1. Aggregate signals
+    const aggregated = this.signalAggregator.aggregate(strategySignals);
+    logger.info(`Aggregated ${aggregated.length} signals from ${strategySignals.size} strategies`);
+
+    if (aggregated.length === 0) {
+      logger.info('No signals passed aggregation threshold');
+      return results;
+    }
+
+    // Get account and positions once for all signals
+    let account: { total_assets: number; available_cash: number; frozen_cash: number; currency: string };
+    let positions: Array<{ symbol: string; quantity: number; avg_cost: number; current_price: number; market_value: number }>;
+    try {
+      account = await this.tradingGateway.getAccount();
+      positions = await this.tradingGateway.getPositions();
+    } catch (err: any) {
+      logger.error('Failed to get account/positions for multi-strategy processing', { error: err.message });
+      return results;
+    }
+
+    for (const agg of aggregated) {
+      const result = await this.processAggregatedSignal(agg, config, account, positions);
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  /**
+   * Process a single aggregated signal through AI filter → risk check → sizing → order.
+   */
+  private async processAggregatedSignal(
+    agg: AggregatedSignal,
+    config: PipelineConfig,
+    account: { total_assets: number; available_cash: number; frozen_cash: number; currency: string },
+    positions: Array<{ symbol: string; quantity: number; avg_cost: number; current_price: number; market_value: number }>,
+  ): Promise<MultiStrategyResult> {
+    const signal = agg.best_signal;
+
+    // 2. AI risk filter
+    const aiResult = await this.runAIRiskFilter(agg);
+    if (aiResult !== 'HIGH_PROBABILITY') {
+      logger.info(`Signal ${agg.symbol} skipped by AI filter: ${aiResult}`, {
+        symbol: agg.symbol,
+        composite_score: agg.composite_score,
+        ai_filter_result: aiResult,
+      });
+      return {
+        symbol: agg.symbol,
+        action: 'skipped',
+        reason: `ai_filter_${aiResult.toLowerCase()}`,
+        composite_score: agg.composite_score,
+        ai_filter_result: aiResult,
+      };
+    }
+
+    // 3. Risk control check
+    if (this.riskController && signal.action === 'buy') {
+      const todayStats = this.getTodayOrderStats();
+      const mockOrder = {
+        symbol: signal.symbol,
+        side: signal.action,
+        order_type: 'moo' as const,
+        quantity: 1, // placeholder, will be recalculated
+        price: signal.entry_price,
+        status: 'pending' as const,
+        trading_mode: 'paper' as const,
+        local_order_id: '',
+        filled_quantity: 0,
+        created_at: Math.floor(Date.now() / 1000),
+        updated_at: Math.floor(Date.now() / 1000),
+      } as TradingOrder;
+
+      const riskResult = this.riskController.checkOrder(mockOrder, account, positions, todayStats);
+      if (!riskResult.passed) {
+        const violationMessages = riskResult.violations.map((v) => v.message).join('; ');
+        logger.warn(`Signal ${agg.symbol} rejected by risk control: ${violationMessages}`, {
+          symbol: agg.symbol,
+          violations: riskResult.violations,
+        });
+        return {
+          symbol: agg.symbol,
+          action: 'skipped',
+          reason: 'risk_control_rejected',
+          composite_score: agg.composite_score,
+          ai_filter_result: aiResult,
+        };
+      }
+    }
+
+    // 4. Position sizing (risk_budget mode)
+    const quantity = calculateOrderQuantity({
+      mode: 'risk_budget',
+      entry_price: signal.entry_price,
+      stop_loss: signal.stop_loss,
+      total_assets: account.total_assets,
+      max_risk_pct: 0.02, // 2% risk per trade
+    });
+
+    if (quantity === 0) {
+      logger.warn(`Signal ${agg.symbol} skipped: position size is 0`, {
+        symbol: agg.symbol,
+        entry_price: signal.entry_price,
+        stop_loss: signal.stop_loss,
+      });
+      return {
+        symbol: agg.symbol,
+        action: 'skipped',
+        reason: 'quantity_zero',
+        composite_score: agg.composite_score,
+        ai_filter_result: aiResult,
+      };
+    }
+
+    // 5. Create MOO order (after-hours signals use MOO)
+    const orderRequest: CreateOrderRequest = {
+      symbol: signal.symbol,
+      side: signal.action as 'buy' | 'sell',
+      order_type: 'moo',
+      quantity,
+      price: signal.entry_price,
+    };
+
+    let order;
+    try {
+      order = await this.tradingGateway.placeOrder(orderRequest);
+    } catch (err: any) {
+      logger.error(`Failed to place MOO order for ${agg.symbol}`, { error: err.message });
+      return {
+        symbol: agg.symbol,
+        action: 'skipped',
+        reason: 'order_placement_failed',
+        composite_score: agg.composite_score,
+        ai_filter_result: aiResult,
+      };
+    }
+
+    if (order.status === 'rejected' || order.status === 'failed') {
+      logger.warn(`MOO order for ${agg.symbol} was ${order.status}`, {
+        symbol: agg.symbol,
+        reject_reason: order.reject_reason,
+      });
+      return {
+        symbol: agg.symbol,
+        action: 'skipped',
+        reason: `order_${order.status}`,
+        composite_score: agg.composite_score,
+        ai_filter_result: aiResult,
+      };
+    }
+
+    logger.info(`MOO order created for ${agg.symbol}`, {
+      symbol: agg.symbol,
+      order_id: order.id,
+      quantity,
+      composite_score: agg.composite_score,
+    });
+
+    this.logAudit('multi_strategy_order', order.id, {
+      symbol: agg.symbol,
+      composite_score: agg.composite_score,
+      ai_filter_result: aiResult,
+      quantity,
+      order_type: 'moo',
+    });
+
+    return {
+      symbol: agg.symbol,
+      action: 'order_created',
+      order_id: order.id,
+      composite_score: agg.composite_score,
+      ai_filter_result: aiResult,
+    };
+  }
+
+  /**
+   * Run AI risk filter on an aggregated signal.
+   * Returns 'HIGH_PROBABILITY', 'MEDIUM', or 'LOW'.
+   * On error (timeout, API failure), returns 'ERROR' — safety first, signal will be skipped.
+   */
+  private async runAIRiskFilter(agg: AggregatedSignal): Promise<string> {
+    if (!this.aiRuntime) {
+      // No AI runtime configured — skip signal (safety first)
+      logger.warn(`AI runtime not available, skipping signal ${agg.symbol} (safety first)`);
+      return 'NO_AI_RUNTIME';
+    }
+
+    const config = this.getConfig();
+    const model = config.debate_model || 'deepseek/deepseek-reasoner';
+    const sessionId = `ai-risk-filter-${agg.symbol}-${Date.now()}`;
+
+    const prompt = [
+      `你是 AI 风险过滤器。请评估以下交易信号的质量。`,
+      ``,
+      `标的: ${agg.symbol}`,
+      `综合评分: ${agg.composite_score.toFixed(3)}`,
+      `动量评分: ${agg.component_scores.momentum_score.toFixed(3)}`,
+      `成交量评分: ${agg.component_scores.volume_score.toFixed(3)}`,
+      `情绪评分: ${agg.component_scores.sentiment_score.toFixed(3)}`,
+      `AI 置信度: ${agg.component_scores.ai_confidence.toFixed(3)}`,
+      `建议操作: ${agg.best_signal.action}`,
+      `入场价: ${agg.best_signal.entry_price}`,
+      `止损价: ${agg.best_signal.stop_loss}`,
+      `止盈价: ${agg.best_signal.take_profit}`,
+      ``,
+      `请严格输出以下 JSON 格式（不要输出其他内容）:`,
+      `{"probability":"HIGH_PROBABILITY"或"MEDIUM"或"LOW","reason":"一句话理由"}`,
+    ].join('\n');
+
+    try {
+      const result = await this.aiRuntime.execute({
+        sessionId,
+        message: prompt,
+        model,
+      });
+
+      const jsonMatch = result.text.match(/\{[^}]+\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const probability = parsed.probability;
+        if (['HIGH_PROBABILITY', 'MEDIUM', 'LOW'].includes(probability)) {
+          return probability;
+        }
+      }
+
+      // Unparseable response — treat as LOW (safety first)
+      logger.warn(`AI risk filter returned unparseable response for ${agg.symbol}, treating as LOW`);
+      return 'LOW';
+    } catch (err: any) {
+      // Error (timeout, API failure) — skip signal (safety first)
+      logger.error(`AI risk filter error for ${agg.symbol}: ${err.message}`);
+      return 'ERROR';
+    }
+  }
+
+  /**
+   * Get today's order statistics for risk control checks.
+   */
+  private getTodayOrderStats(): { total_orders: number; filled_orders: number; cancelled_orders: number; total_filled_amount: number } {
+    const startOfDay = Math.floor(new Date().setUTCHours(0, 0, 0, 0) / 1000);
+    const row = this.db.prepare(`
+      SELECT
+        COUNT(*) as total_orders,
+        SUM(CASE WHEN status = 'filled' THEN 1 ELSE 0 END) as filled_orders,
+        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders,
+        COALESCE(SUM(CASE WHEN status = 'filled' THEN filled_quantity * COALESCE(filled_price, price, 0) ELSE 0 END), 0) as total_filled_amount
+      FROM trading_orders
+      WHERE created_at >= ?
+    `).get(startOfDay) as any;
+
+    return {
+      total_orders: row?.total_orders ?? 0,
+      filled_orders: row?.filled_orders ?? 0,
+      cancelled_orders: row?.cancelled_orders ?? 0,
+      total_filled_amount: row?.total_filled_amount ?? 0,
+    };
   }
 
   // ─── getStatus / getConfig / updateConfig ───────────────────────────────

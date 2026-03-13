@@ -1,4 +1,4 @@
-export type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
+export type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit' | 'moo';
 export type OrderSide = 'buy' | 'sell';
 export type OrderStatus = 'pending' | 'submitted' | 'partial_filled' | 'filled' | 'cancelled' | 'rejected' | 'failed';
 export type TradingMode = 'paper' | 'live';
@@ -52,7 +52,7 @@ export interface OrderStats {
   total_filled_amount: number;
 }
 
-export type RiskRuleType = 'max_order_amount' | 'max_daily_amount' | 'max_position_ratio' | 'max_daily_loss' | 'max_daily_trades';
+export type RiskRuleType = 'max_order_amount' | 'max_daily_amount' | 'max_position_ratio' | 'max_daily_loss' | 'max_daily_trades' | 'max_positions' | 'max_weekly_loss';
 
 export interface RiskRule {
   id?: number;
@@ -199,7 +199,7 @@ export interface EvaluationResult {
   reason?: 'confidence_below_threshold' | 'duplicate_signal' | 'action_hold' | 'missing_price';
 }
 
-export type QuantityMode = 'fixed_quantity' | 'fixed_amount' | 'kelly_formula' | 'volatility_parity';
+export type QuantityMode = 'fixed_quantity' | 'fixed_amount' | 'kelly_formula' | 'volatility_parity' | 'risk_budget';
 
 export interface QuantityParams {
   mode: QuantityMode;
@@ -211,6 +211,8 @@ export interface QuantityParams {
   total_assets?: number;
   /** ATR(14) value for volatility_parity mode */
   atr14?: number;
+  /** Maximum risk percentage per trade for risk_budget mode (e.g. 0.02 = 2%) */
+  max_risk_pct?: number;
 }
 
 export interface StopLossRecord {
@@ -238,4 +240,30 @@ export interface StopLossTriggerEvent {
   trigger_type: 'stop_loss' | 'take_profit';
   current_price: number;
   pnl_amount: number;
+}
+
+// ─── Multi-Strategy Types ──────────────────────────────────────────────────
+
+/** 策略信号 */
+export interface StrategySignal {
+  symbol: string;
+  action: 'buy' | 'sell' | 'hold';
+  entry_price: number;
+  stop_loss: number;
+  take_profit: number;
+  scores: Record<string, number>;
+  metadata: Record<string, any>;
+}
+
+/** 统一策略接口 */
+export interface Strategy {
+  readonly name: string;
+  generateSignal(symbol: string, indicators: Record<string, number | null>): StrategySignal | null;
+}
+
+/** 策略注册信息 */
+export interface StrategyRegistration {
+  strategy: Strategy;
+  weight: number;
+  enabled: boolean;
 }

@@ -151,6 +151,88 @@ export class RiskController {
           }
           break;
         }
+
+        case 'max_positions': {
+          // Only restrict buy orders; sell orders bypass this rule
+          if (order.side === 'buy') {
+            const currentPositionCount = positions.filter((p) => p.quantity > 0).length;
+            // In crisis mode the dynamic multiplier is already applied to threshold above,
+            // but max_positions needs floor() since it's a discrete count.
+            const effectiveThreshold = Math.floor(threshold);
+            if (currentPositionCount >= effectiveThreshold) {
+              violations.push({
+                rule_type: rule.rule_type,
+                rule_name: rule.rule_name,
+                threshold: effectiveThreshold,
+                current_value: currentPositionCount,
+                message: `Current positions ${currentPositionCount} reached limit ${effectiveThreshold}`,
+              });
+            }
+          }
+          break;
+        }
+
+        case 'max_weekly_loss': {
+          // Only restrict buy orders; sell orders bypass this rule
+          if (order.side === 'buy') {
+            // Determine this Monday's start (00:00 UTC)
+            const now = new Date();
+            const dayOfWeek = now.getUTCDay(); // 0=Sun, 1=Mon, ...
+            const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+            const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday));
+            const mondayEpoch = Math.floor(monday.getTime() / 1000);
+
+            // Query weekly_loss_tracker
+            const tracker = this.db.prepare('SELECT * FROM weekly_loss_tracker WHERE id = 1').get() as any;
+
+            let cumulativeLoss = 0;
+            if (tracker) {
+              if (tracker.week_start !== mondayEpoch) {
+                // New week — reset the counter
+                this.db.prepare(
+                  'UPDATE weekly_loss_tracker SET week_start = @week_start, cumulative_loss = 0, updated_at = @updated_at WHERE id = 1'
+                ).run({ week_start: mondayEpoch, updated_at: Math.floor(Date.now() / 1000) });
+                cumulativeLoss = 0;
+              } else {
+                cumulativeLoss = tracker.cumulative_loss;
+              }
+            }
+
+            // threshold is stored as percentage (e.g. 10 for 10%), already multiplied by risk_multiplier
+            const maxLoss = account.total_assets * (threshold / 100);
+
+            if (cumulativeLoss > maxLoss) {
+              // Log audit entry when triggered
+              this.db.prepare(`
+                INSERT INTO trading_audit_log (timestamp, operation, request_params, response_result, trading_mode)
+                VALUES (@timestamp, @operation, @request_params, @response_result, @trading_mode)
+              `).run({
+                timestamp: Math.floor(Date.now() / 1000),
+                operation: 'max_weekly_loss_triggered',
+                request_params: JSON.stringify({
+                  cumulative_loss: cumulativeLoss,
+                  threshold_pct: threshold,
+                  max_loss: maxLoss,
+                  total_assets: account.total_assets,
+                }),
+                response_result: JSON.stringify({
+                  action: 'reject_buy',
+                  symbol: order.symbol,
+                }),
+                trading_mode: order.trading_mode,
+              });
+
+              violations.push({
+                rule_type: rule.rule_type,
+                rule_name: rule.rule_name,
+                threshold: maxLoss,
+                current_value: cumulativeLoss,
+                message: `Weekly cumulative loss ${cumulativeLoss.toFixed(2)} exceeds limit ${maxLoss.toFixed(2)} (${threshold}% of total assets)`,
+              });
+            }
+          }
+          break;
+        }
       }
     }
 
@@ -232,6 +314,8 @@ export class RiskController {
       { rule_type: 'max_position_ratio', rule_name: '单只股票持仓占比上限', threshold: 0.3 },
       { rule_type: 'max_daily_loss', rule_name: '单日最大亏损限额', threshold: 50000 },
       { rule_type: 'max_daily_trades', rule_name: '单日最大交易笔数', threshold: 50 },
+      { rule_type: 'max_positions', rule_name: '最大同时持仓数', threshold: 3 },
+      { rule_type: 'max_weekly_loss', rule_name: '周度最大亏损比例', threshold: 10 },
     ];
 
     const insertAll = this.db.transaction(() => {

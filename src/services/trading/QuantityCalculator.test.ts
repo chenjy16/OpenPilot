@@ -1,4 +1,98 @@
 import { calculateKellyFraction, calculateOrderQuantity } from './QuantityCalculator';
+
+describe('risk_budget mode', () => {
+  it('calculates position size based on risk budget (Req 10.1, 10.2)', () => {
+    // total_assets=1000, max_risk_pct=0.02 → max_risk_amount=20
+    // entry_price=100, stop_loss=95 → risk_per_share=5
+    // position_size = floor(20 / 5) = 4
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      stop_loss: 95,
+      total_assets: 1000,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(4);
+  });
+
+  it('returns 0 when stop_loss >= entry_price (Req 10.3)', () => {
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      stop_loss: 100,
+      total_assets: 10000,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(0);
+  });
+
+  it('returns 0 when stop_loss > entry_price', () => {
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      stop_loss: 105,
+      total_assets: 10000,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(0);
+  });
+
+  it('floors result to integer (Req 10.4)', () => {
+    // total_assets=1000, max_risk_pct=0.02 → max_risk_amount=20
+    // entry_price=100, stop_loss=93 → risk_per_share=7
+    // position_size = floor(20 / 7) = floor(2.857) = 2
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      stop_loss: 93,
+      total_assets: 1000,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(2);
+  });
+
+  it('returns 0 when entry_price <= 0', () => {
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 0,
+      stop_loss: 95,
+      total_assets: 10000,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(0);
+  });
+
+  it('returns 0 when total_assets is missing', () => {
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      stop_loss: 95,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(0);
+  });
+
+  it('returns 0 when max_risk_pct is missing', () => {
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      stop_loss: 95,
+      total_assets: 10000,
+    };
+    expect(calculateOrderQuantity(params)).toBe(0);
+  });
+
+  it('returns 0 when stop_loss is missing', () => {
+    const params: QuantityParams = {
+      mode: 'risk_budget',
+      entry_price: 100,
+      total_assets: 10000,
+      max_risk_pct: 0.02,
+    };
+    expect(calculateOrderQuantity(params)).toBe(0);
+  });
+});
+
 import type { QuantityParams } from './types';
 
 // ─── calculateKellyFraction ─────────────────────────────────────────────────

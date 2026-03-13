@@ -67,21 +67,23 @@ describe('RiskController', () => {
   // initDefaultRules
   // -----------------------------------------------------------------------
   describe('initDefaultRules', () => {
-    it('should insert 5 default rules', () => {
+    it('should insert 7 default rules', () => {
       const rules = rc.listRules();
-      expect(rules).toHaveLength(5);
+      expect(rules).toHaveLength(7);
       const types = rules.map((r) => r.rule_type);
       expect(types).toContain('max_order_amount');
       expect(types).toContain('max_daily_amount');
       expect(types).toContain('max_position_ratio');
       expect(types).toContain('max_daily_loss');
       expect(types).toContain('max_daily_trades');
+      expect(types).toContain('max_positions');
+      expect(types).toContain('max_weekly_loss');
     });
 
     it('should not duplicate rules on repeated calls', () => {
       rc.initDefaultRules(); // second call
       const rules = rc.listRules();
-      expect(rules).toHaveLength(5);
+      expect(rules).toHaveLength(7);
     });
 
     it('should set correct default thresholds', () => {
@@ -92,6 +94,8 @@ describe('RiskController', () => {
       expect(byType['max_position_ratio'].threshold).toBe(0.3);
       expect(byType['max_daily_loss'].threshold).toBe(50000);
       expect(byType['max_daily_trades'].threshold).toBe(50);
+      expect(byType['max_positions'].threshold).toBe(3);
+      expect(byType['max_weekly_loss'].threshold).toBe(10);
     });
   });
 
@@ -289,6 +293,92 @@ describe('RiskController', () => {
       // Should not have position_ratio violation
       const v = result.violations.find((v) => v.rule_type === 'max_position_ratio');
       expect(v).toBeUndefined();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // checkOrder — max_positions rule
+  // -----------------------------------------------------------------------
+  describe('checkOrder — max_positions', () => {
+    it('should reject buy order when positions >= threshold (default 3)', () => {
+      const order = makeOrder({ side: 'buy', quantity: 10, price: 100 });
+      const positions: BrokerPosition[] = [
+        { symbol: 'AAPL', quantity: 100, avg_cost: 150, current_price: 150, market_value: 15000 },
+        { symbol: 'GOOG', quantity: 50, avg_cost: 100, current_price: 100, market_value: 5000 },
+        { symbol: 'MSFT', quantity: 80, avg_cost: 200, current_price: 200, market_value: 16000 },
+      ];
+      const result = rc.checkOrder(order, makeAccount(), positions, makeStats());
+      const v = result.violations.find((v) => v.rule_type === 'max_positions');
+      expect(v).toBeDefined();
+      expect(v!.current_value).toBe(3);
+      expect(v!.threshold).toBe(3);
+    });
+
+    it('should allow buy order when positions < threshold', () => {
+      const order = makeOrder({ side: 'buy', quantity: 10, price: 100 });
+      const positions: BrokerPosition[] = [
+        { symbol: 'AAPL', quantity: 100, avg_cost: 150, current_price: 150, market_value: 15000 },
+        { symbol: 'GOOG', quantity: 50, avg_cost: 100, current_price: 100, market_value: 5000 },
+      ];
+      const result = rc.checkOrder(order, makeAccount(), positions, makeStats());
+      const v = result.violations.find((v) => v.rule_type === 'max_positions');
+      expect(v).toBeUndefined();
+    });
+
+    it('should allow sell orders regardless of position count', () => {
+      const order = makeOrder({ side: 'sell', quantity: 10, price: 100 });
+      const positions: BrokerPosition[] = [
+        { symbol: 'AAPL', quantity: 100, avg_cost: 150, current_price: 150, market_value: 15000 },
+        { symbol: 'GOOG', quantity: 50, avg_cost: 100, current_price: 100, market_value: 5000 },
+        { symbol: 'MSFT', quantity: 80, avg_cost: 200, current_price: 200, market_value: 16000 },
+        { symbol: 'TSLA', quantity: 30, avg_cost: 300, current_price: 300, market_value: 9000 },
+      ];
+      const result = rc.checkOrder(order, makeAccount(), positions, makeStats());
+      const v = result.violations.find((v) => v.rule_type === 'max_positions');
+      expect(v).toBeUndefined();
+    });
+
+    it('should ignore positions with zero quantity', () => {
+      const order = makeOrder({ side: 'buy', quantity: 10, price: 100 });
+      const positions: BrokerPosition[] = [
+        { symbol: 'AAPL', quantity: 100, avg_cost: 150, current_price: 150, market_value: 15000 },
+        { symbol: 'GOOG', quantity: 50, avg_cost: 100, current_price: 100, market_value: 5000 },
+        { symbol: 'MSFT', quantity: 0, avg_cost: 200, current_price: 200, market_value: 0 },
+      ];
+      // Only 2 active positions (MSFT has quantity 0), should pass
+      const result = rc.checkOrder(order, makeAccount(), positions, makeStats());
+      const v = result.violations.find((v) => v.rule_type === 'max_positions');
+      expect(v).toBeUndefined();
+    });
+
+    it('should apply dynamic risk multiplier in crisis mode (floor)', () => {
+      // Set crisis mode: risk_multiplier = 0.25
+      rc.updateDynamicRisk(0.20); // drawdown > 0.15 → crisis, multiplier = 0.25
+      // threshold = 3 * 0.25 = 0.75, floor = 0
+      // Any buy with any positions should be rejected
+      const order = makeOrder({ side: 'buy', quantity: 10, price: 100 });
+      const positions: BrokerPosition[] = [
+        { symbol: 'AAPL', quantity: 100, avg_cost: 150, current_price: 150, market_value: 15000 },
+      ];
+      const result = rc.checkOrder(order, makeAccount(), positions, makeStats());
+      const v = result.violations.find((v) => v.rule_type === 'max_positions');
+      expect(v).toBeDefined();
+      expect(v!.threshold).toBe(0); // floor(3 * 0.25) = 0
+    });
+
+    it('should apply dynamic risk multiplier in high_vol mode', () => {
+      // Set high_vol mode: risk_multiplier = 0.5
+      rc.updateDynamicRisk(0.10); // drawdown > 0.08 → high_vol, multiplier = 0.5
+      // threshold = 3 * 0.5 = 1.5, floor = 1
+      const order = makeOrder({ side: 'buy', quantity: 10, price: 100 });
+      const positions: BrokerPosition[] = [
+        { symbol: 'AAPL', quantity: 100, avg_cost: 150, current_price: 150, market_value: 15000 },
+      ];
+      // 1 position >= 1 threshold → reject
+      const result = rc.checkOrder(order, makeAccount(), positions, makeStats());
+      const v = result.violations.find((v) => v.rule_type === 'max_positions');
+      expect(v).toBeDefined();
+      expect(v!.threshold).toBe(1); // floor(3 * 0.5) = 1
     });
   });
 });

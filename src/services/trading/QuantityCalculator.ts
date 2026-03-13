@@ -70,6 +70,15 @@ export function calculateOrderQuantity(params: QuantityParams): number {
       result = Math.floor(maxRiskAmount / adjustedRisk);
       break;
     }
+    case 'risk_budget': {
+      const { stop_loss, total_assets, max_risk_pct } = params;
+      if (!stop_loss || !total_assets || !max_risk_pct || entry_price <= 0) return 0;
+      const risk_per_share = entry_price - stop_loss;
+      if (risk_per_share <= 0) return 0;
+      const max_risk_amount = total_assets * max_risk_pct;
+      result = Math.floor(max_risk_amount / risk_per_share);
+      break;
+    }
     default:
       return 0;
   }
