@@ -18,6 +18,13 @@ vi.mock('./AutoTradingPanel', () => ({
   default: () => <div data-testid="auto-trading-panel">AutoTradingPanel</div>,
 }));
 
+// Mock global fetch for OrderHistoryTable
+const mockFetch = vi.fn().mockResolvedValue({
+  ok: true,
+  json: async () => ({ orders: [], total: 0 }),
+});
+vi.stubGlobal('fetch', mockFetch);
+
 const baseMockConfig = {
   trading_mode: 'paper' as const,
   auto_trade_enabled: false,
@@ -60,28 +67,58 @@ const mockOrders = [
   },
 ];
 
+const mockPositions = [
+  { symbol: 'AAPL.US', quantity: 10, avg_cost: 150, current_price: 160, market_value: 1600 },
+  { symbol: 'TSLA.US', quantity: 5, avg_cost: 200, current_price: 190, market_value: 950 },
+];
+
+const baseStoreState = {
+  account: { total_assets: 100000, available_cash: 50000, frozen_cash: 10000, currency: 'USD' },
+  orders: mockOrders,
+  positions: mockPositions,
+  riskRules: [],
+  stats: { total_orders: 4, filled_orders: 2, cancelled_orders: 0, total_filled_amount: 5000 },
+  config: baseMockConfig,
+  credentials: { app_key_set: true, app_secret_set: true, access_token_set: false, paper_access_token_set: true },
+  pipelineStatus: null,
+  stopLossRecords: [],
+  pipelineSignals: [],
+  loading: false,
+  error: null,
+};
+
 describe('TradingDashboardView', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    useTradingStore.setState({
-      account: { total_assets: 100000, available_cash: 50000, frozen_cash: 10000, currency: 'HKD' },
-      orders: mockOrders,
-      riskRules: [],
-      stats: { total_orders: 4, filled_orders: 2, cancelled_orders: 0, total_filled_amount: 5000 },
-      config: baseMockConfig,
-      credentials: { app_key_set: true, app_secret_set: true, access_token_set: false, paper_access_token_set: true },
-      pipelineStatus: null,
-      stopLossRecords: [],
-      pipelineSignals: [],
-      loading: false,
-      error: null,
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ orders: mockOrders, total: mockOrders.length }),
     });
+    useTradingStore.setState(baseStoreState);
   });
 
   afterEach(() => {
     vi.useRealTimers();
     cleanup();
+  });
+
+  it('should display positions-based account overview with correct labels', () => {
+    render(<TradingDashboardView />);
+    expect(screen.getByText('持仓成本')).toBeTruthy();
+    expect(screen.getByText('持仓市值')).toBeTruthy();
+    expect(screen.getByText('浮动盈亏')).toBeTruthy();
+    expect(screen.getByText('当日交易笔数')).toBeTruthy();
+  });
+
+  it('should compute account overview values from positions', () => {
+    render(<TradingDashboardView />);
+    // AAPL: cost=10*150=1500, market=10*160=1600
+    // TSLA: cost=5*200=1000, market=5*190=950
+    // totalCost=2500, totalMarket=2550, pnl=+50
+    expect(screen.getByText('$2,500.00')).toBeTruthy();
+    expect(screen.getByText('$2,550.00')).toBeTruthy();
+    expect(screen.getByText('+$50.00')).toBeTruthy();
   });
 
   it('should embed AutoTradingPanel in the dashboard', () => {
@@ -91,58 +128,46 @@ describe('TradingDashboardView', () => {
 
   it('should show "来源" column header in active orders table', () => {
     render(<TradingDashboardView />);
-    // Active orders section has "来源" header
     const headers = screen.getAllByText('来源');
     expect(headers.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should classify signal_id-only order as "信号自动"', () => {
     render(<TradingDashboardView />);
-    // Order 1: signal_id=10, strategy_id=undefined → 信号自动
-    // Appears in both active orders and order history tables
+    // Order 1: signal_id=10, strategy_id=undefined → 信号自动 (in active orders)
     const badges = screen.getAllByText('信号自动');
     expect(badges.length).toBeGreaterThanOrEqual(1);
   });
 
   it('should classify strategy_id order as "策略自动"', () => {
     render(<TradingDashboardView />);
-    // Order 2 (strategy_id=5) and Order 4 (strategy_id=3) → 策略自动
-    // Some appear in both active and history tables
+    // Order 4: strategy_id=3 → 策略自动 (in active orders, pending status)
     const badges = screen.getAllByText('策略自动');
-    expect(badges.length).toBeGreaterThanOrEqual(2);
+    expect(badges.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('should classify order with no signal_id/strategy_id as "手动"', () => {
-    render(<TradingDashboardView />);
-    // Order 3: both null → 手动
-    expect(screen.getByText('手动')).toBeTruthy();
-  });
-
-  it('should poll stop-loss records every 3 seconds', () => {
+  it('should poll stop-loss records every 15 seconds', () => {
     const mockFetchStopLoss = vi.fn().mockResolvedValue(undefined);
-    useTradingStore.setState({ fetchStopLossRecords: mockFetchStopLoss });
+    useTradingStore.setState({ ...baseStoreState, fetchStopLossRecords: mockFetchStopLoss });
 
     render(<TradingDashboardView />);
 
-    // Advance timer by 3 seconds
-    vi.advanceTimersByTime(3000);
+    vi.advanceTimersByTime(15000);
     expect(mockFetchStopLoss).toHaveBeenCalled();
 
-    // Advance another 3 seconds
-    vi.advanceTimersByTime(3000);
+    vi.advanceTimersByTime(15000);
     expect(mockFetchStopLoss.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('should clean up stop-loss polling on unmount', () => {
     const mockFetchStopLoss = vi.fn().mockResolvedValue(undefined);
-    useTradingStore.setState({ fetchStopLossRecords: mockFetchStopLoss });
+    useTradingStore.setState({ ...baseStoreState, fetchStopLossRecords: mockFetchStopLoss });
 
     const { unmount } = render(<TradingDashboardView />);
     unmount();
 
-    // After unmount, advancing timers should not trigger more calls
     const callCount = mockFetchStopLoss.mock.calls.length;
-    vi.advanceTimersByTime(6000);
+    vi.advanceTimersByTime(30000);
     expect(mockFetchStopLoss.mock.calls.length).toBe(callCount);
   });
 });

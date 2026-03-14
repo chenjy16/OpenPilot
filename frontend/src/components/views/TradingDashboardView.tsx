@@ -6,7 +6,7 @@ import {
   type RiskRule,
   type OrderSide,
   type OrderType,
-  type BrokerAccount,
+  type BrokerPosition,
   type BrokerCredentialsMasked,
   type OrderStats,
 } from '../../stores/tradingStore';
@@ -271,13 +271,18 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
   );
 }
 
-function AccountOverview({ account, stats }: { account: BrokerAccount | null; stats: OrderStats | null }) {
-  const currencySymbol = account?.currency === 'USD' ? '$' : account?.currency === 'HKD' ? 'HK$' : '¥';
-  const fmtMoney = (v: number) => `${currencySymbol}${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+function AccountOverview({ stats, positions }: { stats: OrderStats | null; positions: BrokerPosition[] }) {
+  const fmtMoney = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+  // Compute from positions (USD) — same logic as live dashboard
+  const totalCost = positions.reduce((sum, p) => sum + p.avg_cost * p.quantity, 0);
+  const totalMarketValue = positions.reduce((sum, p) => sum + (p.current_price ?? p.avg_cost) * p.quantity, 0);
+  const unrealizedPnl = totalMarketValue - totalCost;
+
   const cards = [
-    { label: '总资产', value: account?.total_assets ?? 0, fmt: fmtMoney },
-    { label: '可用资金', value: account?.available_cash ?? 0, fmt: fmtMoney },
-    { label: '冻结资金', value: account?.frozen_cash ?? 0, fmt: fmtMoney },
+    { label: '持仓成本', value: totalCost, fmt: fmtMoney },
+    { label: '持仓市值', value: totalMarketValue, fmt: fmtMoney },
+    { label: '浮动盈亏', value: unrealizedPnl, fmt: (v: number) => `${v >= 0 ? '+' : ''}${fmtMoney(v)}` },
     { label: '当日交易笔数', value: stats?.total_orders ?? 0, fmt: (v: number) => String(v) },
   ];
 
@@ -665,7 +670,7 @@ function DynamicRiskPanel() {
 
 const TradingDashboardView: React.FC = () => {
   const {
-    account, orders, riskRules, stats, config, credentials,
+    account, orders, positions, riskRules, stats, config, credentials,
     loading, error, tradingEvents,
     fetchAll, placeOrder, cancelOrder, updateConfig, saveCredentials, testBrokerConnection,
     startPolling, stopPolling,
@@ -746,7 +751,7 @@ const TradingDashboardView: React.FC = () => {
         )}
 
         {/* Account Overview */}
-        <AccountOverview account={account} stats={stats} />
+        <AccountOverview stats={stats} positions={positions} />
 
         {/* Dynamic Risk State (VIX) */}
         <DynamicRiskPanel />

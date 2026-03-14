@@ -330,18 +330,17 @@ export class LongportAdapter implements BrokerAdapter {
         const balances = await ctx.accountBalance();
 
         if (balances.length === 0) {
-          return { total_assets: 0, available_cash: 0, frozen_cash: 0, currency: 'HKD' };
+          return { total_assets: 0, available_cash: 0, frozen_cash: 0, currency: 'USD' };
         }
 
         // Use the first (primary) account balance
         const bal = balances[0];
-        const currency = bal.currency || 'HKD';
 
-        // Sum up cash info for the primary currency
+        // Always use USD cash info since all positions are US stocks
         let availableCash = 0;
         let frozenCash = 0;
         for (const info of bal.cashInfos) {
-          if (info.currency === currency) {
+          if (info.currency === 'USD') {
             availableCash = info.availableCash.toNumber();
             frozenCash = info.frozenCash.toNumber();
             break;
@@ -349,10 +348,10 @@ export class LongportAdapter implements BrokerAdapter {
         }
 
         return {
-          total_assets: bal.totalCash.toNumber(),
+          total_assets: bal.netAssets.toNumber(),
           available_cash: availableCash,
           frozen_cash: frozenCash,
-          currency,
+          currency: 'USD',
         };
       });
       this.accountCache = { data: result, ts: Date.now() };
@@ -361,7 +360,7 @@ export class LongportAdapter implements BrokerAdapter {
       // On error, return stale cache if available, otherwise zeroed account
       if (this.accountCache) return this.accountCache.data;
       console.error(`[LongportAdapter] getAccount error: ${this.extractErrorMessage(err)}`);
-      return { total_assets: 0, available_cash: 0, frozen_cash: 0, currency: 'HKD' };
+      return { total_assets: 0, available_cash: 0, frozen_cash: 0, currency: 'USD' };
     }
   }
 

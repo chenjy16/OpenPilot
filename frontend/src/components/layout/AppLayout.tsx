@@ -18,6 +18,7 @@ import StockAnalysisView from '../views/StockAnalysisView';
 import PortfolioView from '../views/PortfolioView';
 import TradingDashboardView from '../views/TradingDashboardView';
 import PerformanceView from '../views/PerformanceView';
+import LiveDashboardView from '../views/LiveDashboardView';
 
 const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   chat: <ChatView />,
@@ -35,6 +36,7 @@ const VIEW_MAP: Record<NavTab, React.ReactNode> = {
   portfolio: <PortfolioView />,
   trading: <TradingDashboardView />,
   performance: <PerformanceView />,
+  live: <LiveDashboardView />,
   config: <ConfigView />,
 };
 

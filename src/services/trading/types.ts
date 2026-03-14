@@ -267,3 +267,116 @@ export interface StrategyRegistration {
   weight: number;
   enabled: boolean;
 }
+
+// ─── Live Dashboard Types ──────────────────────────────────────────────────
+
+export interface LiveDashboardResponse {
+  account_summary: AccountSummary | null;
+  equity_curve: DailyEquityPoint[] | null;
+  ai_decisions: AIDecision[] | null;
+  positions: LivePosition[] | null;
+  recent_trades: LiveTradeRecord[] | null;
+  metrics: LiveMetrics | null;
+  risk_summary: LiveRiskRule[] | null;
+  first_trade_date: number | null;
+  warnings: string[];
+  cached_at: number;
+}
+
+export interface AccountSummary {
+  initial_capital: number;
+  current_equity: number;
+  total_return_pct: number;
+  daily_pnl: number;
+}
+
+export interface DailyEquityPoint {
+  date: string;
+  equity: number;
+  daily_pnl: number;
+  cumulative_return: number;
+}
+
+export interface AIDecision {
+  timestamp: number;
+  symbol: string;
+  strategy_name: string;
+  side: 'buy' | 'sell';
+  composite_score: number;
+  entry_price: number;
+  stop_loss: number | null;
+  take_profit: number | null;
+  reason: string;
+}
+
+export interface LivePosition {
+  symbol: string;
+  quantity: number;
+  avg_cost: number;
+  current_price: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+}
+
+export interface LiveTradeRecord {
+  symbol: string;
+  strategy_name: string;
+  entry_price: number;
+  exit_price: number;
+  pnl: number;
+  pnl_pct: number;
+  hold_days: number;
+  exit_time: number;
+}
+
+export interface LiveMetrics {
+  win_rate: number;
+  sharpe_ratio: number | null;
+  max_drawdown_pct: number;
+  total_trades: number;
+  profit_factor: number;
+}
+
+export interface LiveRiskRule {
+  rule_name: string;
+  threshold: number;
+  triggered: boolean;
+  description: string;
+}
+
+// ─── Sensitive Field Filtering ─────────────────────────────────────────────
+
+const SENSITIVE_KEYWORDS = [
+  'credential',
+  'secret',
+  'token',
+  'api_key',
+  'app_key',
+  'app_secret',
+  'access_token',
+];
+
+/**
+ * Recursively strips fields whose names contain sensitive keywords.
+ * Matching is case-insensitive.
+ */
+export function stripSensitiveFields<T>(obj: T): T {
+  if (obj === null || obj === undefined || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => stripSensitiveFields(item)) as unknown as T;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj as Record<string, unknown>)) {
+    const lowerKey = key.toLowerCase();
+    const isSensitive = SENSITIVE_KEYWORDS.some((kw) => lowerKey.includes(kw));
+    if (!isSensitive) {
+      result[key] = stripSensitiveFields((obj as Record<string, unknown>)[key]);
+    }
+  }
+  return result as T;
+}
+

@@ -81,8 +81,6 @@
 - `scripts/universe_screener.py`
 
 ### 运行状态: ✅ 可跑通
-- Python 脚本通过 `execFile` 调用，5 分钟超时
-- 结果以 JSON 格式输出，TypeScript 端解析并存入 SQLite
 
 ---
 
@@ -106,11 +104,8 @@
 ### 关键文件
 - `src/services/StockScanner.ts`
 - `scripts/stock_analysis.py`
-- Quant Agent IDENTITY.md (在 `src/index.ts` 中配置)
 
 ### 运行状态: ✅ 可跑通
-- Quant Agent 已在 `main()` 中自动创建并配置 IDENTITY.md
-- 技术面 + 消息面双重数据源，AI 综合研判后输出 Signal_Card
 
 ---
 
@@ -130,11 +125,9 @@
 
 ### 关键文件
 - `src/services/trading/SignalEvaluator.ts`
-- `src/services/trading/AutoTradingPipeline.ts` (`pollNewSignals`, `processSignal`)
+- `src/services/trading/AutoTradingPipeline.ts`
 
 ### 运行状态: ✅ 可跑通
-- 纯函数 + DB 查询，无外部依赖
-- 去重窗口默认 24 小时，防止重复下单
 
 ---
 
@@ -155,12 +148,8 @@
 
 ### 关键文件
 - `src/services/trading/AutoTradingPipeline.ts` (`runDebate`)
-- Bull/Bear Agent 在 `src/index.ts` 中创建并配置 IDENTITY.md
 
 ### 运行状态: ✅ 可跑通
-- 三个 Agent 均在 `main()` 中自动创建
-- 使用 DeepSeek-R1 作为主模型，o1-mini 作为 fallback
-- 延迟约 15-45 秒/信号 (三次 LLM 调用)，对 Swing Trading 可接受
 
 ---
 
@@ -177,6 +166,7 @@
 - `fixed_amount`: 固定金额 (金额 / 入场价)
 - `kelly_formula`: Kelly 公式 (基于胜率和盈亏比)
 - `volatility_parity`: 波动率平价 (单笔最大亏损 = 总资金 × 1%, 止损宽容度 = 2 × ATR)
+- `risk_budget`: 风险预算 (单笔最大亏损 = 总资金 × max_risk_pct / 每股风险)
 
 #### 5b. 风控检查 (RiskController)
 5 条静态规则:
@@ -201,18 +191,16 @@
 ### 关键文件
 - `src/services/trading/QuantityCalculator.ts`
 - `src/services/trading/RiskController.ts`
-- `src/services/trading/StrategyAllocator.ts` (在 TradingGateway 中引用)
+- `src/services/trading/StrategyAllocator.ts`
 
 ### 运行状态: ✅ 可跑通
-- 纯函数 + DB 查询，无外部依赖
-- 风控规则在 `initDefaultRules()` 中初始化
 
 ---
 
 ## 阶段 6: 行情服务 (Quote Service)
 
 ### 触发方式
-- 系统启动时自动初始化 (步骤 16)
+- 系统启动时自动初始化
 - StopLossManager / PositionSyncer 按需调用
 
 ### 详细流程 — 双通道架构
@@ -244,37 +232,12 @@ QuoteService
 | 美股实时性 | Nasdaq Basic，~15 分钟延迟（免费版） | 实时报价 |
 | 更新方式 | WebSocket 推送 + 60s 轮询 | HTTP 请求，30s 缓存 TTL |
 | 调用限制 | 无（推送模式，订阅上限 500 只） | 60 次/分钟 |
-| 港股支持 | LV1 实时 | 不支持 |
-
-#### 当前策略：Longport WS 为主，Finnhub 为补充
-
-`getPriceNumber()` 优先级：缓存 → Longport WS → Finnhub HTTP
-
-选择 Longport WS 为主通道的原因：
-- **无调用次数限制**：推送模式，symbol 数量增长不受限（500 只以内）
-- **Finnhub 容量不足**：StopLoss 每 30s × N 个 symbol + PositionSyncer 每 60s × N 个持仓，20+ symbol 时接近 60 次/分钟上限
-- **架构统一**：交易下单、持仓查询、行情数据均走 Longport，减少跨平台 symbol 格式转换问题
-
-#### 15 分钟延迟的影响评估
-
-| 功能模块 | 影响程度 | 说明 |
-|---------|---------|------|
-| 止盈止损 (StopLossManager) | ⚠️ 中等 | 止损可能晚触发 ~15 分钟，极端行情下可能造成额外亏损 |
-| 风控检查 (RiskController) | 🟢 低 | `max_position_ratio` / `max_daily_loss` 基于市值，15 分钟偏差对日线级交易影响有限 |
-| 持仓同步 (PositionSyncer) | 🟢 低 | 显示市值略有偏差，不影响交易逻辑 |
-| 信号扫描 (StockScanner) | 🟢 无 | 使用 Python yfinance 独立获取历史数据，不走 QuoteService |
-
-**结论**：对于 Swing Trading（持仓数天~数周）策略，15 分钟延迟可接受。止损场景下最坏情况是晚触发 15 分钟，但 ATR-based trailing stop 本身就有较宽的容忍度。如果未来需要日内交易级别的实时性，升级 Longport LV2 行情（付费）是最干净的方案。
 
 ### 关键文件
 - `src/services/trading/QuoteService.ts`
 - `src/services/trading/FinnhubPriceProvider.ts`
 
 ### 运行状态: ✅ 可跑通
-- 台湾网络环境下 Longport WebSocket 超时问题已通过 Finnhub HTTP 回退解决
-- `setFallbackProvider()` 在 `main()` 步骤 16 中配置
-- StopLossManager、PositionSyncer、TradingGateway 均已接入 `QuoteService.getPriceNumber()`
-- 即使 Longport 凭证缺失，也可以纯 Finnhub 模式运行
 
 ---
 
@@ -318,23 +281,86 @@ QuoteService
 - `src/services/trading/PaperTradingEngine.ts`
 
 ### 运行状态: ✅ 可跑通
-- Paper 模式完全本地化，无外部依赖
-- Live 模式通过 Longport SDK 连接券商
-- TWAP 拆单逻辑已实现，支持中途取消
-- Chandelier Exit (ATR-based trailing) 已实现
+
+---
+
+## 前端页面
+
+### 实盘大屏 (LiveDashboardView)
+
+只读直播看板，深色主题，60 秒自动刷新，1920×1080 优化。
+
+数据来源: `GET /api/trading/live-dashboard` → `handleLiveDashboard()`
+
+#### 账户概览卡片 (AccountSummaryCard)
+
+| 字段 | 计算逻辑 | 数据来源 |
+|------|----------|----------|
+| 持仓成本 | `Σ(avg_cost × quantity)` 所有持仓 | `gateway.getPositions()` |
+| 持仓市值 | `Σ(current_price × quantity)` 所有持仓 | `gateway.getPositions()` + QuoteService 实时价 |
+| 累计收益率 | `(市值 - 成本) / 成本 × 100` | 由上两项计算 |
+| 当日盈亏 | equity_curve 最后一天的 `daily_pnl` | `PerformanceAnalytics.getMetrics()` |
+
+注意: 当日盈亏基于已平仓交易 (FIFO 匹配 buy→sell)，不含未实现盈亏。无平仓交易时显示 $0.00。
+
+#### AI 决策流 (AIDecisionFeed)
+- 查询 `trading_audit_log` 表中 `operation = 'multi_strategy_order'` 的最近 10 条记录
+- JOIN `trading_orders` 获取 `order_side` 和 `order_price`
+- 从 `request_params` JSON 解析 `symbol`、`composite_score`、`ai_filter_result`
+- 无记录时显示"暂无 AI 决策"
+
+#### 持仓面板 (PositionPanel)
+- 数据来自 `gateway.getPositions()`，经 PositionSyncer 实时价格填充
+- 浮动盈亏: `(current_price - avg_cost) × quantity`
+- 盈亏%: `(current_price - avg_cost) / avg_cost × 100`
+
+#### 其他组件
+| 组件 | 说明 |
+|------|------|
+| LiveHeader | 标题 + 交易中/已收盘状态 + 运行天数 |
+| EquityCurveChart | 净值曲线图表 (基于 equity_curve) |
+| TradeHistoryTable | 近期 20 条已平仓交易 (来自 trade_journal) |
+| MetricsBar | 胜率、夏普比率、最大回撤、总交易数、盈亏比 |
+| RiskSummary | 风控规则状态摘要 |
+
+### 量化交易页面 (TradingDashboardView)
+
+交互式交易管理页面，白色主题，15 秒轮询刷新。
+
+#### 账户概览 (AccountOverview)
+| 字段 | 计算逻辑 | 数据来源 |
+|------|----------|----------|
+| 持仓成本 | `Σ(avg_cost × quantity)` | `tradingStore.positions` |
+| 持仓市值 | `Σ(current_price × quantity)` | `tradingStore.positions` |
+| 浮动盈亏 | `市值 - 成本` | 由上两项计算 |
+| 当日交易笔数 | `stats.total_orders` | `GET /api/trading/stats` |
+
+两个页面的持仓成本/市值计算逻辑一致，均基于 positions 数组，统一使用 USD。
+
+#### 其他功能模块
+| 模块 | 说明 |
+|------|------|
+| TradingModeSwitch | 模拟/实盘模式切换 (含确认弹窗) |
+| BrokerSettingsPanel | Longport 券商凭证配置 |
+| DynamicRiskPanel | VIX 市场状态 + 风险乘数 + 组合回撤 |
+| AutoTradingPanel | 自动交易管线控制 (启停、配置) |
+| ActiveOrdersTable | 活跃订单 (pending/submitted/partial_filled) |
+| OrderHistoryTable | 历史订单 (分页、筛选、API 分页查询) |
+| RiskStatusPanel | 风控规则使用进度条 |
+| ManualOrderForm | 手动下单表单 |
 
 ---
 
 ## Cron 定时任务总览
 
-| Job ID | 名称 | Schedule | Handler | 说明 |
-|--------|------|----------|---------|------|
-| `universe-screen-daily` | 股票池自动筛选 | `0 22 * * 1-5` (周一至五 22:00 UTC) | `universe-screen` | 筛选适合量化交易的美股 |
-| `stock-scan` | AI 量化扫描 | 可配置 | `stock-scan` | 技术面+消息面 AI 分析 |
-| `data-sync-daily` | 历史数据同步 | `30 22 * * 1-5` (周一至五 22:30 UTC) | `data-sync` | 同步 OHLCV 日线数据到本地 |
-| `vix-monitor-periodic` | VIX 恐慌指数监控 | `*/15 13-21 * * 1-5` (美股交易时段每 15 分钟) | `vix-monitor` | VIX > 25 时收紧所有止损至 1×ATR |
-| `signal-verify-periodic` | 信号回溯验证 | `*/30 * * * 1-5` (周一至五每 30 分钟) | `signal-verify` | 验证历史信号的准确性 |
-| `weekly-review-saturday` | AI 周末复盘报告 | `0 2 * * 6` (周六 02:00 UTC) | `weekly-review` | 分析本周亏损交易，生成反思报告 |
+| Job ID | Schedule | 说明 |
+|--------|----------|------|
+| `universe-screen-daily` | `0 22 * * 1-5` | 筛选适合量化交易的美股 |
+| `stock-scan` | 可配置 | 技术面+消息面 AI 分析 |
+| `data-sync-daily` | `30 22 * * 1-5` | 同步 OHLCV 日线数据 |
+| `vix-monitor-periodic` | `*/15 13-21 * * 1-5` | VIX > 25 时收紧止损 |
+| `signal-verify-periodic` | `*/30 * * * 1-5` | 验证历史信号准确性 |
+| `weekly-review-saturday` | `0 2 * * 6` | AI 周末复盘报告 |
 
 ---
 
@@ -348,7 +374,7 @@ QuoteService
 | `trading_audit_log` | 审计日志 (operation, order_id, params, result) |
 | `risk_rules` | 风控规则 (5 种类型, threshold, enabled) |
 | `stop_loss_records` | 止盈止损记录 (含 trailing, Chandelier Exit ATR 字段) |
-| `pipeline_signal_log` | 管线信号处理日志 (signal → 结果追踪) |
+| `pipeline_signal_log` | 管线信号处理日志 |
 
 ### 模拟交易表
 | 表名 | 说明 |
@@ -359,73 +385,18 @@ QuoteService
 ### 数据与分析表
 | 表名 | 说明 |
 |------|------|
-| `ohlcv_daily` | OHLCV 日线缓存 (symbol + date 联合主键) |
-| `backtest_results` | 回测结果 (含权益曲线 JSON) |
+| `ohlcv_daily` | OHLCV 日线缓存 |
+| `backtest_results` | 回测结果 |
 | `dynamic_watchlist` | 动态股票池 (UniverseScreener 输出) |
 | `stock_signals` | AI 分析信号 (Signal_Card 格式) |
+| `trade_journal` | 已平仓交易记录 (用于绩效分析和 AI 周末复盘) |
 
 ### 风控与策略表
 | 表名 | 说明 |
 |------|------|
-| `symbol_sectors` | 股票板块映射 (用于板块集中度风控) |
+| `symbol_sectors` | 股票板块映射 |
 | `strategy_allocations` | 策略资金分配与 PnL 追踪 |
 | `dynamic_risk_state` | 动态风控状态 (VIX, 回撤, 风险乘数) |
-
----
-
-## v2.0 已实现的核心功能
-
-### 1. 双智能体辩论 (Dual-Agent Debate)
-- Bull Analyst + Bear Analyst + Arbiter 三角辩论
-- 在 `AutoTradingPipeline.runDebate()` 中实现
-- 使用 DeepSeek-R1 / o1-mini 模型
-
-### 2. TWAP 智能拆单
-- 金额 > $50,000 自动拆分为 5 片
-- 每片间隔 60 秒执行
-- 在 `TradingGateway.executeTWAP()` 中实现
-
-### 3. 波动率平价仓位 (Volatility Parity)
-- 单笔最大亏损 = 总资金 × 1%
-- 止损宽容度 = 2 × ATR
-- 在 `QuantityCalculator` 的 `volatility_parity` 模式中实现
-
-### 4. Chandelier Exit (ATR 移动止损)
-- `stop_loss = highest_price - multiplier × ATR`
-- `stop_loss_records` 表新增 `trailing_atr_multiplier` 和 `atr_value` 字段
-- 在 `StopLossManager.checkAll()` 中实现
-
-### 5. Finnhub HTTP 回退
-- Longport WebSocket 超时 (8 秒) 后自动切换
-- 30 秒缓存 TTL，60 次/分钟速率限制
-- 在 `FinnhubPriceProvider` 中实现
-
-### 6. VIX 恐慌指数监控
-- 每 15 分钟获取 VIX (通过 Python yfinance)
-- VIX > 25 时收紧所有止损至 1×ATR
-- 联动 `RiskController.updateDynamicRisk()` 调整风险乘数
-
-### 7. AI 周末复盘
-- 每周六 02:00 UTC 自动执行
-- 分析本周亏损交易，生成《败局反思报告》
-- 通过 `TradeNotifier` 推送至 Telegram/Discord
-
----
-
-## 通知与前端
-
-### 通知推送 (TradeNotifier)
-- 订单创建/成交/失败通知
-- 止盈止损触发通知
-- 风控拒绝告警
-- VIX 紧急告警
-- 通过 `NotificationService` → Telegram / Discord 推送
-- 同时通过 WebSocket 推送至前端 (`server.broadcastTradingEvent`)
-
-### 前端组件
-- `AutoTradingPanel.tsx`: 管线控制面板 (启停、配置、状态)
-- `TradingDashboardView.tsx`: 交易仪表盘 (订单、持仓、审计日志)
-- `tradingStore.ts`: Zustand 状态管理 (WebSocket 实时更新)
 
 ---
 
@@ -433,22 +404,77 @@ QuoteService
 
 - 每 60 秒同步一次
 - Broker 数据为 source of truth
-- 通过 `QuoteService.getPriceNumber()` 获取实时价格 (Longport 的 `stockPositions()` 不返回实时价)
+- 通过 `QuoteService.getPriceNumber()` 获取实时价格填充 `current_price`
+- Longport `stockPositions()` 不返回实时价，初始 `current_price = avg_cost`
 - 自动处理: 新增持仓 / 更新持仓 / 移除已清仓
+
+---
+
+## LongportAdapter 账户与持仓
+
+### getAccount() 返回值
+| 字段 | 来源 | 币种 |
+|------|------|------|
+| `total_assets` | `bal.netAssets` | HKD (账户基础币种) |
+| `available_cash` | USD cashInfos `availableCash` | USD |
+| `frozen_cash` | USD cashInfos `frozenCash` | USD |
+| `currency` | 硬编码 `'USD'` | — |
+
+> ⚠️ `total_assets` 实际为 HKD 计价的净资产，与其他 USD 字段存在币种不一致。
+> 目前实盘大屏和量化交易页面均不使用 `total_assets` 显示，改为从 positions 计算。
+> 但 `QuantityCalculator` 的 kelly/volatility_parity/risk_budget 模式仍使用此值，
+> 在实盘模式下可能导致仓位计算偏差（HKD 金额 ÷ USD 价格）。
+
+### getPositions() 返回值
+| 字段 | 来源 |
+|------|------|
+| `symbol` | `pos.symbol` (如 AAPL.US) |
+| `quantity` | `pos.quantity` |
+| `avg_cost` | `pos.costPrice` (USD) |
+| `current_price` | 初始 = `costPrice`，后由 PositionSyncer 通过 QuoteService 更新 |
+| `market_value` | `quantity × current_price` |
+
+---
+
+## v2.0 已实现的核心功能
+
+1. **双智能体辩论** — Bull + Bear + Arbiter 三角辩论
+2. **TWAP 智能拆单** — 金额 > $50,000 自动拆分 5 片
+3. **波动率平价仓位** — 单笔最大亏损 = 总资金 × 1%
+4. **Chandelier Exit** — ATR 移动止损
+5. **Finnhub HTTP 回退** — Longport WS 超时后自动切换
+6. **VIX 恐慌指数监控** — VIX > 25 收紧止损
+7. **AI 周末复盘** — 每周六自动分析亏损交易
+8. **实盘大屏** — 只读直播看板，深色主题，60s 自动刷新
+9. **统一 USD 显示** — 两个页面均基于 positions 计算，统一美元
+
+---
+
+## 通知与 WebSocket
+
+### 通知推送 (TradeNotifier)
+- 订单创建/成交/失败、止盈止损触发、风控拒绝、VIX 告警
+- 通过 `NotificationService` → Telegram / Discord
+- 同时通过 WebSocket 推送至前端 (`server.broadcastTradingEvent`)
+
+### 前端 WebSocket 实时更新
+- 连接 `ws://host/ws`，自动重连 (5 秒延迟)
+- 事件类型: `order_created`, `order_filled`, `order_failed`, `stop_loss_triggered`, `risk_alert`
+- 收到事件后自动刷新相关数据 (订单、账户、持仓)
 
 ---
 
 ## 优雅关闭 (Graceful Shutdown)
 
 收到 SIGTERM/SIGINT 后依序停止:
-1. `AutoTradingPipeline.stop()` — 停止信号轮询
-2. `TradingGateway.cancelAllTWAP()` — 取消所有进行中的 TWAP
-3. `StopLossManager.stopMonitoring()` — 停止止损监控
-4. `QuoteService.stop()` — 断开行情连接
-5. `PositionSyncer.stop()` — 停止持仓同步
-6. `CronScheduler.stop()` — 停止定时任务
-7. `APIServer.stop()` — 停止 HTTP/WS 服务
-8. `ChannelManager.disconnectAll()` — 断开 Telegram/Discord
+1. `AutoTradingPipeline.stop()`
+2. `TradingGateway.cancelAllTWAP()`
+3. `StopLossManager.stopMonitoring()`
+4. `QuoteService.stop()`
+5. `PositionSyncer.stop()`
+6. `CronScheduler.stop()`
+7. `APIServer.stop()`
+8. `ChannelManager.disconnectAll()`
 9. 10 秒超时后强制退出
 
 ---
@@ -458,55 +484,47 @@ QuoteService
 ### 交易核心
 | 文件 | 说明 |
 |------|------|
-| `src/services/trading/AutoTradingPipeline.ts` | 自动交易管线 (信号轮询 → 辩论 → 下单) |
-| `src/services/trading/TradingGateway.ts` | 统一交易入口 (风控 → 路由 → TWAP) |
+| `src/services/trading/AutoTradingPipeline.ts` | 自动交易管线 |
+| `src/services/trading/TradingGateway.ts` | 统一交易入口 |
 | `src/services/trading/SignalEvaluator.ts` | 信号评估与过滤 |
-| `src/services/trading/QuantityCalculator.ts` | 仓位计算 (4 种模式) |
-| `src/services/trading/RiskController.ts` | 风控引擎 (静态规则 + 动态风控) |
-| `src/services/trading/StopLossManager.ts` | 止盈止损管理 (含 Chandelier Exit) |
+| `src/services/trading/QuantityCalculator.ts` | 仓位计算 (5 种模式) |
+| `src/services/trading/RiskController.ts` | 风控引擎 |
+| `src/services/trading/StopLossManager.ts` | 止盈止损管理 |
 | `src/services/trading/StrategyAllocator.ts` | 策略资金分配 |
+| `src/services/trading/PerformanceAnalytics.ts` | 绩效分析 (equity curve, 胜率等) |
+| `src/services/trading/TradeJournal.ts` | 交易日志 (已平仓记录) |
 
 ### 券商与行情
 | 文件 | 说明 |
 |------|------|
 | `src/services/trading/LongportAdapter.ts` | Longport 券商适配器 |
 | `src/services/trading/PaperTradingEngine.ts` | 模拟交易引擎 |
-| `src/services/trading/QuoteService.ts` | 行情服务 (WS + HTTP 双通道) |
+| `src/services/trading/QuoteService.ts` | 行情服务 (WS + HTTP) |
 | `src/services/trading/FinnhubPriceProvider.ts` | Finnhub HTTP 回退 |
 | `src/services/trading/PositionSyncer.ts` | 持仓同步 |
 
-### 扫描与分析
+### API 与前端
 | 文件 | 说明 |
 |------|------|
-| `src/services/UniverseScreener.ts` | 股票池自动筛选 |
-| `src/services/StockScanner.ts` | AI 量化扫描 |
-| `scripts/universe_screener.py` | Python 股票池筛选脚本 |
-| `scripts/stock_analysis.py` | Python 技术面分析脚本 |
-| `scripts/vix_monitor.py` | Python VIX 监控脚本 |
-
-### 通知与前端
-| 文件 | 说明 |
-|------|------|
-| `src/services/trading/TradeNotifier.ts` | 交易通知器 |
-| `src/services/trading/tradingSchema.ts` | 数据库 Schema (14+ 表) |
-| `frontend/src/components/views/AutoTradingPanel.tsx` | 管线控制面板 |
-| `frontend/src/components/views/TradingDashboardView.tsx` | 交易仪表盘 |
-| `frontend/src/stores/tradingStore.ts` | 前端状态管理 |
-
-### 系统入口
-| 文件 | 说明 |
-|------|------|
-| `src/index.ts` | 主启动文件 (步骤 15-19 为交易模块初始化) |
-| `src/services/CronScheduler.ts` | 定时任务调度器 |
+| `src/api/tradingRoutes.ts` | 交易 API 路由 + handleLiveDashboard |
+| `frontend/src/components/views/LiveDashboardView.tsx` | 实盘大屏 |
+| `frontend/src/components/views/TradingDashboardView.tsx` | 量化交易页面 |
+| `frontend/src/components/views/AccountSummaryCard.tsx` | 实盘大屏账户卡片 |
+| `frontend/src/components/views/PositionPanel.tsx` | 实盘大屏持仓面板 |
+| `frontend/src/components/views/AIDecisionFeed.tsx` | AI 决策流 |
+| `frontend/src/stores/tradingStore.ts` | 量化交易状态管理 |
+| `frontend/src/stores/liveDashboardStore.ts` | 实盘大屏状态管理 |
+| `frontend/src/utils/liveDashboardUtils.ts` | 格式化工具 (formatUSD 等) |
 
 ---
 
 ## 已知限制与注意事项
 
-1. **Longport 免费美股行情为 Nasdaq Basic (~15 分钟延迟)** — 对 Swing Trading 可接受；止损最坏情况晚触发 ~15 分钟。升级 LV2 行情（付费）可获得实时数据
-2. **Finnhub 免费 tier 限制 60 次/分钟** — 仅作为 Longport WS 断线时的回退通道，不作为主力价格源（symbol 多时容量不足）
-3. **目前仅支持美股** — 港股/A股通相关代码保留但短期内不启用
-4. **双智能体辩论延迟 15-45 秒** — 三次 LLM 串行调用，对日线级交易可接受
+1. **Longport 免费美股行情 ~15 分钟延迟** — 对 Swing Trading 可接受
+2. **Finnhub 免费 tier 60 次/分钟** — 仅作为回退通道
+3. **目前仅支持美股** — 港股/A股代码保留但未启用
+4. **双智能体辩论延迟 15-45 秒** — 三次 LLM 串行调用
 5. **VWAP 拆单不可行** — 缺少分钟级成交量数据，仅实现 TWAP
-6. **VIX 数据延迟 ~15 分钟** — yfinance 免费数据，对 VIX 级别判断 (>25 vs <15) 足够
-7. **PaperTradingEngine 条件单** — Stop/Stop-Limit 订单仅返回 `submitted`，不模拟触发
+6. **VIX 数据延迟 ~15 分钟** — yfinance 免费数据
+7. **当日盈亏仅含已平仓** — 基于 FIFO 匹配的 closed trades，不含未实现盈亏
+8. **getAccount().total_assets 币种问题** — netAssets 为 HKD，影响 kelly/volatility_parity 仓位计算

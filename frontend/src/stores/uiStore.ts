@@ -18,6 +18,7 @@ export type NavTab =
   | 'portfolio'
   | 'trading'
   | 'performance'
+  | 'live'
   | 'config';
 
 export interface NavGroup {
@@ -56,6 +57,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'portfolio', label: '投资组合', icon: '💼' },
       { id: 'trading', label: '量化交易', icon: '📊' },
       { id: 'performance', label: '交易绩效', icon: '🏆' },
+      { id: 'live', label: '实盘大屏', icon: '📺' },
     ],
   },
   {

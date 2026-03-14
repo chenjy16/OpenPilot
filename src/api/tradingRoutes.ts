@@ -22,7 +22,18 @@ import type { RiskController } from '../services/trading/RiskController';
 import type { OrderManager } from '../services/trading/OrderManager';
 import type { AutoTradingPipeline } from '../services/trading/AutoTradingPipeline';
 import type { StopLossManager } from '../services/trading/StopLossManager';
-import type { CreateOrderRequest, OrderFilter, OrderStatus, TradingMode } from '../services/trading/types';
+import type { CreateOrderRequest, OrderFilter, OrderStatus, TradingMode, RiskRuleType } from '../services/trading/types';
+import {
+  stripSensitiveFields,
+  type LiveDashboardResponse,
+  type AccountSummary,
+  type DailyEquityPoint,
+  type AIDecision,
+  type LivePosition,
+  type LiveTradeRecord,
+  type LiveMetrics,
+  type LiveRiskRule,
+} from '../services/trading/types';
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -42,6 +53,271 @@ function getCached<T>(key: string): T | null {
 }
 function setCache<T>(key: string, data: T): void {
   apiCache.set(key, { data, ts: Date.now() });
+}
+
+// ---------------------------------------------------------------------------
+// Live Dashboard cache (30-second TTL)
+// ---------------------------------------------------------------------------
+let liveDashboardCache: { data: LiveDashboardResponse; ts: number } | null = null;
+const LIVE_DASHBOARD_CACHE_TTL_MS = 30_000;
+
+/** Exported for testing — clears the live dashboard cache. */
+export function clearLiveDashboardCache(): void {
+  liveDashboardCache = null;
+}
+
+/**
+ * Generate a natural-language description for a risk rule.
+ */
+export function describeRiskRule(ruleType: RiskRuleType, threshold: number): string {
+  switch (ruleType) {
+    case 'max_order_amount':
+      return `单笔订单金额不超过 $${threshold.toLocaleString('en-US')}`;
+    case 'max_daily_amount':
+      return `单日交易总金额不超过 $${threshold.toLocaleString('en-US')}`;
+    case 'max_position_ratio':
+      return `单只股票持仓占比不超过 ${(threshold * 100).toFixed(0)}%`;
+    case 'max_daily_loss':
+      return `单日最大亏损不超过 $${threshold.toLocaleString('en-US')}`;
+    case 'max_daily_trades':
+      return `单日最多交易 ${threshold} 笔`;
+    case 'max_positions':
+      return `最多同时持有 ${threshold} 个仓位`;
+    case 'max_weekly_loss':
+      return `周度最大亏损不超过 ${threshold}%`;
+    default:
+      return `${ruleType}: ${threshold}`;
+  }
+}
+
+/**
+ * Aggregation handler for the live dashboard endpoint.
+ * Calls all data sources in parallel, gracefully degrades on failure,
+ * and returns a LiveDashboardResponse.
+ */
+export async function handleLiveDashboard(
+  gateway: TradingGateway,
+  riskController: RiskController,
+  db: Database.Database,
+): Promise<LiveDashboardResponse> {
+  // Check cache
+  if (liveDashboardCache && Date.now() - liveDashboardCache.ts < LIVE_DASHBOARD_CACHE_TTL_MS) {
+    return liveDashboardCache.data;
+  }
+
+  const warnings: string[] = [];
+
+  // Parallel data source calls
+  const [metricsResult, positionsResult, tradesResult, rulesResult, aiDecisionsResult, firstTradeDateResult] =
+    await Promise.allSettled([
+      // 1. PerformanceAnalytics.getMetrics()
+      (async () => {
+        const { PerformanceAnalytics } = require('../services/trading/PerformanceAnalytics');
+        const analytics = new PerformanceAnalytics(db);
+        return analytics.getMetrics(365);
+      })(),
+      // 2. TradingGateway.getPositions()
+      gateway.getPositions(),
+      // 3. TradeJournal.query()
+      (async () => {
+        const { TradeJournal } = require('../services/trading/TradeJournal');
+        const journal = new TradeJournal(db);
+        return journal.query();
+      })(),
+      // 4. RiskController.listRules()
+      Promise.resolve(riskController.listRules()),
+      // 5. trading_audit_log query for AI decisions (JOIN with trading_orders for side/price)
+      (async () => {
+        const rows = db.prepare(
+          `SELECT a.id, a.timestamp, a.operation, a.order_id, a.request_params, a.response_result,
+                  o.side AS order_side, o.price AS order_price
+           FROM trading_audit_log a
+           LEFT JOIN trading_orders o ON a.order_id = o.id
+           WHERE a.operation = 'multi_strategy_order'
+           ORDER BY a.timestamp DESC
+           LIMIT 10`
+        ).all() as Array<{
+          id: number;
+          timestamp: number;
+          operation: string;
+          order_id: number | null;
+          request_params: string | null;
+          response_result: string | null;
+          order_side: string | null;
+          order_price: number | null;
+        }>;
+        return rows;
+      })(),
+      // 6. first_trade_date from trade_journal
+      (async () => {
+        const row = db.prepare(
+          `SELECT MIN(entry_time) as first_trade_date FROM trade_journal`
+        ).get() as { first_trade_date: number | null } | undefined;
+        return row?.first_trade_date ?? null;
+      })(),
+    ]);
+
+  // Process metrics
+  let accountSummary: AccountSummary | null = null;
+  let equityCurve: DailyEquityPoint[] | null = null;
+  let metrics: LiveMetrics | null = null;
+
+  // Build account summary from positions (USD only — all positions are US stocks)
+  // initial_capital = total cost basis, current_equity = total market value
+  if (positionsResult.status === 'fulfilled') {
+    const posArr = positionsResult.value as any[];
+    const totalCost = posArr.reduce((sum: number, p: any) => sum + p.avg_cost * p.quantity, 0);
+    const totalMarketValue = posArr.reduce(
+      (sum: number, p: any) => sum + (p.current_price ?? p.avg_cost) * p.quantity, 0,
+    );
+    const totalReturnPct = totalCost > 0 ? ((totalMarketValue - totalCost) / totalCost) * 100 : 0;
+
+    // Daily PnL from equity curve if available
+    let dailyPnl = 0;
+    if (metricsResult.status === 'fulfilled') {
+      const m = metricsResult.value;
+      if (m.equity_curve.length > 0) {
+        dailyPnl = m.equity_curve[m.equity_curve.length - 1].daily_pnl;
+      }
+    }
+
+    accountSummary = {
+      initial_capital: totalCost,
+      current_equity: totalMarketValue,
+      total_return_pct: totalReturnPct,
+      daily_pnl: dailyPnl,
+    };
+  }
+
+  if (metricsResult.status === 'fulfilled') {
+    const m = metricsResult.value;
+
+    equityCurve = m.equity_curve.map((point: any) => ({
+      date: point.date,
+      equity: point.equity,
+      daily_pnl: point.daily_pnl,
+      cumulative_return: point.cumulative_return,
+    }));
+
+    metrics = {
+      win_rate: m.win_rate,
+      sharpe_ratio: m.sharpe_ratio,
+      max_drawdown_pct: m.max_drawdown_pct,
+      total_trades: m.total_trades,
+      profit_factor: m.profit_factor,
+    };
+  } else {
+    warnings.push(`PerformanceAnalytics failed: ${metricsResult.reason}`);
+  }
+
+  // Process positions
+  let positions: LivePosition[] | null = null;
+  if (positionsResult.status === 'fulfilled') {
+    positions = positionsResult.value.map((p: any) => ({
+      symbol: p.symbol,
+      quantity: p.quantity,
+      avg_cost: p.avg_cost,
+      current_price: p.current_price,
+      unrealized_pnl: (p.current_price - p.avg_cost) * p.quantity,
+      unrealized_pnl_pct: p.avg_cost > 0
+        ? ((p.current_price - p.avg_cost) / p.avg_cost) * 100
+        : 0,
+    }));
+  } else {
+    warnings.push(`TradingGateway.getPositions failed: ${positionsResult.reason}`);
+  }
+
+  // Process recent trades
+  let recentTrades: LiveTradeRecord[] | null = null;
+  if (tradesResult.status === 'fulfilled') {
+    const allTrades = tradesResult.value;
+    // Already sorted by exit_time DESC from TradeJournal.query(), take first 20
+    const limited = allTrades.slice(0, 20);
+    recentTrades = limited.map((t: any) => ({
+      symbol: t.symbol,
+      strategy_name: t.strategy_name,
+      entry_price: t.entry_price,
+      exit_price: t.exit_price,
+      pnl: t.pnl,
+      pnl_pct: t.pnl_pct,
+      hold_days: t.hold_days,
+      exit_time: t.exit_time,
+    }));
+  } else {
+    warnings.push(`TradeJournal.query failed: ${tradesResult.reason}`);
+  }
+
+  // Process risk rules
+  let riskSummary: LiveRiskRule[] | null = null;
+  if (rulesResult.status === 'fulfilled') {
+    riskSummary = rulesResult.value.map((r: any) => ({
+      rule_name: r.rule_name,
+      threshold: r.threshold,
+      triggered: !r.enabled,
+      description: describeRiskRule(r.rule_type, r.threshold),
+    }));
+  } else {
+    warnings.push(`RiskController.listRules failed: ${rulesResult.reason}`);
+  }
+
+  // Process AI decisions
+  let aiDecisions: AIDecision[] | null = null;
+  if (aiDecisionsResult.status === 'fulfilled') {
+    aiDecisions = aiDecisionsResult.value.map((row: any) => {
+      let params: any = {};
+      try {
+        params = row.request_params ? JSON.parse(row.request_params) : {};
+      } catch {
+        // ignore parse errors
+      }
+      const side = (row.order_side === 'buy' || row.order_side === 'sell')
+        ? row.order_side as 'buy' | 'sell'
+        : 'buy' as const;
+      return {
+        timestamp: row.timestamp,
+        symbol: params.symbol ?? '',
+        strategy_name: 'multi_strategy',
+        side,
+        composite_score: params.composite_score ?? 0,
+        entry_price: row.order_price ?? 0,
+        stop_loss: null,
+        take_profit: null,
+        reason: params.ai_filter_result ?? '',
+      };
+    });
+  } else {
+    warnings.push(`trading_audit_log query failed: ${aiDecisionsResult.reason}`);
+  }
+
+  // Process first_trade_date
+  let firstTradeDate: number | null = null;
+  if (firstTradeDateResult.status === 'fulfilled') {
+    firstTradeDate = firstTradeDateResult.value;
+  } else {
+    warnings.push(`first_trade_date query failed: ${firstTradeDateResult.reason}`);
+  }
+
+  const cachedAt = Math.floor(Date.now() / 1000);
+
+  const response: LiveDashboardResponse = {
+    account_summary: accountSummary,
+    equity_curve: equityCurve,
+    ai_decisions: aiDecisions,
+    positions,
+    recent_trades: recentTrades,
+    metrics,
+    risk_summary: riskSummary,
+    first_trade_date: firstTradeDate,
+    warnings,
+    cached_at: cachedAt,
+  };
+
+  const filtered = stripSensitiveFields(response);
+
+  // Store in cache
+  liveDashboardCache = { data: filtered, ts: Date.now() };
+
+  return filtered;
 }
 
 const VALID_SIDES = ['buy', 'sell'] as const;
@@ -599,6 +875,19 @@ export function createTradingRoutes(
       }
       const result = riskController.updateDynamicRisk(portfolio_drawdown, vix_level);
       res.status(200).json(result);
+    } catch (err: any) {
+      errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
+    }
+  });
+
+  // GET /live-dashboard — aggregated live dashboard data (cached 30s)
+  router.get('/live-dashboard', async (_req: Request, res: Response) => {
+    try {
+      if (!db) {
+        return errorResponse(res, 503, 'SERVICE_UNAVAILABLE', 'Database is not configured');
+      }
+      const data = await handleLiveDashboard(gateway, riskController, db);
+      res.status(200).json(data);
     } catch (err: any) {
       errorResponse(res, 500, 'INTERNAL_ERROR', err.message);
     }

@@ -252,12 +252,13 @@ export class AutoTradingPipeline {
 
     // 4. Calculate order quantity
     //    For volatility_parity mode, we need total_assets and atr14
+    //    Use positions-based total market value (USD) instead of account.total_assets (HKD)
     let totalAssets: number | undefined;
     let atr14: number | undefined;
     if (config.quantity_mode === 'volatility_parity' || config.quantity_mode === 'kelly_formula') {
       try {
-        const account = await this.tradingGateway.getAccount();
-        totalAssets = account.total_assets;
+        const positions = await this.tradingGateway.getPositions();
+        totalAssets = positions.reduce((sum, p) => sum + (p.current_price ?? p.avg_cost) * p.quantity, 0);
       } catch { /* fallback: quantity will be 0 */ }
     }
     if (config.quantity_mode === 'volatility_parity') {
@@ -505,6 +506,10 @@ export class AutoTradingPipeline {
     try {
       account = await this.tradingGateway.getAccount();
       positions = await this.tradingGateway.getPositions();
+      // Override total_assets with positions-based USD market value
+      // (account.total_assets from Longport is netAssets in HKD, not USD)
+      const positionsMarketValue = positions.reduce((sum, p) => sum + (p.current_price ?? p.avg_cost) * p.quantity, 0);
+      account = { ...account, total_assets: positionsMarketValue };
     } catch (err: any) {
       logger.error('Failed to get account/positions for multi-strategy processing', { error: err.message });
       return results;

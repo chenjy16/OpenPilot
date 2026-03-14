@@ -1,0 +1,67 @@
+name: Release Build
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Run backend tests
+        run: npx jest --no-coverage --forceExit
+
+      - name: Run frontend tests
+        run: npx vitest --run
+        working-directory: frontend
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Build frontend
+        run: npm run ui:build
+
+      - name: Prepare release artifact
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          ARTIFACT_NAME="ai-assistant-mvp-${VERSION}"
+          mkdir -p release-staging/${ARTIFACT_NAME}
+          cp -r dist release-staging/${ARTIFACT_NAME}/
+          cp package.json release-staging/${ARTIFACT_NAME}/
+          cp package-lock.json release-staging/${ARTIFACT_NAME}/
+          cp .env.example release-staging/${ARTIFACT_NAME}/
+          cp README.md release-staging/${ARTIFACT_NAME}/
+          [ -d scripts ] && cp -r scripts release-staging/${ARTIFACT_NAME}/
+          [ -d docs ] && cp -r docs release-staging/${ARTIFACT_NAME}/
+          chmod +x release-staging/${ARTIFACT_NAME}/scripts/install.sh
+          cd release-staging
+          tar -czf ../${ARTIFACT_NAME}.tar.gz ${ARTIFACT_NAME}
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ai-assistant-mvp-*.tar.gz
