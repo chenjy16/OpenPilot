@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get, put } from '../../services/apiClient';
 
 interface ModelOption { ref: string; name: string; provider: string; providerLabel?: string; configured?: boolean; }
@@ -24,46 +25,47 @@ function isModelArrayField(path: string): boolean {
 }
 
 // Section metadata — aligned with OpenClaw config structure
+// label values are i18n keys resolved at render time via t()
 const SECTION_META: Record<string, { icon: string; label: string; description: string; order: number }> = {
-  gateway: { icon: '🌐', label: '网关配置', description: '端口、绑定、认证、TLS、热重载', order: 1 },
-  agents: { icon: '🤖', label: '智能体配置', description: '模型、压缩、沙箱、心跳、子智能体', order: 2 },
-  models: { icon: '🧩', label: '自定义模型', description: '自定义模型提供商、Bedrock 发现', order: 3 },
-  tools: { icon: '🔧', label: '工具配置', description: '工具策略、执行、搜索/抓取、媒体、循环检测', order: 4 },
-  skills: { icon: '⚡', label: '技能配置', description: '技能加载、白名单、限制', order: 5 },
-  plugins: { icon: '�', label: '插件系统', description: '插件加载、白名单、插槽绑定', order: 6 },
-  channels: { icon: '�', label: '渠道配置', description: 'Telegram、Discord、Slack 等', order: 7 },
-  bindings: { icon: '🔀', label: '路由绑定', description: '智能体路由绑定规则', order: 8 },
-  session: { icon: '�', label: '会话管理', description: '范围、重置、维护清理', order: 9 },
-  logging: { icon: '📋', label: '日志配置', description: '级别、文件、脱敏', order: 10 },
-  cron: { icon: '⏰', label: '定时任务', description: '调度器、并发、重试', order: 11 },
-  messages: { icon: '�', label: '消息处理', description: '前缀、队列、TTS', order: 12 },
-  commands: { icon: '⌨️', label: '命令系统', description: '原生命令、文本命令、Bash、权限', order: 13 },
-  broadcast: { icon: '📡', label: '广播配置', description: '广播策略与对等节点映射', order: 14 },
-  memory: { icon: '🧠', label: '记忆系统', description: '后端、引用模式', order: 15 },
-  diagnostics: { icon: '�', label: '诊断遥测', description: 'OpenTelemetry、标志', order: 16 },
-  update: { icon: '🔄', label: '自动更新', description: '通道、启动检查', order: 17 },
-  hooks: { icon: '🪝', label: 'Webhook', description: 'Hook 端点、映射', order: 18 },
-  browser: { icon: '🌍', label: '浏览器工具', description: '无头模式、CDP', order: 19 },
-  approvals: { icon: '✅', label: '审批配置', description: '执行审批流', order: 20 },
-  auth: { icon: '�', label: '认证 Profile', description: '模型提供商认证与退避策略', order: 21 },
-  discovery: { icon: '�', label: '服务发现', description: 'mDNS 广播与广域发现', order: 22 },
-  talk: { icon: '🎙️', label: '实时语音', description: 'Talk 实时语音模式', order: 23 },
-  voice: { icon: '🎤', label: '语音配置', description: 'STT 语音转文字 / TTS 文字转语音', order: 24 },
-  imageGeneration: { icon: '🖼️', label: '图片生成', description: 'Provider 配置（Qwen/Stability/OpenAI/本地SD）', order: 25 },
-  documentGeneration: { icon: '📄', label: '文档生成', description: 'PDF/PPT 输出目录、渲染器、默认样式', order: 26 },
-  video: { icon: '🎬', label: '视频编辑', description: 'FFmpeg 路径、输出目录、渲染超时', order: 27 },
-  polymarket: { icon: '📈', label: 'PolyOracle', description: '预测市场扫描、信号阈值、通知', order: 28 },
-  stockAnalysis: { icon: '📊', label: 'Quant Copilot', description: '量化股票分析：Finnhub API、自选股池、信号阈值', order: 29 },
-  ui: { icon: '🎨', label: 'UI 外观', description: 'Web UI 主题色、助手名称', order: 30 },
-  cli: { icon: '💻', label: 'CLI 配置', description: 'CLI 横幅与标语模式', order: 31 },
-  secrets: { icon: '🔒', label: '密钥管理', description: '密钥来源提供商', order: 32 },
-  env: { icon: '🌱', label: '环境变量', description: '环境变量注入与 Shell 导入', order: 33 },
-  meta: { icon: '📝', label: '配置元数据', description: '配置文件版本与时间戳', order: 34 },
-  apiKeys: { icon: '🔑', label: 'API 密钥', description: '环境变量设置', order: 35 },
-  nodeEnv: { icon: '⚙️', label: '运行环境', description: '环境标识', order: 36 },
-  logLevel: { icon: '📊', label: '全局日志级别', description: '日志级别', order: 37 },
-  databasePath: { icon: '💾', label: '数据库路径', description: 'SQLite 路径', order: 38 },
-  debug: { icon: '🐛', label: '调试模式', description: '调试输出', order: 39 },
+  gateway: { icon: '🌐', label: 'config.gateway', description: '', order: 1 },
+  agents: { icon: '🤖', label: 'config.agents', description: '', order: 2 },
+  models: { icon: '🧩', label: 'config.models', description: '', order: 3 },
+  tools: { icon: '🔧', label: 'config.tools', description: '', order: 4 },
+  skills: { icon: '⚡', label: 'config.skills', description: '', order: 5 },
+  plugins: { icon: '�', label: 'config.plugins', description: '', order: 6 },
+  channels: { icon: '�', label: 'config.channels', description: '', order: 7 },
+  bindings: { icon: '🔀', label: 'config.bindings', description: '', order: 8 },
+  session: { icon: '�', label: 'config.session', description: '', order: 9 },
+  logging: { icon: '📋', label: 'config.logging', description: '', order: 10 },
+  cron: { icon: '⏰', label: 'config.cronConfig', description: '', order: 11 },
+  messages: { icon: '�', label: 'config.messages', description: '', order: 12 },
+  commands: { icon: '⌨️', label: 'config.commands', description: '', order: 13 },
+  broadcast: { icon: '📡', label: 'config.broadcast', description: '', order: 14 },
+  memory: { icon: '🧠', label: 'config.memory', description: '', order: 15 },
+  diagnostics: { icon: '�', label: 'config.diagnostics', description: '', order: 16 },
+  update: { icon: '🔄', label: 'config.update', description: '', order: 17 },
+  hooks: { icon: '🪝', label: 'Webhook', description: '', order: 18 },
+  browser: { icon: '🌍', label: 'config.browser', description: '', order: 19 },
+  approvals: { icon: '✅', label: 'config.approvals', description: '', order: 20 },
+  auth: { icon: '�', label: 'config.auth', description: '', order: 21 },
+  discovery: { icon: '�', label: 'config.discovery', description: '', order: 22 },
+  talk: { icon: '🎙️', label: 'config.talk', description: '', order: 23 },
+  voice: { icon: '🎤', label: 'config.voice', description: '', order: 24 },
+  imageGeneration: { icon: '🖼️', label: 'config.imageGeneration', description: '', order: 25 },
+  documentGeneration: { icon: '📄', label: 'config.documentGeneration', description: '', order: 26 },
+  video: { icon: '🎬', label: 'config.video', description: '', order: 27 },
+  polymarket: { icon: '📈', label: 'PolyOracle', description: '', order: 28 },
+  stockAnalysis: { icon: '📊', label: 'Quant Copilot', description: '', order: 29 },
+  ui: { icon: '🎨', label: 'config.ui', description: '', order: 30 },
+  cli: { icon: '💻', label: 'config.cli', description: '', order: 31 },
+  secrets: { icon: '🔒', label: 'config.secrets', description: '', order: 32 },
+  env: { icon: '🌱', label: 'config.env', description: '', order: 33 },
+  meta: { icon: '📝', label: 'config.meta', description: '', order: 34 },
+  apiKeys: { icon: '🔑', label: 'config.apiKeys', description: '', order: 35 },
+  nodeEnv: { icon: '⚙️', label: 'config.nodeEnv', description: '', order: 36 },
+  logLevel: { icon: '📊', label: 'config.logLevel', description: '', order: 37 },
+  databasePath: { icon: '💾', label: 'config.databasePath', description: '', order: 38 },
+  debug: { icon: '🐛', label: 'config.debug', description: '', order: 39 },
 };
 
 // Known enum fields for select rendering
@@ -114,6 +116,7 @@ const ENUM_FIELDS: Record<string, string[]> = {
 };
 
 const ConfigView: React.FC = () => {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<Record<string, unknown> | null>(null);
   const [originalConfig, setOriginalConfig] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,14 +184,14 @@ const ConfigView: React.FC = () => {
       const payload = mode === 'raw' ? JSON.parse(rawJson) : config;
       const result = await put<{ ok: boolean; savedTo?: string; saveError?: string }>('/config', payload);
       if (result.saveError) {
-        setSaveMsg(`已保存到内存，文件写入失败: ${result.saveError}`);
+        setSaveMsg(t("config.savedToMemory"));
       } else {
-        setSaveMsg(result.savedTo ? `已保存到 ${result.savedTo}` : '配置已保存');
+        setSaveMsg(result.savedTo ? t("config.savedTo", { path: result.savedTo }) : t('config.configSaved'));
       }
       await fetchConfig();
       setTimeout(() => setSaveMsg(null), 5000);
     } catch (err) {
-      setSaveMsg(`保存失败: ${(err as Error).message}`);
+      setSaveMsg(`${t("common.saveFailed")}: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -214,16 +217,16 @@ const ConfigView: React.FC = () => {
     : search
       ? sortedSections.filter(([k]) => {
           const meta = SECTION_META[k];
-          const haystack = `${k} ${meta?.label ?? ''} ${meta?.description ?? ''}`.toLowerCase();
+          const haystack = `${k} ${meta?.label ? t(meta.label) : ''} ${meta?.description ?? ''}`.toLowerCase();
           return haystack.includes(search.toLowerCase());
         })
       : sortedSections;
 
   const navItems = [
-    { key: null, label: '全部设置', icon: '📋' },
+    { key: null, label: t('config.allSettings'), icon: '📋' },
     ...sortedSections.map(([k]) => ({
       key: k,
-      label: SECTION_META[k]?.label || k,
+      label: SECTION_META[k]?.label ? t(SECTION_META[k].label) : k,
       icon: SECTION_META[k]?.icon || '📄',
     })),
   ];
@@ -233,12 +236,12 @@ const ConfigView: React.FC = () => {
       {/* Sidebar */}
       <div className="w-52 flex-shrink-0 border-r border-gray-200 bg-gray-50 flex flex-col">
         <div className="border-b border-gray-200 px-3 py-3">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">系统配置</span>
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('config.title')}</span>
         </div>
         <div className="px-3 py-2">
           <input
             type="text" value={search} onChange={e => { setSearch(e.target.value); setActiveSection(null); }}
-            placeholder="搜索配置项..."
+            placeholder={t("config.searchPlaceholder")}
             className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
           />
         </div>
@@ -258,11 +261,11 @@ const ConfigView: React.FC = () => {
         <div className="border-t border-gray-200 p-3 flex gap-1">
           <button onClick={() => setMode('form')}
             className={`flex-1 rounded py-1 text-xs ${mode === 'form' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-            表单
+            {t('config.form')}
           </button>
           <button onClick={() => setMode('raw')}
             className={`flex-1 rounded py-1 text-xs ${mode === 'raw' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-600'}`}>
-            JSON
+            {t('config.json')}
           </button>
         </div>
       </div>
@@ -272,26 +275,26 @@ const ConfigView: React.FC = () => {
         <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-2">
           <button onClick={fetchConfig} disabled={loading}
             className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-            🔄 重新加载
+            {t('config.reload')}
           </button>
           <button onClick={handleSave} disabled={!isDirty || saving}
             className="rounded bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50">
-            {saving ? '保存中...' : '💾 保存到文件'}
+            {saving ? t('common.saving') : t('config.saveToFile')}
           </button>
           {isDirty && (
             <button onClick={handleReset}
               className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50">
-              ↩ 撤销
+              {t('config.undo')}
             </button>
           )}
           <div className="flex-1" />
           {isDirty && (
             <span className="text-xs text-amber-600">
-              {mode === 'form' ? `${changes.length} 项未保存变更` : '有未保存变更'}
+              {mode === 'form' ? t("config.unsavedChanges", { count: changes.length }) : t('config.hasUnsavedChanges')}
             </span>
           )}
           {saveMsg && (
-            <span className={`text-xs ${saveMsg.includes('失败') ? 'text-red-500' : 'text-green-600'}`}>
+            <span className={`text-xs ${saveMsg.includes('fail') ? 'text-red-500' : 'text-green-600'}`}>
               {saveMsg}
             </span>
           )}
@@ -300,7 +303,7 @@ const ConfigView: React.FC = () => {
         {mode === 'form' && changes.length > 0 && (
           <details className="border-b border-amber-200 bg-amber-50 px-4 py-2">
             <summary className="cursor-pointer text-xs text-amber-700">
-              查看 {changes.length} 项变更
+              {t("config.viewChanges", { count: changes.length })}
             </summary>
             <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
               {changes.map(c => (
@@ -316,7 +319,7 @@ const ConfigView: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
-            <div className="flex h-32 items-center justify-center text-sm text-gray-400">加载中...</div>
+            <div className="flex h-32 items-center justify-center text-sm text-gray-400">{t("common.loading")}</div>
           ) : error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{error}</div>
           ) : mode === 'raw' ? (
@@ -335,7 +338,7 @@ const ConfigView: React.FC = () => {
                     key={key}
                     sectionKey={key}
                     icon={meta.icon}
-                    label={meta.label}
+                    label={meta.label ? t(meta.label) : key}
                     description={meta.description}
                     value={value}
                     schema={schema[key]}
@@ -430,19 +433,19 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
       <div>
         <select value={currentVal} onChange={e => onChange(e.target.value)}
           className={`w-full rounded border px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 ${isValid ? 'border-gray-300' : 'border-orange-400 bg-orange-50'}`}>
-          {!isValid && currentVal && <option value={currentVal}>⚠️ {currentVal} (未配置)</option>}
+          {!isValid && currentVal && <option value={currentVal}>⚠️ {currentVal} {t("config.notConfigured")}</option>}
           {[...grouped.entries()].map(([provider, models]) => (
             <optgroup key={provider} label={provider}>
               {models.map(m => (
                 <option key={m.ref} value={m.ref}>
-                  {m.name} {m.configured ? '' : '(未配置)'} — {m.ref}
+                  {m.name} {m.configured ? '' : '{t("config.notConfigured")}'} — {m.ref}
                 </option>
               ))}
             </optgroup>
           ))}
         </select>
         {!isValid && currentVal && (
-          <p className="mt-1 text-xs text-orange-600">当前值 "{currentVal}" 不在已知模型列表中</p>
+          <p className="mt-1 text-xs text-orange-600">{t("config.currentValueNotInList", { value: currentVal })}</p>
         )}
       </div>
     );
@@ -467,7 +470,7 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
         >
           <div className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${value ? 'translate-x-4' : 'translate-x-0.5'}`} />
         </button>
-        <span className="text-sm text-gray-700">{value ? '启用' : '禁用'}</span>
+        <span className="text-sm text-gray-700">{value ? t('common.enabled') : t('common.disabled')}</span>
       </label>
     );
   }
@@ -487,7 +490,7 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
         type={isPassword && !showPassword ? 'password' : 'text'}
         value={value != null ? String(value) : ''}
         onChange={e => onChange(e.target.value)}
-        placeholder={isPassword ? '(未设置)' : ''}
+        placeholder={isPassword ? '{t("config.notSet")}' : ''}
         className={`w-full rounded border px-2 py-1 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ${
           isMaskedVal ? 'border-gray-200 bg-gray-50 text-gray-400' : 'border-gray-300'
         } ${isPassword ? 'pr-14' : ''}`}
@@ -502,7 +505,7 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
         </button>
       ) : null}
       {isMaskedVal && !showPassword && (
-        <p className="mt-0.5 text-xs text-green-600">✓ 已配置（输入新值可覆盖）</p>
+        <p className="mt-0.5 text-xs text-green-600">{t("config.envVarSet")}</p>
       )}
     </div>
   );
@@ -565,13 +568,13 @@ const NestedFields: React.FC<{
               <p className="mb-1 text-xs text-gray-400">{meta.description}</p>
             )}
             {v === null || v === undefined ? (
-              <span className="text-xs text-gray-400 font-mono italic">(未设置)</span>
+              <span className="text-xs text-gray-400 font-mono italic">{t("config.notSet")}</span>
             ) : isApiKeys ? (
               <input
                 type="password"
                 value={v ? String(v) : ''}
                 onChange={e => handleFieldChange(k, e.target.value || undefined)}
-                placeholder="(环境变量设置)"
+                placeholder={t("config.envVarSet")}
                 disabled
                 className="w-full rounded border border-gray-200 bg-gray-50 px-2 py-1 text-sm font-mono text-gray-400"
               />
@@ -602,7 +605,7 @@ const NestedBlock: React.FC<{
     <div className="rounded border border-gray-100 bg-gray-50">
       <button onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs text-gray-500 hover:bg-gray-100">
-        <span>{open ? '▼' : '▶'} {keyCount} 项</span>
+        <span>{open ? '▼' : '▶'} {t("config.items", { count: keyCount })}</span>
       </button>
       {open && (
         <div className="border-t border-gray-100 px-3 py-2">
@@ -643,7 +646,7 @@ const ArrayField: React.FC<{
       <div className="space-y-2">
         <div className="flex flex-wrap gap-1">
           {currentRefs.length === 0 ? (
-            <span className="text-xs text-gray-400">(空)</span>
+            <span className="text-xs text-gray-400">{t("config.empty")}</span>
           ) : (
             currentRefs.map((ref, i) => {
               const meta = _modelOptions.find(m => m.ref === ref);
@@ -652,7 +655,7 @@ const ArrayField: React.FC<{
                 <span key={i} className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono ${isValid ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
                   {meta?.name ?? ref}{!isValid && ' ⚠️'}
                   <button onClick={() => onChange(currentRefs.filter((_, j) => j !== i))}
-                    className="ml-0.5 text-gray-400 hover:text-red-500" title="移除">×</button>
+                    className="ml-0.5 text-gray-400 hover:text-red-500" title={t("config.remove")}>×</button>
                 </span>
               );
             })
@@ -664,12 +667,12 @@ const ArrayField: React.FC<{
             onChange={e => { if (e.target.value) onChange([...currentRefs, e.target.value]); }}
             className="rounded border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
           >
-            <option value="">+ 添加 fallback 模型...</option>
+            <option value="">{t("config.addFallbackModel")}</option>
             {[...grouped.entries()].map(([provider, models]) => (
               <optgroup key={provider} label={provider}>
                 {models.map(m => (
                   <option key={m.ref} value={m.ref}>
-                    {m.name} {m.configured ? '' : '(未配置)'} — {m.ref}
+                    {m.name} {m.configured ? '' : '{t("config.notConfigured")}'} — {m.ref}
                   </option>
                 ))}
               </optgroup>
@@ -685,12 +688,12 @@ const ArrayField: React.FC<{
       <div className="flex items-center gap-1">
         <input type="text" value={text} onChange={e => setText(e.target.value)}
           className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
-          placeholder="逗号分隔" />
+          placeholder={t("config.empty")} />
         <button onClick={() => {
           onChange(text.split(',').map(s => s.trim()).filter(Boolean));
           setEditing(false);
-        }} className="rounded bg-blue-500 px-2 py-1 text-xs text-white">确定</button>
-        <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-600">取消</button>
+        }} className="rounded bg-blue-500 px-2 py-1 text-xs text-white">{t("common.confirm")}</button>
+        <button onClick={() => setEditing(false)} className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-600">{t("common.cancel")}</button>
       </div>
     );
   }
@@ -699,7 +702,7 @@ const ArrayField: React.FC<{
     <div className="flex items-center gap-1">
       <div className="flex flex-wrap gap-1">
         {value.length === 0 ? (
-          <span className="text-xs text-gray-400">(空)</span>
+          <span className="text-xs text-gray-400">{t("config.empty")}</span>
         ) : (
           value.map((item, i) => (
             <span key={i} className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-gray-600">
@@ -709,7 +712,7 @@ const ArrayField: React.FC<{
         )}
       </div>
       <button onClick={() => { setText(value.join(', ')); setEditing(true); }}
-        className="ml-1 text-xs text-blue-500 hover:underline">编辑</button>
+        className="ml-1 text-xs text-blue-500 hover:underline">{t("common.edit")}</button>
     </div>
   );
 };

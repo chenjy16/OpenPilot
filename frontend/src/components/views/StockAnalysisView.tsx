@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get, post } from '../../services/apiClient';
 import KlineChart from '../charts/KlineChart';
 
@@ -48,6 +49,7 @@ interface AnalyzeResult {
 // ---------------------------------------------------------------------------
 
 const StockAnalysisView: React.FC = () => {
+  const { t } = useTranslation();
   const [signals, setSignals] = useState<StockSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +91,7 @@ const StockAnalysisView: React.FC = () => {
       setChartSymbol(trimmed);
       await fetchSignals();
     } catch (err) {
-      setError(`分析失败: ${(err as Error).message}`);
+      setError(t('stockAnalysis.analyzeFailed', { message: (err as Error).message }));
     } finally {
       setAnalyzing(false);
     }
@@ -97,9 +99,9 @@ const StockAnalysisView: React.FC = () => {
 
   const actionLabel = (action: string) => {
     switch (action) {
-      case 'buy': return { text: '买入', color: 'bg-green-100 text-green-700' };
-      case 'sell': return { text: '卖出', color: 'bg-red-100 text-red-700' };
-      case 'hold': return { text: '观望', color: 'bg-yellow-100 text-yellow-700' };
+      case 'buy': return { text: t('stockAnalysis.buy'), color: 'bg-green-100 text-green-700' };
+      case 'sell': return { text: t('stockAnalysis.sell'), color: 'bg-red-100 text-red-700' };
+      case 'hold': return { text: t('stockAnalysis.hold'), color: 'bg-yellow-100 text-yellow-700' };
       default: return { text: action, color: 'bg-gray-100 text-gray-700' };
     }
   };
@@ -115,10 +117,10 @@ const StockAnalysisView: React.FC = () => {
 
   const outcomeLabel = (outcome: string | null) => {
     switch (outcome) {
-      case 'hit_tp': return { text: '止盈', color: 'bg-green-100 text-green-700' };
-      case 'hit_sl': return { text: '止损', color: 'bg-red-100 text-red-700' };
-      case 'expired': return { text: '过期', color: 'bg-gray-100 text-gray-500' };
-      case 'pending': return { text: '待验证', color: 'bg-blue-100 text-blue-600' };
+      case 'hit_tp': return { text: t('stockAnalysis.hitTp'), color: 'bg-green-100 text-green-700' };
+      case 'hit_sl': return { text: t('stockAnalysis.hitSl'), color: 'bg-red-100 text-red-700' };
+      case 'expired': return { text: t('stockAnalysis.expired'), color: 'bg-gray-100 text-gray-500' };
+      case 'pending': return { text: t('stockAnalysis.pending'), color: 'bg-blue-100 text-blue-600' };
       default: return null;
     }
   };
@@ -151,16 +153,16 @@ const StockAnalysisView: React.FC = () => {
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">📈</span>
-          <h1 className="text-lg font-semibold text-gray-800">股票分析</h1>
+          <h1 className="text-lg font-semibold text-gray-800">{t('stockAnalysis.title')}</h1>
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-            量化信号仪表盘
+            {t('stockAnalysis.quantDashboard')}
           </span>
         </div>
         <button
           onClick={fetchSignals}
           className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200"
         >
-          🔄 刷新
+          🔄 {t('stockAnalysis.refresh')}
         </button>
       </div>
 
@@ -173,10 +175,10 @@ const StockAnalysisView: React.FC = () => {
         {/* Manual Analysis Panel */}
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800">
-            🔍 手动分析
+            🔍 {t('stockAnalysis.manualAnalysis')}
           </h2>
           <p className="mt-1 text-xs text-gray-500">
-            输入股票代码触发单只股票的完整分析流程（技术面 + 消息面 + AI 综合研判）
+            {t('stockAnalysis.manualAnalysisDesc')}
           </p>
           <div className="mt-4 flex items-center gap-3">
             <input
@@ -184,7 +186,7 @@ const StockAnalysisView: React.FC = () => {
               value={symbol}
               onChange={e => setSymbol(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleAnalyze(); }}
-              placeholder="输入股票代码，如 AAPL"
+              placeholder={t('stockAnalysis.symbolPlaceholder')}
               className="w-48 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               disabled={analyzing}
             />
@@ -193,7 +195,7 @@ const StockAnalysisView: React.FC = () => {
               disabled={analyzing || !symbol.trim()}
               className="rounded-md bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:opacity-50"
             >
-              {analyzing ? '⏳ 分析中...' : '📊 开始分析'}
+              {analyzing ? t('stockAnalysis.analyzing') : t('stockAnalysis.startAnalysis')}
             </button>
           </div>
 
@@ -206,26 +208,26 @@ const StockAnalysisView: React.FC = () => {
                   {actionLabel(analyzeResult.action).text}
                 </span>
                 <span className={`rounded px-2 py-0.5 text-xs ${confidenceStyle(analyzeResult.confidence)}`}>
-                  置信度: {analyzeResult.confidence}
+                  {t('stockAnalysis.confidence')}: {analyzeResult.confidence}
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-600">
-                <span>💰 入场: ${analyzeResult.entry_price?.toFixed(2)}</span>
-                <span>🛑 止损: ${analyzeResult.stop_loss?.toFixed(2)}</span>
-                <span>🎯 止盈: ${analyzeResult.take_profit?.toFixed(2)}</span>
+                <span>💰 {t('stockAnalysis.entry')}: ${analyzeResult.entry_price?.toFixed(2)}</span>
+                <span>🛑 {t('stockAnalysis.stopLoss')}: ${analyzeResult.stop_loss?.toFixed(2)}</span>
+                <span>🎯 {t('stockAnalysis.takeProfit')}: ${analyzeResult.take_profit?.toFixed(2)}</span>
               </div>
               {analyzeResult.reasoning && (
                 <div className="mt-2 rounded bg-white p-2 text-xs text-gray-600">
-                  <span className="font-medium text-gray-500">分析逻辑: </span>
+                  <span className="font-medium text-gray-500">{t('stockAnalysis.reasoning')}: </span>
                   {analyzeResult.reasoning}
                 </div>
               )}
               {analyzeResult.scores && (analyzeResult.scores.technical_score != null || analyzeResult.scores.sentiment_score != null || analyzeResult.scores.overall_score != null) && (
                 <div className="mt-3 space-y-1.5 rounded bg-white p-3">
-                  <span className="text-xs font-medium text-gray-500">多因子评分</span>
-                  <ScoreBar label="技术面" score={analyzeResult.scores.technical_score} />
-                  <ScoreBar label="消息面" score={analyzeResult.scores.sentiment_score} />
-                  <ScoreBar label="综合" score={analyzeResult.scores.overall_score} />
+                  <span className="text-xs font-medium text-gray-500">{t('stockAnalysis.multiFactorScore')}</span>
+                  <ScoreBar label={t('stockAnalysis.technical')} score={analyzeResult.scores.technical_score} />
+                  <ScoreBar label={t('stockAnalysis.sentiment')} score={analyzeResult.scores.sentiment_score} />
+                  <ScoreBar label={t('stockAnalysis.overall')} score={analyzeResult.scores.overall_score} />
                 </div>
               )}
             </div>
@@ -244,21 +246,21 @@ const StockAnalysisView: React.FC = () => {
         {/* Signals List Panel */}
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800">
-            📊 信号列表
+            📊 {t('stockAnalysis.signalList')}
           </h2>
           <p className="mt-1 text-xs text-gray-500">
-            最近的股票分析信号记录
+            {t('stockAnalysis.signalListDesc')}
           </p>
 
           {loading ? (
             <div className="flex h-32 items-center justify-center text-sm text-gray-400">
-              加载信号数据...
+              {t('stockAnalysis.loadingSignals')}
             </div>
           ) : signals.length === 0 ? (
             <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-8 text-center">
               <div className="mb-3 text-4xl">📊</div>
-              <p className="text-sm text-gray-500">暂无分析信号</p>
-              <p className="mt-1 text-xs text-gray-400">使用上方的手动分析功能生成信号</p>
+              <p className="text-sm text-gray-500">{t('stockAnalysis.noSignals')}</p>
+              <p className="mt-1 text-xs text-gray-400">{t('stockAnalysis.noSignalsHint')}</p>
             </div>
           ) : (
             <div className="mt-4 space-y-3">
@@ -274,7 +276,7 @@ const StockAnalysisView: React.FC = () => {
                         </span>
                         {signal.confidence && (
                           <span className={`rounded px-2 py-0.5 text-xs ${confidenceStyle(signal.confidence)}`}>
-                            置信度: {signal.confidence}
+                            {t('stockAnalysis.confidence')}: {signal.confidence}
                           </span>
                         )}
                         {(() => {
@@ -295,7 +297,7 @@ const StockAnalysisView: React.FC = () => {
                               : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                           }`}
                         >
-                          📈 K线
+                          📈 {t('stockAnalysis.kline')}
                         </button>
                         <span className="text-xs text-gray-400">
                           {new Date(signal.created_at * 1000).toLocaleString()}
@@ -303,9 +305,9 @@ const StockAnalysisView: React.FC = () => {
                       </div>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-600">
-                      {signal.entry_price != null && <span>💰 入场: ${signal.entry_price.toFixed(2)}</span>}
-                      {signal.stop_loss != null && <span>🛑 止损: ${signal.stop_loss.toFixed(2)}</span>}
-                      {signal.take_profit != null && <span>🎯 止盈: ${signal.take_profit.toFixed(2)}</span>}
+                      {signal.entry_price != null && <span>💰 {t('stockAnalysis.entry')}: ${signal.entry_price.toFixed(2)}</span>}
+                      {signal.stop_loss != null && <span>🛑 {t('stockAnalysis.stopLoss')}: ${signal.stop_loss.toFixed(2)}</span>}
+                      {signal.take_profit != null && <span>🎯 {t('stockAnalysis.takeProfit')}: ${signal.take_profit.toFixed(2)}</span>}
                     </div>
                     {signal.reasoning && (
                       <div className="mt-2 rounded bg-gray-50 p-2 text-xs text-gray-600">
@@ -314,10 +316,10 @@ const StockAnalysisView: React.FC = () => {
                     )}
                     {(signal.technical_score != null || signal.sentiment_score != null || signal.overall_score != null) && (
                       <div className="mt-2 space-y-1.5 rounded bg-gray-50 p-3">
-                        <span className="text-xs font-medium text-gray-500">多因子评分</span>
-                        <ScoreBar label="技术面" score={signal.technical_score} />
-                        <ScoreBar label="消息面" score={signal.sentiment_score} />
-                        <ScoreBar label="综合" score={signal.overall_score} />
+                        <span className="text-xs font-medium text-gray-500">{t('stockAnalysis.multiFactorScore')}</span>
+                        <ScoreBar label={t('stockAnalysis.technical')} score={signal.technical_score} />
+                        <ScoreBar label={t('stockAnalysis.sentiment')} score={signal.sentiment_score} />
+                        <ScoreBar label={t('stockAnalysis.overall')} score={signal.overall_score} />
                       </div>
                     )}
                     {chartSymbol === signal.symbol && (

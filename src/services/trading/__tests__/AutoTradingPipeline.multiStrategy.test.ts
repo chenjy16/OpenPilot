@@ -413,10 +413,11 @@ describe('AutoTradingPipeline.processMultiStrategySignals', () => {
         aiRuntime,
       });
 
-      // total_assets=100000, max_risk_pct=0.02, entry=150, stop=142.5
+      // total_assets falls back to available_cash=50000 when no positions exist
+      // max_risk_pct=0.02, entry=150, stop=142.5
       // risk_per_share = 150 - 142.5 = 7.5
-      // max_risk_amount = 100000 * 0.02 = 2000
-      // quantity = floor(2000 / 7.5) = 266
+      // max_risk_amount = 50000 * 0.02 = 1000
+      // quantity = floor(1000 / 7.5) = 133
       const signals = makeSignalMap(makeStrategySignal());
       const results = await pipeline.processMultiStrategySignals(signals);
 
@@ -424,7 +425,7 @@ describe('AutoTradingPipeline.processMultiStrategySignals', () => {
       expect(results[0].action).toBe('order_created');
       expect(gw.placeOrder).toHaveBeenCalledWith(
         expect.objectContaining({
-          quantity: 266,
+          quantity: 133,
         }),
       );
     });

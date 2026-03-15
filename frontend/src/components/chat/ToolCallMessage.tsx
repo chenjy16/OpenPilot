@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ToolCall, ToolResult } from '../../types';
 
 interface ToolCallMessageProps {
@@ -23,6 +24,7 @@ const ToolCallMessage: React.FC<ToolCallMessageProps> = ({ toolCalls, toolResult
 };
 
 const ToolCallItem: React.FC<{ toolCall: ToolCall; result?: ToolResult }> = ({ toolCall: tc, result }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const hasError = !!result?.error;
 
@@ -41,10 +43,10 @@ const ToolCallItem: React.FC<{ toolCall: ToolCall; result?: ToolResult }> = ({ t
         <span role="img" aria-label="tool">🔧</span>
         <span className="font-medium text-gray-700 truncate flex-1">{tc.name}</span>
         {hasError && (
-          <span className="text-xs text-red-500 font-medium shrink-0">失败</span>
+          <span className="text-xs text-red-500 font-medium shrink-0">{t('chat.failed')}</span>
         )}
         {result && !hasError && (
-          <span className="text-xs text-green-600 font-medium shrink-0">完成</span>
+          <span className="text-xs text-green-600 font-medium shrink-0">{t('chat.done')}</span>
         )}
         {!result && (
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400 shrink-0" />
@@ -56,7 +58,7 @@ const ToolCallItem: React.FC<{ toolCall: ToolCall; result?: ToolResult }> = ({ t
         <div className="border-t border-gray-100 px-3 py-2 space-y-2">
           {/* Arguments */}
           <div>
-            <div className="text-xs text-gray-400 mb-1">参数</div>
+            <div className="text-xs text-gray-400 mb-1">{t('chat.params')}</div>
             <div className="text-xs bg-gray-50 rounded p-2 max-h-40 overflow-auto">
               <pre className="whitespace-pre-wrap break-words">
                 {JSON.stringify(tc.arguments, null, 2)}
@@ -67,7 +69,7 @@ const ToolCallItem: React.FC<{ toolCall: ToolCall; result?: ToolResult }> = ({ t
           {/* Result */}
           {result && (
             <div>
-              <div className="text-xs text-gray-400 mb-1">结果</div>
+              <div className="text-xs text-gray-400 mb-1">{t('chat.result')}</div>
               {result.error ? (
                 <div className="text-xs text-red-600 bg-red-50 rounded p-2 max-h-40 overflow-auto">
                   <pre className="whitespace-pre-wrap break-words">{result.error}</pre>

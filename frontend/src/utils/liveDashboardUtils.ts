@@ -89,12 +89,12 @@ export function formatDecimal(n: number): string {
 }
 
 /**
- * Map a trade side to a Chinese label and color class.
- * buy → green "买入", sell → red "卖出"
+ * Map a trade side to a label key and color class.
+ * buy → green, sell → red
  */
 export function getSideLabel(side: 'buy' | 'sell'): { text: string; colorClass: string } {
   if (side === 'buy') {
-    return { text: '买入', colorClass: 'text-green-500' };
+    return { text: 'live.buy', colorClass: 'text-green-500' };
   }
-  return { text: '卖出', colorClass: 'text-red-500' };
+  return { text: 'live.sell', colorClass: 'text-red-500' };
 }

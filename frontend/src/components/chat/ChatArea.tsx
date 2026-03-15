@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { useSessionStore } from '../../stores/sessionStore';
 import { wsClient } from '../../services/wsClient';
@@ -15,9 +16,9 @@ const WS_STATUS_MAP = {
 } as const;
 
 const WS_STATUS_LABELS: Record<string, string> = {
-  connected: '已连接',
-  disconnected: '已断开',
-  reconnecting: '重连中',
+  connected: 'chat.connected',
+  disconnected: 'chat.disconnected',
+  reconnecting: 'chat.reconnecting',
 };
 
 export interface ToolStreamEntry {
@@ -30,6 +31,7 @@ export interface ToolStreamEntry {
 }
 
 const ChatArea: React.FC = () => {
+  const { t } = useTranslation();
   const { wsStatus, error, isStreaming, compactSession } = useChatStore();
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const [compacting, setCompacting] = useState(false);
@@ -79,10 +81,10 @@ const ChatArea: React.FC = () => {
   const handleCompact = useCallback(async () => {
     if (!activeSessionId || compacting) return;
     setCompacting(true);
-    setCompactionToast('正在压缩上下文...');
+    setCompactionToast(t('chat.compactingContext'));
     try {
       await compactSession(activeSessionId);
-      setCompactionToast('上下文压缩完成');
+      setCompactionToast(t('chat.compactDone'));
       setTimeout(() => setCompactionToast(null), 5000);
     } catch {
       setCompactionToast(null);
@@ -104,7 +106,7 @@ const ChatArea: React.FC = () => {
       <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-2">
         <StatusBadge
           status={WS_STATUS_MAP[wsStatus]}
-          label={WS_STATUS_LABELS[wsStatus]}
+          label={t(WS_STATUS_LABELS[wsStatus])}
         />
 
         {wsStatus === 'disconnected' && (
@@ -112,7 +114,7 @@ const ChatArea: React.FC = () => {
             onClick={handleReconnect}
             className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-700 hover:bg-gray-300"
           >
-            重新连接
+            {t('chat.reconnect')}
           </button>
         )}
 
@@ -122,7 +124,7 @@ const ChatArea: React.FC = () => {
         {isStreaming && (
           <span className="flex items-center gap-1 text-xs text-blue-600">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
-            生成中
+            {t('chat.streaming')}
           </span>
         )}
 
@@ -131,7 +133,7 @@ const ChatArea: React.FC = () => {
           disabled={!activeSessionId || compacting}
           className="rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {compacting ? '压缩中...' : '压缩会话'}
+          {compacting ? t('chat.compacting') : t('chat.compactSession')}
         </button>
       </div>
 

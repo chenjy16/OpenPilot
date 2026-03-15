@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 type BadgeStatus = 'running' | 'idle' | 'error' | 'success' | 'warning' | 'info';
 
 interface StatusBadgeProps {
@@ -15,20 +17,21 @@ const STATUS_STYLES: Record<BadgeStatus, string> = {
 };
 
 const DEFAULT_LABELS: Record<BadgeStatus, string> = {
-  running: '运行中',
-  idle: '空闲',
-  error: '错误',
-  success: '成功',
-  warning: '警告',
-  info: '信息',
+  running: 'status.running',
+  idle: 'status.idle',
+  error: 'status.error',
+  success: 'status.success',
+  warning: 'status.warning',
+  info: 'status.info',
 };
 
 const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label }) => {
+  const { t } = useTranslation();
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[status]}`}
     >
-      {label ?? DEFAULT_LABELS[status]}
+      {label ?? t(DEFAULT_LABELS[status])}
     </span>
   );
 };

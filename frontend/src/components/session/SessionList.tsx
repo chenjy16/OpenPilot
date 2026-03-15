@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useChatStore } from '../../stores/chatStore';
 import ErrorBanner from '../common/ErrorBanner';
@@ -7,6 +8,7 @@ import type { Message } from '../../types';
 import { get } from '../../services/apiClient';
 
 const SessionList: React.FC = () => {
+  const { t } = useTranslation();
   const {
     sessions,
     activeSessionId,
@@ -54,7 +56,7 @@ const SessionList: React.FC = () => {
         onClick={createSession}
         disabled={loading}
       >
-        + 新建会话
+        {t('session.newSession')}
       </button>
 
       {error && (
@@ -66,7 +68,7 @@ const SessionList: React.FC = () => {
 
       {!loading && sessions.length === 0 && (
         <div className="py-8 text-center text-sm text-gray-500">
-          暂无会话，点击上方按钮新建一个吧
+          {t('session.noSessions')}
         </div>
       )}
 

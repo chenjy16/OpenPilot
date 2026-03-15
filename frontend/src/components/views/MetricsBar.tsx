@@ -12,6 +12,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatPercent, formatDecimal } from '../../utils/liveDashboardUtils';
 import type { LiveMetrics } from '../../stores/liveDashboardStore';
 
@@ -20,20 +21,22 @@ export interface MetricsBarProps {
 }
 
 const MetricsBar: React.FC<MetricsBarProps> = ({ metrics }) => {
+  const { t } = useTranslation();
+
   if (!metrics) {
     return (
       <div data-testid="metrics-bar-unavailable" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        数据暂不可用
+        {t('common.dataUnavailable')}
       </div>
     );
   }
 
   const items: { label: string; value: string }[] = [
-    { label: '胜率', value: formatPercent(metrics.win_rate) },
-    { label: '夏普比率', value: metrics.sharpe_ratio !== null ? formatDecimal(metrics.sharpe_ratio) : 'N/A' },
-    { label: '最大回撤', value: formatPercent(metrics.max_drawdown_pct) },
-    { label: '总交易笔数', value: String(metrics.total_trades) },
-    { label: '盈亏比', value: formatDecimal(metrics.profit_factor) },
+    { label: t('live.winRate'), value: formatPercent(metrics.win_rate) },
+    { label: t('live.sharpeRatio'), value: metrics.sharpe_ratio !== null ? formatDecimal(metrics.sharpe_ratio) : 'N/A' },
+    { label: t('live.maxDrawdown'), value: formatPercent(metrics.max_drawdown_pct) },
+    { label: t('live.totalTrades'), value: String(metrics.total_trades) },
+    { label: t('live.profitFactor'), value: formatDecimal(metrics.profit_factor) },
   ];
 
   return (

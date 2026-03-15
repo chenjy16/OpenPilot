@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUIStore } from '../../stores/uiStore';
 import type { NavTab } from '../../stores/uiStore';
 import NavSidebar from './NavSidebar';
@@ -43,6 +44,7 @@ const VIEW_MAP: Record<NavTab, React.ReactNode> = {
 
 const AppLayout: React.FC = () => {
   const { activeTab, sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleResize = () => {
@@ -76,7 +78,7 @@ const AppLayout: React.FC = () => {
           <button
             className="rounded p-1 text-gray-600 hover:bg-gray-100"
             onClick={toggleSidebar}
-            aria-label="切换侧边栏"
+            aria-label={t('common.toggleSidebar')}
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />

@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useUIStore, NAV_GROUPS } from '../../stores/uiStore';
 import type { NavTab } from '../../stores/uiStore';
 import { useChatStore } from '../../stores/chatStore';
+import LanguageSwitcher from '../common/LanguageSwitcher';
 
 type Theme = 'system' | 'light' | 'dark';
 
 const NavSidebar: React.FC = () => {
   const { activeTab, setActiveTab } = useUIStore();
+  const { t } = useTranslation();
   const wsStatus = useChatStore((s) => s.wsStatus);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [theme, setTheme] = useState<Theme>(() => {
@@ -47,7 +50,7 @@ const NavSidebar: React.FC = () => {
       </div>
 
       {/* Navigation groups (§2.3) */}
-      <nav className="flex-1 overflow-y-auto px-2 py-2" aria-label="主导航">
+      <nav className="flex-1 overflow-y-auto px-2 py-2" aria-label="Main navigation">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="mb-2">
             <button
@@ -61,7 +64,7 @@ const NavSidebar: React.FC = () => {
               <NavItem
                 key={tab.id}
                 id={tab.id}
-                label={tab.label}
+                label={t(tab.label)}
                 icon={tab.icon}
                 active={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -75,13 +78,16 @@ const NavSidebar: React.FC = () => {
       <div className="border-t border-gray-700 px-4 py-3">
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-500">v0.1.0</span>
-          <button
-            onClick={cycleTheme}
-            className="rounded p-1 text-sm hover:bg-gray-800"
-            title={`主题: ${theme}`}
-          >
-            {themeIcon}
-          </button>
+          <div className="flex items-center gap-1">
+            <LanguageSwitcher />
+            <button
+              onClick={cycleTheme}
+              className="rounded p-1 text-sm hover:bg-gray-800"
+              title={`${t('common.theme')}: ${theme}`}
+            >
+              {themeIcon}
+            </button>
+          </div>
         </div>
       </div>
     </div>

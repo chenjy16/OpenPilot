@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get, post } from '../../services/apiClient';
 
 /* ------------------------------------------------------------------ */
@@ -39,6 +40,7 @@ const ProviderKeyForm: React.FC<{
   maskedKey?: string;
   onSaved: () => void;
 }> = ({ providerId, providerLabel, detected, maskedKey, onSaved }) => {
+  const { t } = useTranslation();
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -52,11 +54,11 @@ const ProviderKeyForm: React.FC<{
         '/models/providers',
         { providerId, apiKey: apiKey.trim(), models: [] },
       );
-      setMsg(`✅ ${providerLabel} 已启用，共 ${result.totalConfigured} 个可用模型`);
+      setMsg(t('models.providerEnabled', { provider: providerLabel, count: result.totalConfigured }));
       setApiKey('');
       onSaved();
     } catch (err) {
-      setMsg(`❌ 失败: ${(err as Error).message}`);
+      setMsg(t('models.failed', { message: (err as Error).message }));
     } finally {
       setSaving(false);
     }
@@ -66,18 +68,18 @@ const ProviderKeyForm: React.FC<{
     <div style={{ padding: '8px 12px', background: '#1a1a2e', borderRadius: 6, marginTop: 4 }}>
       {detected && maskedKey && (
         <div style={{ fontSize: 12, color: '#4ade80', marginBottom: 6 }}>
-          ✅ 已配置 API Key: <span style={{ fontFamily: 'monospace', color: '#93c5fd' }}>{maskedKey}</span>
+          {t('models.apiKeyConfigured')} <span style={{ fontFamily: 'monospace', color: '#93c5fd' }}>{maskedKey}</span>
         </div>
       )}
       {detected && !maskedKey && (
         <div style={{ fontSize: 12, color: '#4ade80', marginBottom: 6 }}>
-          ✅ 已通过环境变量检测到 API Key
+          {t('models.apiKeyDetectedEnv')}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <input
           type="password"
-          placeholder={detected ? '输入新 Key 覆盖当前配置...' : `输入 ${providerLabel} API Key...`}
+          placeholder={detected ? t('models.placeholderOverrideKey') : t('models.placeholderEnterKey', { provider: providerLabel })}
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSave()}
@@ -94,7 +96,7 @@ const ProviderKeyForm: React.FC<{
             border: 'none', borderRadius: 4, cursor: saving ? 'default' : 'pointer', fontSize: 13,
           }}
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('models.saving') : t('models.save')}
         </button>
       </div>
       {msg && <div style={{ fontSize: 12, marginTop: 6, color: msg.startsWith('✅') ? '#4ade80' : '#f87171' }}>{msg}</div>}
@@ -107,6 +109,7 @@ const ProviderKeyForm: React.FC<{
 /* ------------------------------------------------------------------ */
 
 const CustomProviderForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
+  const { t } = useTranslation();
   const [providerId, setProviderId] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -124,11 +127,11 @@ const CustomProviderForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
         '/models/providers',
         { providerId: providerId.trim(), apiKey: apiKey.trim(), baseUrl: baseUrl.trim() || undefined, models },
       );
-      setMsg(`✅ 已添加 ${providerId}，共 ${result.totalConfigured} 个可用模型`);
+      setMsg(t('models.providerAdded', { provider: providerId, count: result.totalConfigured }));
       setProviderId(''); setApiKey(''); setBaseUrl(''); setModelsText('');
       onSaved();
     } catch (err) {
-      setMsg(`❌ 失败: ${(err as Error).message}`);
+      setMsg(t('models.failed', { message: (err as Error).message }));
     } finally {
       setSaving(false);
     }
@@ -141,22 +144,22 @@ const CustomProviderForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
 
   return (
     <div style={{ padding: 16, background: '#1a1a2e', borderRadius: 8 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: '#e6e6e6' }}>添加自定义提供商</div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12, color: '#e6e6e6' }}>{t('models.addCustomProvider')}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div>
-          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>提供商 ID</label>
-          <input placeholder="如: groq, fireworks..." value={providerId} onChange={e => setProviderId(e.target.value)} style={fieldStyle} />
+          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>{t('models.labelProviderId')}</label>
+          <input placeholder={t('models.placeholderProviderId')} value={providerId} onChange={e => setProviderId(e.target.value)} style={fieldStyle} />
         </div>
         <div>
-          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>API Key</label>
+          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>{t('models.labelApiKey')}</label>
           <input type="password" placeholder="sk-..." value={apiKey} onChange={e => setApiKey(e.target.value)} style={fieldStyle} />
         </div>
         <div>
-          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>Base URL（可选）</label>
+          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>{t('models.labelBaseUrl')}</label>
           <input placeholder="https://api.example.com/v1" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} style={fieldStyle} />
         </div>
         <div>
-          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>模型列表（每行一个 model ID）</label>
+          <label style={{ fontSize: 12, color: '#999', display: 'block', marginBottom: 2 }}>{t('models.labelModelList')}</label>
           <textarea
             placeholder={'model-a\nmodel-b'}
             value={modelsText}
@@ -173,7 +176,7 @@ const CustomProviderForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
             border: 'none', borderRadius: 4, cursor: saving ? 'default' : 'pointer', fontSize: 14, fontWeight: 500,
           }}
         >
-          {saving ? '保存中...' : '添加提供商'}
+          {saving ? t('models.saving') : t('models.addProvider')}
         </button>
       </div>
       {msg && <div style={{ fontSize: 12, marginTop: 8, color: msg.startsWith('✅') ? '#4ade80' : '#f87171' }}>{msg}</div>}
@@ -188,6 +191,7 @@ const CustomProviderForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
 type Tab = 'catalog' | 'providers' | 'custom';
 
 const ModelsView: React.FC = () => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('catalog');
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
@@ -225,16 +229,16 @@ const ModelsView: React.FC = () => {
   const tabBar = (
     <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
       {([
-        ['catalog', '📋 模型目录'],
-        ['providers', '🔑 提供商状态'],
-        ['custom', '➕ 添加提供商'],
-      ] as [Tab, string][]).map(([t, label]) => (
+        ['catalog', t('models.tabCatalog')],
+        ['providers', t('models.tabProviders')],
+        ['custom', t('models.tabCustom')],
+      ] as [Tab, string][]).map(([tabKey, label]) => (
         <button
-          key={t}
-          onClick={() => setTab(t)}
+          key={tabKey}
+          onClick={() => setTab(tabKey)}
           style={{
             padding: '6px 16px', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13,
-            background: tab === t ? '#3b82f6' : '#1e1e2e', color: tab === t ? '#fff' : '#999',
+            background: tab === tabKey ? '#3b82f6' : '#1e1e2e', color: tab === tabKey ? '#fff' : '#999',
           }}
         >
           {label}
@@ -247,7 +251,7 @@ const ModelsView: React.FC = () => {
     return (
       <div style={{ padding: 24, color: '#999' }}>
         {tabBar}
-        <div>加载中...</div>
+        <div>{t('models.loading')}</div>
       </div>
     );
   }
@@ -255,7 +259,7 @@ const ModelsView: React.FC = () => {
   /* ---- Catalog tab ---- */
   const renderCatalog = () => {
     const providerIds = Object.keys(grouped);
-    if (providerIds.length === 0) return <div style={{ color: '#999' }}>暂无模型数据</div>;
+    if (providerIds.length === 0) return <div style={{ color: '#999' }}>{t('models.noModelData')}</div>;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -281,7 +285,7 @@ const ModelsView: React.FC = () => {
                     background: configuredCount > 0 ? '#065f46' : '#3f3f46',
                     color: configuredCount > 0 ? '#6ee7b7' : '#a1a1aa',
                   }}>
-                    {configuredCount}/{models.length} 可用
+                    {t('models.available', { configured: configuredCount, total: models.length })}
                   </span>
                 </div>
                 <button
@@ -292,7 +296,7 @@ const ModelsView: React.FC = () => {
                     color: isExpanded ? '#fff' : '#93c5fd', cursor: 'pointer',
                   }}
                 >
-                  {isExpanded ? '收起' : '🔑 配置 API Key'}
+                  {isExpanded ? t('models.collapse') : t('models.configureApiKey')}
                 </button>
               </div>
 
@@ -314,12 +318,12 @@ const ModelsView: React.FC = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ color: '#888', textAlign: 'left' }}>
-                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>模型</th>
-                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>上下文</th>
-                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>输入</th>
-                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>推理</th>
-                      <th style={{ padding: '4px 6px', fontWeight: 500, textAlign: 'right' }}>费用 ($/M)</th>
-                      <th style={{ padding: '4px 6px', fontWeight: 500, textAlign: 'center' }}>状态</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>{t('models.colModel')}</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>{t('models.colContext')}</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>{t('models.colInput')}</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 500 }}>{t('models.colReasoning')}</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 500, textAlign: 'right' }}>{t('models.colCost')}</th>
+                      <th style={{ padding: '4px 6px', fontWeight: 500, textAlign: 'center' }}>{t('models.colStatus')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -367,7 +371,7 @@ const ModelsView: React.FC = () => {
                   background: p.detected ? '#065f46' : '#3f3f46',
                   color: p.detected ? '#6ee7b7' : '#a1a1aa',
                 }}>
-                  {p.detected ? `已配置 (${p.profileCount} key)` : '未配置'}
+                  {p.detected ? t('models.providerConfigured', { count: p.profileCount }) : t('models.providerNotConfigured')}
                 </span>
               </div>
               <button
@@ -378,7 +382,7 @@ const ModelsView: React.FC = () => {
                   color: isExpanded ? '#fff' : '#93c5fd', cursor: 'pointer',
                 }}
               >
-                {isExpanded ? '收起' : '🔑 配置'}
+                {isExpanded ? t('models.collapse') : t('models.configure')}
               </button>
             </div>
             {isExpanded && (
@@ -406,9 +410,9 @@ const ModelsView: React.FC = () => {
     <div style={{ padding: 24, maxWidth: 960, margin: '0 auto', height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: '#e6e6e6' }}>🧩 模型管理</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#e6e6e6' }}>🧩 {t('models.title')}</div>
           <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>
-            共 {catalog.length} 个模型，{totalConfigured} 个已配置可用
+            {t('models.summary', { total: catalog.length, configured: totalConfigured })}
           </div>
         </div>
         <button
@@ -418,7 +422,7 @@ const ModelsView: React.FC = () => {
             borderRadius: 4, cursor: 'pointer', fontSize: 13,
           }}
         >
-          🔄 刷新
+          {t('models.refresh')}
         </button>
       </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useTradingStore,
   type TradingOrder,
@@ -20,6 +21,7 @@ function TradingModeSwitch({ config, onSwitch }: {
   config: TradingConfig | null;
   onSwitch: (mode: 'paper' | 'live') => void;
 }) {
+  const { t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
   if (!config) return null;
   const isPaper = config.trading_mode === 'paper';
@@ -42,33 +44,33 @@ function TradingModeSwitch({ config, onSwitch }: {
         }`}
       >
         <span className={`h-2.5 w-2.5 rounded-full ${isPaper ? 'bg-yellow-500 animate-pulse' : 'bg-red-500 animate-pulse'}`} />
-        {isPaper ? '模拟交易' : '实盘交易'}
+        {isPaper ? t('trading.paperTrading') : t('trading.liveTrading')}
       </div>
       <button
         onClick={handleToggle}
         className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
       >
-        切换至{isPaper ? '实盘' : '模拟'}
+        {t('trading.switchTo', { mode: isPaper ? t('trading.liveTrading') : t('trading.paperTrading') })}
       </button>
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="rounded-lg bg-white p-6 shadow-xl max-w-sm">
-            <p className="text-sm font-semibold text-red-700 mb-2">⚠️ 切换到实盘交易</p>
+            <p className="text-sm font-semibold text-red-700 mb-2">{t('trading.switchToLive')}</p>
             <p className="text-sm text-gray-600 mb-4">
-              实盘模式下所有订单将通过真实券商执行，涉及真实资金。请确认券商凭证已正确配置。
+              {t('trading.switchToLiveWarning')}
             </p>
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setConfirming(false)}
                 className="rounded border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => { setConfirming(false); onSwitch('live'); }}
                 className="rounded bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700"
               >
-                确认切换
+                {t('trading.confirmSwitch')}
               </button>
             </div>
           </div>
@@ -85,6 +87,7 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
   onSaveCredentials: (creds: { app_key?: string; app_secret?: string; access_token?: string; paper_access_token?: string }) => Promise<void>;
   onTestConnection: () => Promise<{ connected: boolean; error?: string }>;
 }) {
+  const { t } = useTranslation();
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
   const [accessToken, setAccessToken] = useState('');
@@ -119,10 +122,10 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
       setAppSecret('');
       setAccessToken('');
       setPaperAccessToken('');
-      setSaveMsg('保存成功');
+      setSaveMsg(t('common.saveSuccess'));
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
-      setSaveMsg(`保存失败: ${(err as Error).message}`);
+      setSaveMsg(`${t('common.saveFailed')}: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -149,11 +152,11 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
     <div className="space-y-4">
       {/* Region selector */}
       <div>
-        <label className="block text-xs text-gray-500 mb-1">券商区域</label>
+        <label className="block text-xs text-gray-500 mb-1">{t('trading.brokerRegion')}</label>
         <div className="flex gap-2">
           {[
-            { value: 'hk', label: '🇭🇰 香港 (Longport HK)' },
-            { value: 'sg', label: '🇸🇬 新加坡 (Longport SG)' },
+            { value: 'hk', labelKey: 'trading.brokerRegionHk' },
+            { value: 'sg', labelKey: 'trading.brokerRegionSg' },
           ].map((opt) => (
             <button
               key={opt.value}
@@ -164,7 +167,7 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
                   : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
               }`}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           ))}
         </div>
@@ -172,7 +175,7 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
 
       {/* Credential status */}
       <div className="flex flex-wrap items-center gap-4 text-xs">
-        <span className="text-gray-500">凭证状态:</span>
+        <span className="text-gray-500">{t('trading.credentialStatus')}:</span>
         <span className={credentials?.app_key_set ? 'text-green-600' : 'text-gray-400'}>
           App Key {credentials?.app_key_set ? '✓' : '✗'}
         </span>
@@ -180,10 +183,10 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
           App Secret {credentials?.app_secret_set ? '✓' : '✗'}
         </span>
         <span className={credentials?.access_token_set ? 'text-green-600' : 'text-gray-400'}>
-          实盘 Token {credentials?.access_token_set ? '✓' : '✗'}
+          {t('trading.liveToken')} {credentials?.access_token_set ? '✓' : '✗'}
         </span>
         <span className={credentials?.paper_access_token_set ? 'text-green-600' : 'text-gray-400'}>
-          模拟 Token {credentials?.paper_access_token_set ? '✓' : '✗'}
+          {t('trading.paperToken')} {credentials?.paper_access_token_set ? '✓' : '✗'}
         </span>
       </div>
 
@@ -194,7 +197,7 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
           <input
             type="password"
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder={credentials?.app_key_set ? '••••••••（已设置，留空保持不变）' : '输入 Longport App Key'}
+            placeholder={credentials?.app_key_set ? t('trading.appKeySet') : t('trading.appKeyPlaceholder')}
             value={appKey}
             onChange={(e) => setAppKey(e.target.value)}
           />
@@ -204,27 +207,27 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
           <input
             type="password"
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder={credentials?.app_secret_set ? '••••••••（已设置，留空保持不变）' : '输入 Longport App Secret'}
+            placeholder={credentials?.app_secret_set ? t('trading.appKeySet') : t('trading.appSecretPlaceholder')}
             value={appSecret}
             onChange={(e) => setAppSecret(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">实盘 Access Token</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('trading.liveToken')}</label>
           <input
             type="password"
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder={credentials?.access_token_set ? '••••••••（已设置，留空保持不变）' : '输入实盘 Access Token'}
+            placeholder={credentials?.access_token_set ? t('trading.appKeySet') : t('trading.liveAccessTokenPlaceholder')}
             value={accessToken}
             onChange={(e) => setAccessToken(e.target.value)}
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 mb-1">模拟账户 Access Token</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('trading.paperAccessTokenLabel')}</label>
           <input
             type="password"
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-            placeholder={credentials?.paper_access_token_set ? '••••••••（已设置，留空保持不变）' : '输入模拟账户 Access Token'}
+            placeholder={credentials?.paper_access_token_set ? t('trading.appKeySet') : t('trading.paperAccessTokenPlaceholder')}
             value={paperAccessToken}
             onChange={(e) => setPaperAccessToken(e.target.value)}
           />
@@ -232,7 +235,7 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
       </div>
 
       <p className="text-xs text-blue-600 bg-blue-50 rounded p-2">
-        💡 长桥模拟账户和真实账户共享 App Key / App Secret，但使用不同的 Access Token。请在开发者中心分别获取。
+        {t('trading.longportNote')}
       </p>
 
       {/* Actions */}
@@ -242,36 +245,37 @@ function BrokerSettingsPanel({ config, credentials, onSaveConfig, onSaveCredenti
           disabled={saving}
           className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {saving ? '保存中...' : '保存配置'}
+          {saving ? t('common.saving') : t('trading.saveConfig')}
         </button>
         <button
           onClick={handleTest}
           disabled={testing || !allSet}
           className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
-          {testing ? '测试中...' : '测试连接'}
+          {testing ? t('trading.testing') : t('trading.testConnection')}
         </button>
         {saveMsg && (
-          <span className={`text-xs ${saveMsg.includes('失败') ? 'text-red-600' : 'text-green-600'}`}>
+          <span className={`text-xs ${saveMsg.includes(t('common.saveFailed')) ? 'text-red-600' : 'text-green-600'}`}>
             {saveMsg}
           </span>
         )}
         {testResult && (
           <span className={`text-xs ${testResult.connected ? 'text-green-600' : 'text-red-600'}`}>
-            {testResult.connected ? '✓ 连接成功' : `✗ 连接失败${testResult.error ? `: ${testResult.error}` : ''}`}
+            {testResult.connected ? t('trading.connectionSuccess') : `${t('trading.connectionFailed')}${testResult.error ? `: ${testResult.error}` : ''}`}
           </span>
         )}
       </div>
 
       <p className="text-xs text-gray-400">
-        凭证从 <a href="https://open.longbridge.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">长桥 OpenAPI 开发者中心</a> 获取。凭证仅存储在本地数据库中。
-        当前模式为{isPaper ? '模拟交易（使用模拟 Token）' : '实盘交易（使用实盘 Token）'}。
+        {t('trading.credentialSource')} <a href="https://open.longbridge.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">{t('trading.longportDevCenter')}</a> {t('trading.credentialLocalNote')}
+        {t('trading.currentMode', { mode: isPaper ? t('trading.paperMode') : t('trading.liveMode') })}
       </p>
     </div>
   );
 }
 
 function AccountOverview({ stats, positions }: { stats: OrderStats | null; positions: BrokerPosition[] }) {
+  const { t } = useTranslation();
   const fmtMoney = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
 
   // Compute from positions (USD) — same logic as live dashboard
@@ -280,10 +284,10 @@ function AccountOverview({ stats, positions }: { stats: OrderStats | null; posit
   const unrealizedPnl = totalMarketValue - totalCost;
 
   const cards = [
-    { label: '持仓成本', value: totalCost, fmt: fmtMoney },
-    { label: '持仓市值', value: totalMarketValue, fmt: fmtMoney },
-    { label: '浮动盈亏', value: unrealizedPnl, fmt: (v: number) => `${v >= 0 ? '+' : ''}${fmtMoney(v)}` },
-    { label: '当日交易笔数', value: stats?.total_orders ?? 0, fmt: (v: number) => String(v) },
+    { label: t('trading.costBasis'), value: totalCost, fmt: fmtMoney },
+    { label: t('trading.marketValue'), value: totalMarketValue, fmt: fmtMoney },
+    { label: t('trading.unrealizedPnl'), value: unrealizedPnl, fmt: (v: number) => `${v >= 0 ? '+' : ''}${fmtMoney(v)}` },
+    { label: t('trading.dailyTrades'), value: stats?.total_orders ?? 0, fmt: (v: number) => String(v) },
   ];
 
   return (
@@ -316,18 +320,22 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 /** Classify order source based on signal_id / strategy_id (Property 12) */
-function getOrderSourceLabel(order: TradingOrder): string {
-  if (order.signal_id != null && order.strategy_id == null) return '信号自动';
-  if (order.strategy_id != null) return '策略自动';
-  return '手动';
+function getOrderSourceLabel(order: TradingOrder, t: (key: string) => string): string {
+  if (order.signal_id != null && order.strategy_id == null) return t('trading.signalAuto');
+  if (order.strategy_id != null) return t('trading.strategyAuto');
+  return t('trading.manual');
 }
 
 function OrderSourceBadge({ order }: { order: TradingOrder }) {
-  const label = getOrderSourceLabel(order);
+  const { t } = useTranslation();
+  const label = getOrderSourceLabel(order, t);
+  const signalAuto = t('trading.signalAuto');
+  const strategyAuto = t('trading.strategyAuto');
+  const manual = t('trading.manual');
   const colors: Record<string, string> = {
-    '手动': 'bg-gray-100 text-gray-700',
-    '信号自动': 'bg-blue-100 text-blue-700',
-    '策略自动': 'bg-purple-100 text-purple-700',
+    [manual]: 'bg-gray-100 text-gray-700',
+    [signalAuto]: 'bg-blue-100 text-blue-700',
+    [strategyAuto]: 'bg-purple-100 text-purple-700',
   };
   return (
     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${colors[label] ?? 'bg-gray-100 text-gray-700'}`}>
@@ -337,19 +345,20 @@ function OrderSourceBadge({ order }: { order: TradingOrder }) {
 }
 
 function ActiveOrdersTable({ orders, onCancel }: { orders: TradingOrder[]; onCancel: (id: number) => void }) {
+  const { t } = useTranslation();
   const active = orders.filter((o) => ['pending', 'submitted', 'partial_filled'].includes(o.status));
-  if (active.length === 0) return <p className="py-4 text-center text-sm text-gray-400">暂无活跃订单</p>;
+  if (active.length === 0) return <p className="py-4 text-center text-sm text-gray-400">{t('trading.noActiveOrders')}</p>;
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-xs text-gray-500">
-            <th className="pb-2 pr-4">代码</th><th className="pb-2 pr-4">方向</th>
-            <th className="pb-2 pr-4">类型</th><th className="pb-2 pr-4">数量</th>
-            <th className="pb-2 pr-4">价格</th><th className="pb-2 pr-4">来源</th>
-            <th className="pb-2 pr-4">状态</th>
-            <th className="pb-2 pr-4">时间</th><th className="pb-2">操作</th>
+            <th className="pb-2 pr-4">{t('trading.symbol')}</th><th className="pb-2 pr-4">{t('trading.side')}</th>
+            <th className="pb-2 pr-4">{t('trading.type')}</th><th className="pb-2 pr-4">{t('trading.quantity')}</th>
+            <th className="pb-2 pr-4">{t('trading.price')}</th><th className="pb-2 pr-4">{t('trading.source')}</th>
+            <th className="pb-2 pr-4">{t('trading.orderStatus')}</th>
+            <th className="pb-2 pr-4">{t('trading.time')}</th><th className="pb-2">{t('trading.action')}</th>
           </tr>
         </thead>
         <tbody>
@@ -357,7 +366,7 @@ function ActiveOrdersTable({ orders, onCancel }: { orders: TradingOrder[]; onCan
             <tr key={o.id ?? o.local_order_id} className="border-b border-gray-100">
               <td className="py-2 pr-4 font-medium">{o.symbol}</td>
               <td className={`py-2 pr-4 ${o.side === 'buy' ? 'text-red-600' : 'text-green-600'}`}>
-                {o.side === 'buy' ? '买入' : '卖出'}
+                {o.side === 'buy' ? t('trading.buy') : t('trading.sell')}
               </td>
               <td className="py-2 pr-4">{o.order_type}</td>
               <td className="py-2 pr-4">{o.quantity}</td>
@@ -366,7 +375,7 @@ function ActiveOrdersTable({ orders, onCancel }: { orders: TradingOrder[]; onCan
               <td className="py-2 pr-4"><StatusBadge status={o.status} /></td>
               <td className="py-2 pr-4 text-gray-500">{new Date(o.created_at * 1000).toLocaleTimeString()}</td>
               <td className="py-2">
-                <button className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-200" onClick={() => o.id && onCancel(o.id)}>撤单</button>
+                <button className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-200" onClick={() => o.id && onCancel(o.id)}>{t('trading.cancelOrder')}</button>
               </td>
             </tr>
           ))}
@@ -377,6 +386,7 @@ function ActiveOrdersTable({ orders, onCancel }: { orders: TradingOrder[]; onCan
 }
 
 function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
+  const { t } = useTranslation();
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSymbol, setFilterSymbol] = useState('');
   const [page, setPage] = useState(0);
@@ -433,40 +443,40 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
   return (
     <div>
       <div className="mb-3 flex items-center gap-2">
-        <input className="rounded border border-gray-300 px-2 py-1 text-sm" placeholder="股票代码" value={filterSymbol} onChange={(e) => handleFilterChange(setFilterSymbol, e.target.value)} />
+        <input className="rounded border border-gray-300 px-2 py-1 text-sm" placeholder={t('trading.symbol')} value={filterSymbol} onChange={(e) => handleFilterChange(setFilterSymbol, e.target.value)} />
         <select className="rounded border border-gray-300 px-2 py-1 text-sm" value={filterStatus} onChange={(e) => handleFilterChange(setFilterStatus, e.target.value)}>
-          <option value="">全部状态</option>
-          <option value="filled">已成交</option>
-          <option value="cancelled">已撤销</option>
-          <option value="rejected">已拒绝</option>
-          <option value="failed">失败</option>
-          <option value="pending">待提交</option>
-          <option value="submitted">已提交</option>
+          <option value="">{t('trading.allStatus')}</option>
+          <option value="filled">{t('trading.filled')}</option>
+          <option value="cancelled">{t('trading.cancelled')}</option>
+          <option value="rejected">{t('trading.rejected')}</option>
+          <option value="failed">{t('trading.failed')}</option>
+          <option value="pending">{t('trading.pending')}</option>
+          <option value="submitted">{t('trading.submitted')}</option>
         </select>
-        <span className="ml-auto text-xs text-gray-400">共 {total} 条</span>
+        <span className="ml-auto text-xs text-gray-400">{t('trading.totalRecords', { count: total })}</span>
       </div>
       {loadingPage ? (
-        <p className="py-4 text-center text-sm text-gray-400">加载中...</p>
+        <p className="py-4 text-center text-sm text-gray-400">{t('common.loading')}</p>
       ) : paginatedOrders.length === 0 ? (
-        <p className="py-4 text-center text-sm text-gray-400">暂无交易记录</p>
+        <p className="py-4 text-center text-sm text-gray-400">{t('trading.noTradeRecords')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-xs text-gray-500">
-                <th className="whitespace-nowrap pb-2 pr-3">代码</th><th className="whitespace-nowrap pb-2 pr-3">方向</th>
-                <th className="whitespace-nowrap pb-2 pr-3">类型</th><th className="whitespace-nowrap pb-2 pr-3">数量</th>
-                <th className="whitespace-nowrap pb-2 pr-3">价格</th><th className="whitespace-nowrap pb-2 pr-3">成交量</th>
-                <th className="whitespace-nowrap pb-2 pr-3">成交价</th><th className="whitespace-nowrap pb-2 pr-3">来源</th>
-                <th className="whitespace-nowrap pb-2 pr-3">状态</th>
-                <th className="whitespace-nowrap pb-2">时间</th>
+                <th className="whitespace-nowrap pb-2 pr-3">{t('trading.symbol')}</th><th className="whitespace-nowrap pb-2 pr-3">{t('trading.side')}</th>
+                <th className="whitespace-nowrap pb-2 pr-3">{t('trading.type')}</th><th className="whitespace-nowrap pb-2 pr-3">{t('trading.quantity')}</th>
+                <th className="whitespace-nowrap pb-2 pr-3">{t('trading.price')}</th><th className="whitespace-nowrap pb-2 pr-3">{t('trading.filledQty')}</th>
+                <th className="whitespace-nowrap pb-2 pr-3">{t('trading.filledPrice')}</th><th className="whitespace-nowrap pb-2 pr-3">{t('trading.source')}</th>
+                <th className="whitespace-nowrap pb-2 pr-3">{t('trading.orderStatus')}</th>
+                <th className="whitespace-nowrap pb-2">{t('trading.time')}</th>
               </tr>
             </thead>
             <tbody>
               {paginatedOrders.map((o) => (
                 <tr key={o.id ?? o.local_order_id} className="border-b border-gray-100">
                   <td className="whitespace-nowrap py-2 pr-3 font-medium">{o.symbol}</td>
-                  <td className={`whitespace-nowrap py-2 pr-3 ${o.side === 'buy' ? 'text-red-600' : 'text-green-600'}`}>{o.side === 'buy' ? '买入' : '卖出'}</td>
+                  <td className={`whitespace-nowrap py-2 pr-3 ${o.side === 'buy' ? 'text-red-600' : 'text-green-600'}`}>{o.side === 'buy' ? t('trading.buy') : t('trading.sell')}</td>
                   <td className="whitespace-nowrap py-2 pr-3">{o.order_type}</td>
                   <td className="whitespace-nowrap py-2 pr-3">{o.quantity}</td>
                   <td className="whitespace-nowrap py-2 pr-3">{o.price ?? '-'}</td>
@@ -484,35 +494,35 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
       {/* Pagination controls */}
       {totalPages > 1 && (
         <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
-          <span>第 {page + 1} / {totalPages} 页</span>
+          <span>{t('trading.page', { current: page + 1, total: totalPages })}</span>
           <div className="flex gap-1">
             <button
               onClick={() => setPage(0)}
               disabled={page === 0}
               className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
-              首页
+              {t('trading.first')}
             </button>
             <button
               onClick={() => setPage(page - 1)}
               disabled={page === 0}
               className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
-              上一页
+              {t('trading.prev')}
             </button>
             <button
               onClick={() => setPage(page + 1)}
               disabled={page >= totalPages - 1}
               className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
-              下一页
+              {t('trading.next')}
             </button>
             <button
               onClick={() => setPage(totalPages - 1)}
               disabled={page >= totalPages - 1}
               className="rounded border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
             >
-              末页
+              {t('trading.last')}
             </button>
           </div>
         </div>
@@ -522,7 +532,8 @@ function OrderHistoryTable({ orders }: { orders: TradingOrder[] }) {
 }
 
 function RiskStatusPanel({ rules, stats }: { rules: RiskRule[]; stats: OrderStats | null }) {
-  if (rules.length === 0) return <p className="py-4 text-center text-sm text-gray-400">暂无风控规则</p>;
+  const { t } = useTranslation();
+  if (rules.length === 0) return <p className="py-4 text-center text-sm text-gray-400">{t('trading.noRiskRules')}</p>;
   const currentValues: Record<string, number> = {
     max_daily_amount: stats?.total_filled_amount ?? 0,
     max_daily_trades: stats?.total_orders ?? 0,
@@ -540,7 +551,7 @@ function RiskStatusPanel({ rules, stats }: { rules: RiskRule[]; stats: OrderStat
         const isRatio = r.rule_type === 'max_position_ratio';
         const thresholdDisplay = isRatio ? `${(r.threshold * 100).toFixed(0)}%` : r.threshold.toLocaleString();
         const currentDisplay = isPerOrder
-          ? (isRatio ? '单股检查' : '单笔检查')
+          ? (isRatio ? t('trading.perTradeCheck') : t('trading.perOrderCheck'))
           : current.toLocaleString();
         return (
           <div key={r.id ?? r.rule_type} className="rounded border border-gray-200 bg-white p-3">
@@ -561,6 +572,7 @@ function RiskStatusPanel({ rules, stats }: { rules: RiskRule[]; stats: OrderStat
 }
 
 function ManualOrderForm({ onSubmit }: { onSubmit: (req: { symbol: string; side: OrderSide; order_type: OrderType; quantity: number; price?: number }) => Promise<unknown> }) {
+  const { t } = useTranslation();
   const [symbol, setSymbol] = useState('');
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
@@ -573,10 +585,10 @@ function ManualOrderForm({ onSubmit }: { onSubmit: (req: { symbol: string; side:
     e.preventDefault();
     setFormError('');
     const qty = Number(quantity);
-    if (!symbol.trim()) { setFormError('请输入股票代码'); return; }
-    if (!qty || qty <= 0) { setFormError('请输入有效数量'); return; }
+    if (!symbol.trim()) { setFormError(t('trading.enterSymbol')); return; }
+    if (!qty || qty <= 0) { setFormError(t('trading.enterValidQty')); return; }
     const prc = price ? Number(price) : undefined;
-    if (orderType === 'limit' && (!prc || prc <= 0)) { setFormError('限价单需要有效价格'); return; }
+    if (orderType === 'limit' && (!prc || prc <= 0)) { setFormError(t('trading.limitNeedsPrice')); return; }
 
     setSubmitting(true);
     try {
@@ -592,25 +604,25 @@ function ManualOrderForm({ onSubmit }: { onSubmit: (req: { symbol: string; side:
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <input className="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="股票代码 (如 700.HK)" value={symbol} onChange={(e) => setSymbol(e.target.value)} />
+        <input className="rounded border border-gray-300 px-3 py-2 text-sm" placeholder={t('trading.symbolPlaceholder')} value={symbol} onChange={(e) => setSymbol(e.target.value)} />
         <select className="rounded border border-gray-300 px-3 py-2 text-sm" value={side} onChange={(e) => setSide(e.target.value as OrderSide)}>
-          <option value="buy">买入</option>
-          <option value="sell">卖出</option>
+          <option value="buy">{t('trading.buy')}</option>
+          <option value="sell">{t('trading.sell')}</option>
         </select>
         <select className="rounded border border-gray-300 px-3 py-2 text-sm" value={orderType} onChange={(e) => setOrderType(e.target.value as OrderType)}>
-          <option value="market">市价单</option>
-          <option value="limit">限价单</option>
-          <option value="stop">止损单</option>
-          <option value="stop_limit">止损限价单</option>
+          <option value="market">{t('trading.marketOrder')}</option>
+          <option value="limit">{t('trading.limitOrder')}</option>
+          <option value="stop">{t('trading.stopOrder')}</option>
+          <option value="stop_limit">{t('trading.stopLimitOrder')}</option>
         </select>
-        <input className="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="数量" type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        <input className="rounded border border-gray-300 px-3 py-2 text-sm" placeholder={t('trading.qtyPlaceholder')} type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         {orderType !== 'market' && (
-          <input className="rounded border border-gray-300 px-3 py-2 text-sm" placeholder="价格" type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+          <input className="rounded border border-gray-300 px-3 py-2 text-sm" placeholder={t('trading.pricePlaceholder')} type="number" step="0.01" min="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
         )}
       </div>
       {formError && <p className="text-xs text-red-600">{formError}</p>}
       <button type="submit" disabled={submitting} className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-        {submitting ? '提交中...' : '下单'}
+        {submitting ? t('common.submitting') : t('trading.placeOrder')}
       </button>
     </form>
   );
@@ -621,6 +633,7 @@ function ManualOrderForm({ onSubmit }: { onSubmit: (req: { symbol: string; side:
 // ---------------------------------------------------------------------------
 
 function DynamicRiskPanel() {
+  const { t } = useTranslation();
   const [riskState, setRiskState] = useState<{
     regime: string; vix_level: number | null; portfolio_drawdown: number; risk_multiplier: number;
   } | null>(null);
@@ -640,10 +653,10 @@ function DynamicRiskPanel() {
   if (!riskState) return null;
 
   const regimeLabels: Record<string, { label: string; color: string; icon: string }> = {
-    low_vol: { label: '低波动', color: 'text-green-600 bg-green-50 border-green-200', icon: '🟢' },
-    normal: { label: '正常', color: 'text-blue-600 bg-blue-50 border-blue-200', icon: '🔵' },
-    high_vol: { label: '高波动', color: 'text-orange-600 bg-orange-50 border-orange-200', icon: '🟠' },
-    crisis: { label: '危机', color: 'text-red-600 bg-red-50 border-red-200', icon: '🔴' },
+    low_vol: { label: t('trading.lowVol'), color: 'text-green-600 bg-green-50 border-green-200', icon: '🟢' },
+    normal: { label: t('trading.normal'), color: 'text-blue-600 bg-blue-50 border-blue-200', icon: '🔵' },
+    high_vol: { label: t('trading.highVol'), color: 'text-orange-600 bg-orange-50 border-orange-200', icon: '🟠' },
+    crisis: { label: t('trading.crisis'), color: 'text-red-600 bg-red-50 border-red-200', icon: '🔴' },
   };
   const regime = regimeLabels[riskState.regime] || regimeLabels.normal;
 
@@ -653,15 +666,15 @@ function DynamicRiskPanel() {
         <div className="flex items-center gap-3">
           <span className="text-lg">{regime.icon}</span>
           <div>
-            <span className="text-sm font-medium">市场状态: {regime.label}</span>
+            <span className="text-sm font-medium">{t('trading.marketStatus')}: {regime.label}</span>
             {riskState.vix_level != null && (
               <span className="ml-3 text-xs opacity-75">VIX: {riskState.vix_level.toFixed(1)}</span>
             )}
           </div>
         </div>
         <div className="flex items-center gap-4 text-xs">
-          <span>风险乘数: {riskState.risk_multiplier.toFixed(2)}x</span>
-          <span>组合回撤: {(riskState.portfolio_drawdown * 100).toFixed(1)}%</span>
+          <span>{t('trading.riskMultiplier')}: {riskState.risk_multiplier.toFixed(2)}x</span>
+          <span>{t('trading.portfolioDrawdown')}: {(riskState.portfolio_drawdown * 100).toFixed(1)}%</span>
         </div>
       </div>
     </div>
@@ -669,6 +682,7 @@ function DynamicRiskPanel() {
 }
 
 const TradingDashboardView: React.FC = () => {
+  const { t } = useTranslation();
   const {
     account, orders, positions, riskRules, stats, config, credentials,
     loading, error, tradingEvents,
@@ -706,11 +720,11 @@ const TradingDashboardView: React.FC = () => {
   };
 
   if (loading && !account) {
-    return <div className="flex h-full items-center justify-center"><p className="text-sm text-gray-500">加载中...</p></div>;
+    return <div className="flex h-full items-center justify-center"><p className="text-sm text-gray-500">{t('common.loading')}</p></div>;
   }
 
   if (error && !account) {
-    return <div className="flex h-full items-center justify-center"><p className="text-sm text-red-500">加载失败: {error}</p></div>;
+    return <div className="flex h-full items-center justify-center"><p className="text-sm text-red-500">{t('trading.loadFailed')}: {error}</p></div>;
   }
 
   return (
@@ -718,7 +732,7 @@ const TradingDashboardView: React.FC = () => {
       <div className="mx-auto max-w-[1600px] space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">量化交易</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t('trading.title')}</h1>
           <div className="flex items-center gap-3">
             <TradingModeSwitch config={config} onSwitch={handleModeSwitch} />
             <button
@@ -727,7 +741,7 @@ const TradingDashboardView: React.FC = () => {
                 showSettings ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              ⚙️ 券商设置
+              {t('trading.brokerSettings')}
             </button>
           </div>
         </div>
@@ -739,7 +753,7 @@ const TradingDashboardView: React.FC = () => {
         {/* Broker Settings Panel (collapsible) */}
         {showSettings && (
           <section className="rounded-lg border border-blue-200 bg-blue-50/30 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">券商配置 — Longport</h2>
+            <h2 className="mb-3 text-sm font-semibold text-gray-700">{t('trading.brokerConfig')}</h2>
             <BrokerSettingsPanel
               config={config}
               credentials={credentials}
@@ -763,17 +777,17 @@ const TradingDashboardView: React.FC = () => {
 
         {/* Active Orders */}
         <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">活跃订单</h2>
+          <h2 className="mb-3 text-sm font-semibold text-gray-700">{t('trading.activeOrders')}</h2>
           <ActiveOrdersTable orders={orders} onCancel={cancelOrder} />
         </section>
 
         <div className="grid gap-6 lg:grid-cols-5">
           <section className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-3">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">交易记录</h2>
+            <h2 className="mb-3 text-sm font-semibold text-gray-700">{t('trading.tradeHistory')}</h2>
             <OrderHistoryTable orders={orders} />
           </section>
           <section className="rounded-lg border border-gray-200 bg-white p-4 lg:col-span-2">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">风控状态</h2>
+            <h2 className="mb-3 text-sm font-semibold text-gray-700">{t('trading.riskStatus')}</h2>
             <RiskStatusPanel rules={riskRules} stats={stats} />
           </section>
         </div>
@@ -781,7 +795,7 @@ const TradingDashboardView: React.FC = () => {
         {/* Real-time Event Feed */}
         {tradingEvents.length > 0 && (
           <section className="rounded-lg border border-gray-200 bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold text-gray-700">📡 实时事件</h2>
+            <h2 className="mb-3 text-sm font-semibold text-gray-700">{t('trading.realtimeEvents')}</h2>
             <div className="max-h-48 space-y-1 overflow-y-auto">
               {tradingEvents.slice(0, 20).map((evt, i) => {
                 const icons: Record<string, string> = {
@@ -806,7 +820,7 @@ const TradingDashboardView: React.FC = () => {
 
         {/* Manual Order Form */}
         <section className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">手动下单</h2>
+          <h2 className="mb-3 text-sm font-semibold text-gray-700">{t('trading.manualOrder')}</h2>
           <ManualOrderForm onSubmit={placeOrder} />
         </section>
       </div>

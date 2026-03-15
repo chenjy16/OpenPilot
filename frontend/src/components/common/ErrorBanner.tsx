@@ -1,9 +1,12 @@
+import { useTranslation } from 'react-i18next';
+
 interface ErrorBannerProps {
   message: string;
   onDismiss?: () => void;
 }
 
 const ErrorBanner: React.FC<ErrorBannerProps> = ({ message, onDismiss }) => {
+  const { t } = useTranslation();
   return (
     <div
       className="flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-4 py-3"
@@ -14,7 +17,7 @@ const ErrorBanner: React.FC<ErrorBannerProps> = ({ message, onDismiss }) => {
         <button
           className="ml-4 flex-shrink-0 text-red-500 hover:text-red-700"
           onClick={onDismiss}
-          aria-label="关闭错误提示"
+          aria-label={t('errorBanner.dismiss')}
         >
           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
             <path

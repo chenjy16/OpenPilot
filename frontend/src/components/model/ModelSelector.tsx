@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useConfigStore } from '../../stores/configStore';
 import { get } from '../../services/apiClient';
 
@@ -26,6 +27,7 @@ const FALLBACK_MODELS = [
 ];
 
 const ModelSelector: React.FC = () => {
+  const { t } = useTranslation();
   const selectedModel = useConfigStore((s) => s.selectedModel);
   const setModel = useConfigStore((s) => s.setModel);
   const [models, setModels] = useState<ModelCatalogEntry[]>([]);
@@ -65,7 +67,7 @@ const ModelSelector: React.FC = () => {
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor="model-selector" className="text-sm font-medium text-gray-700">
-        模型
+        {t('model.label')}
       </label>
       <select
         id="model-selector"

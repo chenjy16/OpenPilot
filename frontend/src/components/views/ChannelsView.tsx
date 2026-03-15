@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get, post, put, del } from '../../services/apiClient';
 
 interface ChannelInfo {
@@ -63,23 +64,24 @@ const STATUS_COLORS: Record<string, string> = {
   error: 'bg-red-100 text-red-700',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  connected: '已连接',
-  disconnected: '未连接',
-  connecting: '连接中',
-  error: '错误',
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  connected: 'channels.statusConnected',
+  disconnected: 'channels.statusDisconnected',
+  connecting: 'channels.statusConnecting',
+  error: 'channels.statusError',
 };
 
-function timeAgo(ts: number | null | undefined): string {
+function timeAgo(ts: number | null | undefined, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (!ts) return '—';
   const diff = Date.now() - ts;
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s 前`;
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m 前`;
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}h 前`;
+  if (diff < 60_000) return t('channels.timeAgoSeconds', { count: Math.floor(diff / 1000) });
+  if (diff < 3600_000) return t('channels.timeAgoMinutes', { count: Math.floor(diff / 60_000) });
+  if (diff < 86400_000) return t('channels.timeAgoHours', { count: Math.floor(diff / 3600_000) });
   return new Date(ts).toLocaleDateString();
 }
 
 const ChannelsView: React.FC = () => {
+  const { t } = useTranslation();
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [available, setAvailable] = useState<AvailableChannel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +90,7 @@ const ChannelsView: React.FC = () => {
   const [configuring, setConfiguring] = useState<string | null>(null);
   const [configValues, setConfigValues] = useState<Record<string, string>>({});
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [saveMsgIsError, setSaveMsgIsError] = useState(false);
   const [securityPanel, setSecurityPanel] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -134,6 +137,7 @@ const ChannelsView: React.FC = () => {
     setConfiguring(type);
     setConfigValues({});
     setSaveMsg(null);
+    setSaveMsgIsError(false);
     // Fetch existing config (masked) to pre-fill
     try {
       const resp = await get<{ config: Record<string, string> }>(`/channels/${encodeURIComponent(type)}/config`);
@@ -164,14 +168,17 @@ const ChannelsView: React.FC = () => {
         { config: filtered, connect: true },
       );
       if (result.connectError) {
-        setSaveMsg(`配置已保存，连接失败: ${result.connectError}`);
+        setSaveMsg(t('channels.configSavedConnectFailed', { error: result.connectError }));
+        setSaveMsgIsError(true);
       } else {
-        setSaveMsg('配置已保存并连接');
+        setSaveMsg(t('channels.configSavedConnected'));
+        setSaveMsgIsError(false);
         setTimeout(() => { setConfiguring(null); setSaveMsg(null); }, 2000);
       }
       await fetchAll();
     } catch (err) {
-      setSaveMsg(`保存失败: ${(err as Error).message}`);
+      setSaveMsg(t('channels.saveFailed', { message: (err as Error).message }));
+      setSaveMsgIsError(true);
     } finally {
       setBusyType(null);
     }
@@ -194,20 +201,20 @@ const ChannelsView: React.FC = () => {
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔗</span>
-          <h1 className="text-lg font-semibold text-gray-800">渠道管理</h1>
+          <h1 className="text-lg font-semibold text-gray-800">{t('channels.title')}</h1>
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-            {registered.length} 已连接
+            {t('channels.connectedCount', { count: registered.length })}
           </span>
         </div>
         <button onClick={fetchAll}
           className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
-          刷新
+          {t('channels.refresh')}
         </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
-          <div className="flex h-32 items-center justify-center text-sm text-gray-400">加载中...</div>
+          <div className="flex h-32 items-center justify-center text-sm text-gray-400">{t('channels.loading')}</div>
         ) : error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">{error}</div>
         ) : (
@@ -215,7 +222,7 @@ const ChannelsView: React.FC = () => {
             {/* Active channels */}
             {channels.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-medium text-gray-600">已配置渠道</h2>
+                <h2 className="mb-3 text-sm font-medium text-gray-600">{t('channels.configuredChannels')}</h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {channels.map(ch => {
                     const av = available.find(a => a.type === ch.type);
@@ -236,7 +243,7 @@ const ChannelsView: React.FC = () => {
             {/* Add new channel */}
             {unregistered.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-medium text-gray-400">添加渠道</h2>
+                <h2 className="mb-3 text-sm font-medium text-gray-400">{t('channels.addChannel')}</h2>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {unregistered.map(ch => (
                     <div key={ch.type} className="rounded-lg border border-dashed border-gray-300 bg-white p-4">
@@ -251,11 +258,11 @@ const ChannelsView: React.FC = () => {
                         <CapabilityBadges caps={ch.capabilities} />
                       )}
                       <p className="text-xs text-gray-400 mb-3 mt-1">
-                        {ch.fields.filter(f => f.required).map(f => f.label).join('、')} 必填
+                        {ch.fields.filter(f => f.required).map(f => f.label).join('、')} {t('channels.required')}
                       </p>
                       <button onClick={() => handleConfigure(ch.type)}
                         className="rounded bg-blue-500 px-3 py-1 text-xs text-white hover:bg-blue-600">
-                        配置
+                        {t('channels.configure')}
                       </button>
                     </div>
                   ))}
@@ -266,7 +273,7 @@ const ChannelsView: React.FC = () => {
             {channels.length === 0 && unregistered.length === 0 && (
               <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
                 <div className="mb-3 text-4xl">🔗</div>
-                <p className="text-sm text-gray-500">暂无可用渠道</p>
+                <p className="text-sm text-gray-500">{t('channels.noChannelsAvailable')}</p>
               </div>
             )}
           </div>
@@ -302,23 +309,24 @@ const ChannelsView: React.FC = () => {
 // Capability badges
 // ---------------------------------------------------------------------------
 
-const CAP_LABELS: Record<string, string> = {
-  media: '📎 媒体',
-  reactions: '👍 反应',
-  threads: '🧵 线程',
-  edit: '✏️ 编辑',
-  polls: '📊 投票',
-  streaming: '⚡ 流式',
+const CAP_LABEL_KEYS: Record<string, string> = {
+  media: 'channels.capMedia',
+  reactions: 'channels.capReactions',
+  threads: 'channels.capThreads',
+  edit: 'channels.capEdit',
+  polls: 'channels.capPolls',
+  streaming: 'channels.capStreaming',
 };
 
 const CapabilityBadges: React.FC<{ caps: ChannelCapabilities }> = ({ caps }) => {
-  const active = Object.entries(CAP_LABELS).filter(([k]) => (caps as any)[k]);
+  const { t } = useTranslation();
+  const active = Object.entries(CAP_LABEL_KEYS).filter(([k]) => (caps as any)[k]);
   if (active.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1 mt-1">
-      {active.map(([k, label]) => (
+      {active.map(([k, labelKey]) => (
         <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">
-          {label}
+          {t(labelKey)}
         </span>
       ))}
     </div>
@@ -335,6 +343,7 @@ const ChannelCard: React.FC<{
   onConfigure: () => void; onRemove: () => void;
   onSecurity: () => void;
 }> = ({ channel, avail, busy, onReconnect, onDisconnect, onConfigure, onRemove, onSecurity }) => {
+  const { t } = useTranslation();
   const icon = avail?.icon ?? '📡';
   const account = channel.accounts?.[0];
 
@@ -346,7 +355,7 @@ const ChannelCard: React.FC<{
           <span className="text-sm font-medium text-gray-700 capitalize">{avail?.label ?? channel.type}</span>
         </div>
         <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_COLORS[channel.status]}`}>
-          {STATUS_LABELS[channel.status]}
+          {t(STATUS_LABEL_KEYS[channel.status])}
         </span>
       </div>
 
@@ -360,26 +369,26 @@ const ChannelCard: React.FC<{
       {account && (
         <div className="mt-2 space-y-0.5 text-[11px] text-gray-400">
           {account.reconnectAttempts != null && account.reconnectAttempts > 0 && (
-            <div className="text-yellow-600">重连尝试: {account.reconnectAttempts}/10</div>
+            <div className="text-yellow-600">{t('channels.reconnectAttempts', { count: account.reconnectAttempts })}</div>
           )}
           {account.lastError && (
             <div className="text-red-500 truncate" title={account.lastError}>
-              错误: {account.lastError}
+              {t('channels.error')}: {account.lastError}
             </div>
           )}
           {account.lastInboundAt && (
-            <div>最近入站: {timeAgo(account.lastInboundAt)}</div>
+            <div>{t('channels.lastInbound')}: {timeAgo(account.lastInboundAt, t)}</div>
           )}
           {account.lastOutboundAt && (
-            <div>最近出站: {timeAgo(account.lastOutboundAt)}</div>
+            <div>{t('channels.lastOutbound')}: {timeAgo(account.lastOutboundAt, t)}</div>
           )}
         </div>
       )}
 
       <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
-        <span>消息: {channel.messageCount}</span>
+        <span>{t('channels.messages')}: {channel.messageCount}</span>
         {channel.connectedAt && (
-          <span>连接于: {new Date(channel.connectedAt).toLocaleString()}</span>
+          <span>{t('channels.connectedAt')}: {new Date(channel.connectedAt).toLocaleString()}</span>
         )}
       </div>
       <div className="mt-3 flex items-center gap-2">
@@ -387,30 +396,30 @@ const ChannelCard: React.FC<{
           <>
             <button onClick={onReconnect} disabled={busy}
               className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50">
-              重连
+              {t('channels.reconnect')}
             </button>
             <button onClick={onDisconnect} disabled={busy}
               className="rounded bg-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-300 disabled:opacity-50">
-              断开
+              {t('channels.disconnect')}
             </button>
           </>
         ) : (
           <button onClick={onReconnect} disabled={busy}
             className="rounded bg-green-500 px-2 py-1 text-xs text-white hover:bg-green-600 disabled:opacity-50">
-            连接
+            {t('channels.connect')}
           </button>
         )}
         <button onClick={onConfigure} disabled={busy}
           className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-          ⚙️ 配置
+          ⚙️ {t('channels.configure')}
         </button>
         <button onClick={onSecurity} disabled={busy}
           className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-          🛡️ 安全
+          🛡️ {t('channels.security')}
         </button>
         <button onClick={onRemove} disabled={busy}
           className="rounded border border-red-200 px-2 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50">
-          删除
+          {t('channels.delete')}
         </button>
       </div>
     </div>
@@ -431,6 +440,7 @@ const ChannelConfigDialog: React.FC<{
   saving: boolean;
   saveMsg: string | null;
 }> = ({ channelType, channel, values, onChange, onSave, onCancel, saving, saveMsg }) => {
+  const { t } = useTranslation();
   const fields = channel?.fields ?? [];
   const requiredFilled = fields.filter(f => f.required).every(f => values[f.key]?.trim());
 
@@ -497,7 +507,7 @@ const ChannelConfigDialog: React.FC<{
           <span className="text-xl">{channel?.icon ?? '📡'}</span>
           <div>
             <h3 className="text-sm font-semibold text-gray-800">
-              配置 {channel?.label ?? channelType}
+              {t('channels.configureChannel', { name: channel?.label ?? channelType })}
             </h3>
             {channel?.blurb && (
               <p className="text-xs text-gray-400">{channel.blurb}</p>
@@ -523,7 +533,7 @@ const ChannelConfigDialog: React.FC<{
                     <input type="checkbox" checked={values[field.key] === 'true'}
                       onChange={e => handleFieldChange(field.key, e.target.checked ? 'true' : 'false')}
                       className="rounded border-gray-300" />
-                    <span className="text-xs text-gray-500">启用</span>
+                    <span className="text-xs text-gray-500">{t('channels.enable')}</span>
                   </label>
                 ) : (
                   <div className="relative">
@@ -531,7 +541,7 @@ const ChannelConfigDialog: React.FC<{
                       type={isPasswordField && !isRevealed ? 'password' : 'text'}
                       value={displayVal}
                       onChange={e => handleFieldChange(field.key, e.target.value)}
-                      placeholder={field.envVar ? `或设置 ${field.envVar}` : ''}
+                      placeholder={field.envVar ? t('channels.orSetEnvVar', { envVar: field.envVar }) : ''}
                       className={`w-full rounded border px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ${
                         hasMaskedValue ? 'border-gray-200 bg-gray-50 text-gray-400' : 'border-gray-300'
                       } ${isPasswordField ? 'pr-16' : ''}`}
@@ -543,7 +553,7 @@ const ChannelConfigDialog: React.FC<{
                         disabled={loadingRaw}
                         className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-2 py-0.5 text-xs text-blue-500 hover:bg-blue-50 disabled:opacity-50"
                       >
-                        {loadingRaw ? '...' : isRevealed ? '🙈 隐藏' : '👁 显示'}
+                        {loadingRaw ? '...' : isRevealed ? t('channels.hide') : t('channels.show')}
                       </button>
                     )}
                   </div>
@@ -552,25 +562,25 @@ const ChannelConfigDialog: React.FC<{
                   <p className="mt-0.5 text-xs text-gray-400">{field.description}</p>
                 )}
                 {hasMaskedValue && !isRevealed && (
-                  <p className="mt-0.5 text-xs text-green-600">✓ 已配置（输入新值可覆盖）</p>
+                  <p className="mt-0.5 text-xs text-green-600">{t('channels.configuredOverride')}</p>
                 )}
               </div>
             );
           })}
         </div>
         {saveMsg && (
-          <div className={`mx-5 mb-2 rounded px-3 py-1.5 text-xs ${saveMsg.includes('失败') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+          <div className={`mx-5 mb-2 rounded px-3 py-1.5 text-xs ${saveMsgIsError ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
             {saveMsg}
           </div>
         )}
         <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3">
           <button onClick={onCancel}
             className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">
-            取消
+            {t('channels.cancel')}
           </button>
           <button onClick={handleSaveFiltered} disabled={!requiredFilled || saving}
             className="rounded bg-blue-500 px-3 py-1.5 text-xs text-white hover:bg-blue-600 disabled:opacity-50">
-            {saving ? '保存中...' : '保存并连接'}
+            {saving ? t('channels.saving') : t('channels.saveAndConnect')}
           </button>
         </div>
       </div>
@@ -610,6 +620,7 @@ const SecurityPanel: React.FC<{
   channelType: string;
   onClose: () => void;
 }> = ({ channelType, onClose }) => {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<'pairing' | 'allowlist'>('pairing');
   const [pairingRequests, setPairingRequests] = useState<PairingRequest[]>([]);
   const [allowFromData, setAllowFromData] = useState<AllowFromData | null>(null);
@@ -617,6 +628,7 @@ const SecurityPanel: React.FC<{
   const [loading, setLoading] = useState(true);
   const [newEntry, setNewEntry] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
+  const [msgIsError, setMsgIsError] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -637,9 +649,10 @@ const SecurityPanel: React.FC<{
   const handleApprove = async (code: string) => {
     try {
       await post('/pairing/approve', { channel: channelType, code });
-      setMsg('已批准');
+      setMsg(t('channels.approved'));
+      setMsgIsError(false);
       await fetchData();
-    } catch (err) { setMsg(`批准失败: ${(err as Error).message}`); }
+    } catch (err) { setMsg(t('channels.approveFailed', { message: (err as Error).message })); setMsgIsError(true); }
   };
 
   const handleAddEntry = async () => {
@@ -647,24 +660,26 @@ const SecurityPanel: React.FC<{
     try {
       await post(`/channels/${encodeURIComponent(channelType)}/allow-from`, { entry: newEntry.trim() });
       setNewEntry('');
-      setMsg('已添加');
+      setMsg(t('channels.added'));
+      setMsgIsError(false);
       await fetchData();
-    } catch (err) { setMsg(`添加失败: ${(err as Error).message}`); }
+    } catch (err) { setMsg(t('channels.addFailed', { message: (err as Error).message })); setMsgIsError(true); }
   };
 
   const handleRemoveEntry = async (entry: string) => {
     try {
       await del(`/channels/${encodeURIComponent(channelType)}/allow-from`, { entry });
-      setMsg('已移除');
+      setMsg(t('channels.removed'));
+      setMsgIsError(false);
       await fetchData();
-    } catch (err) { setMsg(`移除失败: ${(err as Error).message}`); }
+    } catch (err) { setMsg(t('channels.removeFailed', { message: (err as Error).message })); setMsgIsError(true); }
   };
 
   const POLICY_LABELS: Record<string, string> = {
-    open: '🟢 开放 — 允许所有 DM',
-    pairing: '🔒 配对 — 需要配对码授权',
-    allowlist: '📋 白名单 — 仅允许列表中的用户',
-    disabled: '🚫 禁用 — 不接受 DM',
+    open: t('channels.policyOpen'),
+    pairing: t('channels.policyPairing'),
+    allowlist: t('channels.policyAllowlist'),
+    disabled: t('channels.policyDisabled'),
   };
 
   return (
@@ -672,7 +687,7 @@ const SecurityPanel: React.FC<{
       <div className="w-full max-w-lg rounded-lg bg-white shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">🛡️ 安全管理 — {channelType}</h3>
+            <h3 className="text-sm font-semibold text-gray-800">{t('channels.securityManagement', { type: channelType })}</h3>
             {securityInfo && (
               <p className="text-xs text-gray-400 mt-0.5">
                 {POLICY_LABELS[securityInfo.dmPolicy] ?? securityInfo.dmPolicy}
@@ -686,22 +701,22 @@ const SecurityPanel: React.FC<{
         <div className="flex border-b border-gray-200">
           <button onClick={() => setTab('pairing')}
             className={`flex-1 px-4 py-2 text-xs font-medium ${tab === 'pairing' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-400'}`}>
-            配对请求 {pairingRequests.length > 0 && `(${pairingRequests.length})`}
+            {t('channels.pairingRequests')} {pairingRequests.length > 0 && `(${pairingRequests.length})`}
           </button>
           <button onClick={() => setTab('allowlist')}
             className={`flex-1 px-4 py-2 text-xs font-medium ${tab === 'allowlist' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-400'}`}>
-            白名单 {allowFromData?.merged?.length ? `(${allowFromData.merged.length})` : ''}
+            {t('channels.allowlist')} {allowFromData?.merged?.length ? `(${allowFromData.merged.length})` : ''}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5">
           {loading ? (
-            <div className="text-center text-sm text-gray-400 py-8">加载中...</div>
+            <div className="text-center text-sm text-gray-400 py-8">{t('channels.loading')}</div>
           ) : tab === 'pairing' ? (
             <div className="space-y-3">
               {pairingRequests.length === 0 ? (
                 <div className="text-center text-sm text-gray-400 py-8">
-                  暂无待处理的配对请求
+                  {t('channels.noPairingRequests')}
                 </div>
               ) : (
                 pairingRequests.map(req => (
@@ -709,16 +724,16 @@ const SecurityPanel: React.FC<{
                     <div>
                       <div className="text-sm font-mono text-gray-700">{req.id}</div>
                       <div className="text-xs text-gray-400">
-                        配对码: <span className="font-mono font-semibold text-blue-600">{req.code}</span>
-                        {' · '}创建于: {new Date(req.createdAt).toLocaleString()}
+                        {t('channels.pairingCode')}: <span className="font-mono font-semibold text-blue-600">{req.code}</span>
+                        {' · '}{t('channels.createdAt')}: {new Date(req.createdAt).toLocaleString()}
                       </div>
                       {req.meta?.senderName && (
-                        <div className="text-xs text-gray-400">名称: {req.meta.senderName}</div>
+                        <div className="text-xs text-gray-400">{t('channels.name')}: {req.meta.senderName}</div>
                       )}
                     </div>
                     <button onClick={() => handleApprove(req.code)}
                       className="rounded bg-green-500 px-3 py-1 text-xs text-white hover:bg-green-600">
-                      批准
+                      {t('channels.approve')}
                     </button>
                   </div>
                 ))
@@ -733,23 +748,23 @@ const SecurityPanel: React.FC<{
                   value={newEntry}
                   onChange={e => setNewEntry(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleAddEntry()}
-                  placeholder="输入用户 ID..."
+                  placeholder={t('channels.enterUserId')}
                   className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"
                 />
                 <button onClick={handleAddEntry} disabled={!newEntry.trim()}
                   className="rounded bg-blue-500 px-3 py-1.5 text-xs text-white hover:bg-blue-600 disabled:opacity-50">
-                  添加
+                  {t('channels.add')}
                 </button>
               </div>
 
               {/* Config entries (read-only) */}
               {allowFromData?.config && allowFromData.config.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-400 mb-1">配置文件白名单（只读）</div>
+                  <div className="text-xs text-gray-400 mb-1">{t('channels.configAllowlistReadonly')}</div>
                   {allowFromData.config.map(entry => (
                     <div key={`cfg-${entry}`} className="flex items-center justify-between rounded border border-gray-100 bg-gray-50 px-3 py-1.5 mb-1">
                       <span className="text-sm font-mono text-gray-600">{entry}</span>
-                      <span className="text-[10px] text-gray-400">配置</span>
+                      <span className="text-[10px] text-gray-400">{t('channels.configLabel')}</span>
                     </div>
                   ))}
                 </div>
@@ -758,13 +773,13 @@ const SecurityPanel: React.FC<{
               {/* Store entries (editable) */}
               {allowFromData?.store && allowFromData.store.length > 0 && (
                 <div>
-                  <div className="text-xs text-gray-400 mb-1">配对授权白名单</div>
+                  <div className="text-xs text-gray-400 mb-1">{t('channels.pairedAllowlist')}</div>
                   {allowFromData.store.map(entry => (
                     <div key={`store-${entry}`} className="flex items-center justify-between rounded border border-gray-200 px-3 py-1.5 mb-1">
                       <span className="text-sm font-mono text-gray-700">{entry}</span>
                       <button onClick={() => handleRemoveEntry(entry)}
                         className="text-xs text-red-400 hover:text-red-600">
-                        移除
+                        {t('channels.remove')}
                       </button>
                     </div>
                   ))}
@@ -773,7 +788,7 @@ const SecurityPanel: React.FC<{
 
               {(!allowFromData?.merged || allowFromData.merged.length === 0) && (
                 <div className="text-center text-sm text-gray-400 py-4">
-                  白名单为空
+                  {t('channels.allowlistEmpty')}
                 </div>
               )}
             </div>
@@ -781,7 +796,7 @@ const SecurityPanel: React.FC<{
         </div>
 
         {msg && (
-          <div className={`mx-5 mb-3 rounded px-3 py-1.5 text-xs ${msg.includes('失败') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+          <div className={`mx-5 mb-3 rounded px-3 py-1.5 text-xs ${msgIsError ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
             {msg}
           </div>
         )}

@@ -199,6 +199,8 @@ export class LongportAdapter implements BrokerAdapter {
         lastError = err;
         // Don't retry on rate-limit errors — it only makes things worse
         if (err instanceof Error && err.message.includes('429')) throw err;
+        // Don't retry on configuration errors — credentials won't appear mid-retry
+        if (err instanceof Error && err.message.includes('not configured')) throw err;
         if (attempt < this.maxRetries) {
           await sleep(this.retryDelayMs);
         }

@@ -158,13 +158,13 @@ describe('formatDecimal', () => {
 describe('getSideLabel', () => {
   it('maps buy to green 买入', () => {
     const result = getSideLabel('buy');
-    expect(result.text).toBe('买入');
+    expect(result.text).toBe('live.buy');
     expect(result.colorClass).toBe('text-green-500');
   });
 
   it('maps sell to red 卖出', () => {
     const result = getSideLabel('sell');
-    expect(result.text).toBe('卖出');
+    expect(result.text).toBe('live.sell');
     expect(result.colorClass).toBe('text-red-500');
   });
 });

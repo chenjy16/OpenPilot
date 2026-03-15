@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   useTradingStore,
   type ProcessResult,
@@ -10,25 +11,25 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Map ProcessResult reason to Chinese display text */
-function reasonLabel(r: ProcessResult): string {
-  if (r.action === 'order_created') return '已下单';
+/** Map ProcessResult reason to localized display text */
+function reasonLabel(r: ProcessResult, t: (key: string) => string): string {
+  if (r.action === 'order_created') return t('autoTrading.orderCreated');
   switch (r.reason) {
-    case 'confidence_below_threshold': return '置信度不足跳过';
-    case 'skipped_confidence': return '置信度不足跳过';
-    case 'skipped_debate': return '辩论否决';
-    case 'duplicate_signal': return '去重跳过';
-    case 'skipped_dedup': return '去重跳过';
+    case 'confidence_below_threshold': return t('autoTrading.confidenceBelowThreshold');
+    case 'skipped_confidence': return t('autoTrading.confidenceBelowThreshold');
+    case 'skipped_debate': return t('autoTrading.debateRejected');
+    case 'duplicate_signal': return t('autoTrading.dedupSkipped');
+    case 'skipped_dedup': return t('autoTrading.dedupSkipped');
     case 'skipped_risk':
-    case 'risk_rejected': return '风控拒绝';
+    case 'risk_rejected': return t('autoTrading.riskRejected');
     case 'skipped_quantity':
-    case 'quantity_insufficient': return '数量不足跳过';
+    case 'quantity_insufficient': return t('autoTrading.quantityInsufficient');
     case 'action_hold':
-    case 'skipped_hold': return 'Hold 信号跳过';
-    case 'skipped_disabled': return '自动交易未启用';
+    case 'skipped_hold': return t('autoTrading.holdSignal');
+    case 'skipped_disabled': return t('autoTrading.autoTradeDisabled');
     case 'missing_price':
-    case 'skipped_missing_price': return '缺少价格跳过';
-    default: return r.reason ?? '跳过';
+    case 'skipped_missing_price': return t('autoTrading.missingPrice');
+    default: return r.reason ?? t('autoTrading.skipped');
   }
 }
 
@@ -60,6 +61,7 @@ function SummaryStats({
   signals: ProcessResult[];
   stopLossRecords: StopLossRecord[];
 }) {
+  const { t } = useTranslation();
   const safeSignals = signals ?? [];
   const safeRecords = stopLossRecords ?? [];
   const todayStart = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
@@ -79,10 +81,10 @@ function SummaryStats({
   ).length;
 
   const cards = [
-    { label: '今日自动下单', value: todayOrders, color: 'text-blue-600' },
-    { label: '止盈触发', value: tpTriggers, color: 'text-green-600' },
-    { label: '止损触发', value: slTriggers, color: 'text-red-600' },
-    { label: '信号处理数', value: todaySignals, color: 'text-gray-800' },
+    { label: t('autoTrading.todayAutoOrders'), value: todayOrders, color: 'text-blue-600' },
+    { label: t('autoTrading.tpTriggers'), value: tpTriggers, color: 'text-green-600' },
+    { label: t('autoTrading.slTriggers'), value: slTriggers, color: 'text-red-600' },
+    { label: t('autoTrading.signalsProcessed'), value: todaySignals, color: 'text-gray-800' },
   ];
 
   return (
@@ -105,6 +107,7 @@ function PipelineToggle({
   config: TradingConfig | null;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   const enabled = config?.auto_trade_enabled ?? false;
   return (
     <div className="flex items-center gap-3">
@@ -115,7 +118,7 @@ function PipelineToggle({
         }`}
         role="switch"
         aria-checked={enabled}
-        aria-label="自动交易开关"
+        aria-label={t('autoTrading.pipelineToggle')}
       >
         <span
           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -124,7 +127,7 @@ function PipelineToggle({
         />
       </button>
       <span className={`text-sm font-medium ${enabled ? 'text-green-700' : 'text-gray-500'}`}>
-        {enabled ? '流水线已启用' : '流水线已停用'}
+        {enabled ? t('autoTrading.pipelineEnabled') : t('autoTrading.pipelineDisabled')}
       </span>
     </div>
   );
@@ -139,6 +142,7 @@ function ConfigEditor({
   config: TradingConfig | null;
   onSave: (updates: Partial<TradingConfig>) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [confidenceThreshold, setConfidenceThreshold] = useState(config?.confidence_threshold ?? 0.6);
   const [dedupWindowHours, setDedupWindowHours] = useState(config?.dedup_window_hours ?? 24);
   const [quantityMode, setQuantityMode] = useState<QuantityMode>(config?.quantity_mode ?? 'fixed_quantity');
@@ -181,10 +185,10 @@ function ConfigEditor({
         debate_enabled: debateEnabled,
         debate_model: debateModel,
       });
-      setSaveMsg('保存成功');
+      setSaveMsg(t('common.saveSuccess'));
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (err) {
-      setSaveMsg(`保存失败: ${(err as Error).message}`);
+      setSaveMsg(`${t('common.saveFailed')}: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
@@ -196,7 +200,7 @@ function ConfigEditor({
         {/* Confidence threshold */}
         <div>
           <label className="block text-xs text-gray-500 mb-1">
-            置信度阈值: {confidenceThreshold.toFixed(2)}
+            {t('autoTrading.confidenceThreshold')}: {confidenceThreshold.toFixed(2)}
           </label>
           <input
             type="range"
@@ -214,7 +218,7 @@ function ConfigEditor({
 
         {/* Dedup window */}
         <div>
-          <label className="block text-xs text-gray-500 mb-1">去重窗口（小时）</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('autoTrading.dedupWindow')}</label>
           <input
             type="number"
             min="1"
@@ -226,23 +230,23 @@ function ConfigEditor({
 
         {/* Quantity mode */}
         <div>
-          <label className="block text-xs text-gray-500 mb-1">数量计算模式</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('autoTrading.quantityMode')}</label>
           <select
             value={quantityMode}
             onChange={(e) => setQuantityMode(e.target.value as QuantityMode)}
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
           >
-            <option value="fixed_quantity">固定数量</option>
-            <option value="fixed_amount">固定金额</option>
-            <option value="kelly_formula">Kelly 公式</option>
-            <option value="volatility_parity">波动率平价 (ATR)</option>
+            <option value="fixed_quantity">{t('autoTrading.fixedQuantity')}</option>
+            <option value="fixed_amount">{t('autoTrading.fixedAmount')}</option>
+            <option value="kelly_formula">{t('autoTrading.kellyFormula')}</option>
+            <option value="volatility_parity">{t('autoTrading.volatilityParity')}</option>
           </select>
         </div>
 
         {/* Quantity params based on mode */}
         {quantityMode === 'fixed_quantity' && (
           <div>
-            <label className="block text-xs text-gray-500 mb-1">固定数量（股）</label>
+            <label className="block text-xs text-gray-500 mb-1">{t('autoTrading.fixedQtyShares')}</label>
             <input
               type="number"
               min="1"
@@ -254,7 +258,7 @@ function ConfigEditor({
         )}
         {quantityMode === 'fixed_amount' && (
           <div>
-            <label className="block text-xs text-gray-500 mb-1">固定金额</label>
+            <label className="block text-xs text-gray-500 mb-1">{t('autoTrading.fixedAmountValue')}</label>
             <input
               type="number"
               min="1"
@@ -267,8 +271,7 @@ function ConfigEditor({
         {quantityMode === 'volatility_parity' && (
           <div className="sm:col-span-2">
             <p className="text-xs text-gray-400">
-              波动率平价模式：单笔最大亏损 = 账户总资金 × 1%，止损宽容度 = 2 × ATR(14)。
-              波动大的股票自动少买，波动小的股票自动多买。需要信号中包含 ATR 数据。
+              {t('autoTrading.volatilityNote')}
             </p>
           </div>
         )}
@@ -282,7 +285,7 @@ function ConfigEditor({
             }`}
             role="switch"
             aria-checked={slTpEnabled}
-            aria-label="止盈止损开关"
+            aria-label={t('autoTrading.slTpToggle')}
           >
             <span
               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -290,12 +293,12 @@ function ConfigEditor({
               }`}
             />
           </button>
-          <span className="text-xs text-gray-500">止盈止损 {slTpEnabled ? '已启用' : '已停用'}</span>
+          <span className="text-xs text-gray-500">{slTpEnabled ? t('autoTrading.slTpEnabled') : t('autoTrading.slTpDisabled')}</span>
         </div>
 
         {/* SL/TP check interval */}
         <div>
-          <label className="block text-xs text-gray-500 mb-1">止盈止损检查间隔（毫秒）</label>
+          <label className="block text-xs text-gray-500 mb-1">{t('autoTrading.slTpCheckInterval')}</label>
           <input
             type="number"
             min="1000"
@@ -309,7 +312,7 @@ function ConfigEditor({
 
       {/* v2.0: Dual-Agent Debate Section */}
       <div className="border-t border-gray-200 pt-4">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">🤖 双智能体辩论 (v2.0)</h4>
+        <h4 className="text-sm font-medium text-gray-700 mb-3">{t('autoTrading.dualAgentDebate')}</h4>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="flex items-center gap-3">
             <button
@@ -319,7 +322,7 @@ function ConfigEditor({
               }`}
               role="switch"
               aria-checked={debateEnabled}
-              aria-label="辩论机制开关"
+              aria-label={t('autoTrading.debateToggle')}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -328,14 +331,14 @@ function ConfigEditor({
               />
             </button>
             <div>
-              <span className="text-xs text-gray-500">辩论机制 {debateEnabled ? '已启用' : '已停用'}</span>
-              <p className="text-xs text-gray-400">买入前由多头/空头 Agent 辩论，首席风控官裁决</p>
+              <span className="text-xs text-gray-500">{debateEnabled ? t('autoTrading.debateEnabled') : t('autoTrading.debateDisabled')}</span>
+              <p className="text-xs text-gray-400">{t('autoTrading.debateDescription')}</p>
             </div>
           </div>
 
           {debateEnabled && (
             <div>
-              <label className="block text-xs text-gray-500 mb-1">裁决模型</label>
+              <label className="block text-xs text-gray-500 mb-1">{t('autoTrading.adjudicationModel')}</label>
               <input
                 type="text"
                 value={debateModel}
@@ -343,7 +346,7 @@ function ConfigEditor({
                 placeholder="deepseek/deepseek-reasoner"
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
               />
-              <p className="text-xs text-gray-400 mt-0.5">用于最终裁决的 LLM 模型 ID</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t('autoTrading.adjudicationModelHint')}</p>
             </div>
           )}
         </div>
@@ -355,10 +358,10 @@ function ConfigEditor({
           disabled={saving}
           className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {saving ? '保存中...' : '保存配置'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
         {saveMsg && (
-          <span className={`text-xs ${saveMsg.includes('失败') ? 'text-red-600' : 'text-green-600'}`}>
+          <span className={`text-xs ${saveMsg.includes(t('common.saveFailed')) ? 'text-red-600' : 'text-green-600'}`}>
             {saveMsg}
           </span>
         )}
@@ -369,9 +372,10 @@ function ConfigEditor({
 
 /** Recent signals list */
 function RecentSignalsList({ signals }: { signals: ProcessResult[] }) {
+  const { t } = useTranslation();
   const recent = (signals ?? []).slice(0, 10);
   if (recent.length === 0) {
-    return <p className="py-4 text-center text-sm text-gray-400">暂无信号处理记录</p>;
+    return <p className="py-4 text-center text-sm text-gray-400">{t('autoTrading.noSignals')}</p>;
   }
   return (
     <div className="space-y-2">
@@ -381,15 +385,15 @@ function RecentSignalsList({ signals }: { signals: ProcessResult[] }) {
           className="flex items-center justify-between rounded border border-gray-100 bg-gray-50 px-3 py-2"
         >
           <div className="text-sm">
-            <span className="font-medium text-gray-800">信号 #{s.signal_id}</span>
+            <span className="font-medium text-gray-800">{t('autoTrading.signalId', { id: s.signal_id })}</span>
             {s.order_id != null && (
-              <span className="ml-2 text-xs text-gray-500">订单 #{s.order_id}</span>
+              <span className="ml-2 text-xs text-gray-500">{t('autoTrading.orderId', { id: s.order_id })}</span>
             )}
           </div>
           <span
             className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${reasonBadgeColor(s)}`}
           >
-            {reasonLabel(s)}
+            {reasonLabel(s, t)}
           </span>
         </div>
       ))}
@@ -399,21 +403,22 @@ function RecentSignalsList({ signals }: { signals: ProcessResult[] }) {
 
 /** Active stop-loss monitoring list */
 function ActiveStopLossList({ records }: { records: StopLossRecord[] }) {
+  const { t } = useTranslation();
   const active = (records ?? []).filter((r) => r.status === 'active');
   if (active.length === 0) {
-    return <p className="py-4 text-center text-sm text-gray-400">暂无活跃止盈止损监控</p>;
+    return <p className="py-4 text-center text-sm text-gray-400">{t('autoTrading.noActiveSlTp')}</p>;
   }
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-gray-200 text-xs text-gray-500">
-            <th className="whitespace-nowrap pb-2 pr-3">代码</th>
-            <th className="whitespace-nowrap pb-2 pr-3">入场价</th>
-            <th className="whitespace-nowrap pb-2 pr-3">止损价</th>
-            <th className="whitespace-nowrap pb-2 pr-3">止盈价</th>
-            <th className="whitespace-nowrap pb-2 pr-3">移动止损</th>
-            <th className="whitespace-nowrap pb-2">状态</th>
+            <th className="whitespace-nowrap pb-2 pr-3">{t('trading.symbol')}</th>
+            <th className="whitespace-nowrap pb-2 pr-3">{t('autoTrading.entryPrice')}</th>
+            <th className="whitespace-nowrap pb-2 pr-3">{t('autoTrading.stopLossPrice')}</th>
+            <th className="whitespace-nowrap pb-2 pr-3">{t('autoTrading.takeProfitPrice')}</th>
+            <th className="whitespace-nowrap pb-2 pr-3">{t('autoTrading.trailingStop')}</th>
+            <th className="whitespace-nowrap pb-2">{t('trading.orderStatus')}</th>
           </tr>
         </thead>
         <tbody>
@@ -427,12 +432,12 @@ function ActiveStopLossList({ records }: { records: StopLossRecord[] }) {
                 {r.trailing_percent ? (
                   <span className="inline-flex items-center gap-1 text-xs">
                     <span className="rounded bg-purple-100 px-1.5 py-0.5 font-medium text-purple-700">{r.trailing_percent}%</span>
-                    {r.highest_price && <span className="text-gray-400">峰值 {r.highest_price.toFixed(2)}</span>}
+                    {r.highest_price && <span className="text-gray-400">{t('autoTrading.peak')} {r.highest_price.toFixed(2)}</span>}
                   </span>
                 ) : r.trailing_atr_multiplier && r.atr_value ? (
                   <span className="inline-flex items-center gap-1 text-xs">
                     <span className="rounded bg-indigo-100 px-1.5 py-0.5 font-medium text-indigo-700">ATR×{r.trailing_atr_multiplier}</span>
-                    {r.highest_price && <span className="text-gray-400">峰值 {r.highest_price.toFixed(2)}</span>}
+                    {r.highest_price && <span className="text-gray-400">{t('autoTrading.peak')} {r.highest_price.toFixed(2)}</span>}
                   </span>
                 ) : (
                   <span className="text-gray-300">—</span>
@@ -440,7 +445,7 @@ function ActiveStopLossList({ records }: { records: StopLossRecord[] }) {
               </td>
               <td className="whitespace-nowrap py-2">
                 <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                  监控中
+                  {t('autoTrading.monitoring')}
                 </span>
               </td>
             </tr>
@@ -456,6 +461,7 @@ function ActiveStopLossList({ records }: { records: StopLossRecord[] }) {
 // ---------------------------------------------------------------------------
 
 const AutoTradingPanel: React.FC = () => {
+  const { t } = useTranslation();
   const {
     config,
     pipelineSignals,
@@ -491,7 +497,7 @@ const AutoTradingPanel: React.FC = () => {
     <div className="space-y-6">
       {/* Header with toggle */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-700">自动交易</h2>
+        <h2 className="text-sm font-semibold text-gray-700">{t('autoTrading.title')}</h2>
         <div className="flex items-center gap-3">
           <PipelineToggle config={config} onToggle={handleTogglePipeline} />
           <button
@@ -502,7 +508,7 @@ const AutoTradingPanel: React.FC = () => {
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
-            ⚙️ 配置
+            {t('autoTrading.config')}
           </button>
         </div>
       </div>
@@ -513,24 +519,24 @@ const AutoTradingPanel: React.FC = () => {
       {/* Config editor (collapsible) */}
       {showConfig && (
         <section className="rounded-lg border border-blue-200 bg-blue-50/30 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-700">自动交易配置</h3>
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">{t('autoTrading.autoTradingConfig')}</h3>
           <ConfigEditor config={config} onSave={updateConfig} />
         </section>
       )}
 
       {/* Recent signals */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-gray-700">最近信号处理</h3>
+        <h3 className="mb-3 text-sm font-semibold text-gray-700">{t('autoTrading.recentSignals')}</h3>
         <RecentSignalsList signals={pipelineSignals} />
       </section>
 
       {/* Active stop-loss monitoring */}
       <section className="rounded-lg border border-gray-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-gray-700">
-          活跃止盈止损监控
+          {t('autoTrading.activeSlTpMonitoring')}
           {pipelineStatus && (
             <span className="ml-2 text-xs font-normal text-gray-400">
-              ({pipelineStatus.active_stop_loss_count} 条)
+              {t('autoTrading.slTpCount', { count: pipelineStatus.active_stop_loss_count })}
             </span>
           )}
         </h3>

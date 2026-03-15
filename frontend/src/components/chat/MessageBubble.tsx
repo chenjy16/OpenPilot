@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -39,6 +40,7 @@ const CodeBlock: React.FC<React.ComponentPropsWithoutRef<'code'> & { inline?: bo
 };
 
 const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
+  const { t } = useTranslation();
   const isUser = message.role === 'user';
   const contentRef = useRef<HTMLDivElement>(null);
   const [isOverflow, setIsOverflow] = useState(false);
@@ -95,7 +97,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
               isUser ? 'text-blue-200 hover:text-white' : 'text-blue-500 hover:text-blue-700'
             }`}
           >
-            {expanded ? '收起 ▲' : '展开全部 ▼'}
+            {expanded ? t('chat.collapse') : t('chat.expandAll')}
           </button>
         )}
         {message.isStreaming && (

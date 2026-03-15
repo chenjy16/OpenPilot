@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLiveDashboardStore } from '../../stores/liveDashboardStore';
 import LiveHeader from './LiveHeader';
 import AccountSummaryCard from './AccountSummaryCard';
@@ -22,6 +23,7 @@ const REFRESH_INTERVAL_MS = 60_000; // 60 seconds
 
 const LiveDashboardView: React.FC = () => {
   const { data, loading, error, stale, fetchDashboard } = useLiveDashboardStore();
+  const { t } = useTranslation();
 
   // Fetch on mount + set up 60-second auto-refresh interval
   useEffect(() => {
@@ -46,7 +48,7 @@ const LiveDashboardView: React.FC = () => {
             onClick={handleRetry}
             className="rounded bg-blue-600 px-6 py-2 text-white hover:bg-blue-500"
           >
-            重试
+            {t('common.retry')}
           </button>
         </div>
       </div>
@@ -57,7 +59,7 @@ const LiveDashboardView: React.FC = () => {
   if (!data && loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-gray-900 text-white">
-        <p className="text-gray-400">加载中...</p>
+        <p className="text-gray-400">{t('common.loading')}</p>
       </div>
     );
   }
@@ -67,7 +69,7 @@ const LiveDashboardView: React.FC = () => {
       {/* Stale data warning banner — Requirement 11.3 */}
       {stale && (
         <div className="w-full bg-yellow-600 px-4 py-2 text-center text-sm text-white">
-          数据更新失败，显示的是缓存数据
+          {t('live.staleWarning')}
         </div>
       )}
 

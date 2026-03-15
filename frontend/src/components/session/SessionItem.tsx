@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { SessionSummary } from '../../types';
 
 interface SessionItemProps {
@@ -14,6 +15,7 @@ const SessionItem: React.FC<SessionItemProps> = ({
   onSelect,
   onDelete,
 }) => {
+  const { t } = useTranslation();
   const formattedTime = new Date(session.updatedAt).toLocaleString();
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -39,13 +41,13 @@ const SessionItem: React.FC<SessionItemProps> = ({
       }}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{session.title || '新会话'}</p>
+        <p className="truncate font-medium">{session.title || t('session.newSessionTitle')}</p>
         <p className="truncate text-xs text-gray-500">{formattedTime}</p>
       </div>
       <button
         className="ml-2 flex-shrink-0 rounded p-1 text-gray-400 opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100"
         onClick={handleDelete}
-        aria-label={`删除会话 ${session.title || '新会话'}`}
+        aria-label={t('session.deleteSession', { title: session.title || t('session.newSessionTitle') })}
       >
         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
           <path

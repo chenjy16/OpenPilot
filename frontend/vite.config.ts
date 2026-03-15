@@ -12,6 +12,10 @@ export default defineConfig({
     outDir: path.resolve(__dirname, '..', 'dist', 'control-ui'),
     emptyOutDir: true,
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test-setup.ts'],
+  },
   server: {
     proxy: {
       '/api': {

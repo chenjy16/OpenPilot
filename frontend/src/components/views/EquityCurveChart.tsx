@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   AreaChart,
   Area,
@@ -33,31 +34,34 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload }) => {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   const pnlPrefix = point.daily_pnl > 0 ? '+' : '';
+  // Note: tooltip uses English labels since useTranslation can't be used in non-component
   return (
     <div className="rounded bg-gray-800 px-3 py-2 text-sm text-white shadow-lg">
       <p className="mb-1 font-medium">{point.date}</p>
-      <p>净值: {formatUSD(point.equity)}</p>
-      <p>日收益: {pnlPrefix}{formatUSD(point.daily_pnl)}</p>
-      <p>累计收益率: {point.cumulative_return.toFixed(2)}%</p>
+      <p>Equity: {formatUSD(point.equity)}</p>
+      <p>Daily PnL: {pnlPrefix}{formatUSD(point.daily_pnl)}</p>
+      <p>Cumulative: {point.cumulative_return.toFixed(2)}%</p>
     </div>
   );
 };
 
 const EquityCurveChart: React.FC<EquityCurveChartProps> = ({ curve }) => {
+  const { t } = useTranslation();
+
   if (!curve || curve.length === 0) {
     return (
       <div
         data-testid="equity-curve-unavailable"
         className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400"
       >
-        数据暂不可用
+        {t('common.dataUnavailable')}
       </div>
     );
   }
 
   return (
     <div data-testid="equity-curve-chart" className="rounded-lg bg-gray-800 p-4">
-      <h3 className="mb-2 text-sm font-medium text-gray-400">净值曲线</h3>
+      <h3 className="mb-2 text-sm font-medium text-gray-400">{t('live.equityCurve')}</h3>
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={curve}>
           <defs>

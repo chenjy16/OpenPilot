@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get } from '../../services/apiClient';
 import { useChatStore } from '../../stores/chatStore';
 import StatusBadge from '../common/StatusBadge';
@@ -24,6 +25,7 @@ interface ChannelStatus {
 const POLL_INTERVAL = 10000;
 
 const OverviewView: React.FC = () => {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const wsStatus = useChatStore((s) => s.wsStatus);
@@ -57,7 +59,7 @@ const OverviewView: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <h2 className="text-xl font-semibold text-gray-800">系统总览</h2>
+      <h2 className="text-xl font-semibold text-gray-800">{t('overview.title')}</h2>
 
       {error && (
         <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</div>
@@ -66,25 +68,25 @@ const OverviewView: React.FC = () => {
       {/* Connection & system status */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatusCard
-          title="网关连接"
-          value={wsStatus === 'connected' ? 'OK' : wsStatus === 'reconnecting' ? '重连中' : '离线'}
+          title={t('overview.gatewayConnection')}
+          value={wsStatus === 'connected' ? 'OK' : wsStatus === 'reconnecting' ? t('overview.reconnecting') : t('overview.offline')}
           badge={wsStatus === 'connected' ? 'success' : wsStatus === 'reconnecting' ? 'warning' : 'error'}
         />
-        <StatusCard title="运行时间" value={status ? formatUptime(status.uptime) : '—'} />
-        <StatusCard title="版本" value={status?.version ?? '—'} />
+        <StatusCard title={t('overview.uptime')} value={status ? formatUptime(status.uptime) : '—'} />
+        <StatusCard title={t('overview.version')} value={status?.version ?? '—'} />
       </div>
 
       {/* Statistics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard title="活跃会话" value={status?.activeSessions ?? 0} icon="📄" />
-        <StatCard title="可用模型" value={status?.models?.length ?? 0} icon="🧠" />
-        <StatCard title="渠道数" value={channels.length} icon="🔗" />
+        <StatCard title={t('overview.activeSessions')} value={status?.activeSessions ?? 0} icon="📄" />
+        <StatCard title={t('overview.availableModels')} value={status?.models?.length ?? 0} icon="🧠" />
+        <StatCard title={t('overview.channelCount')} value={channels.length} icon="🔗" />
       </div>
 
       {/* Channels status */}
       {channels.length > 0 && (
         <div>
-          <h3 className="mb-3 text-sm font-medium text-gray-600">渠道状态</h3>
+          <h3 className="mb-3 text-sm font-medium text-gray-600">{t('overview.channelStatus')}</h3>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {channels.map((ch) => (
               <div key={ch.name} className="rounded-lg border border-gray-200 bg-white p-3">
@@ -92,13 +94,13 @@ const OverviewView: React.FC = () => {
                   <span className="text-sm font-medium text-gray-800">{ch.name}</span>
                   <StatusBadge
                     status={ch.connected ? 'success' : ch.running ? 'warning' : 'idle'}
-                    label={ch.connected ? '已连接' : ch.running ? '运行中' : '离线'}
+                    label={ch.connected ? t('overview.connected') : ch.running ? t('common.running') : t('overview.offline')}
                   />
                 </div>
                 <div className="flex gap-3 text-xs text-gray-500">
-                  <span>配置: {ch.configured ? '✓' : '✗'}</span>
-                  <span>运行: {ch.running ? '✓' : '✗'}</span>
-                  <span>连接: {ch.connected ? '✓' : '✗'}</span>
+                  <span>{t('overview.configLabel')}: {ch.configured ? '✓' : '✗'}</span>
+                  <span>{t('overview.runLabel')}: {ch.running ? '✓' : '✗'}</span>
+                  <span>{t('overview.connectLabel')}: {ch.connected ? '✓' : '✗'}</span>
                 </div>
               </div>
             ))}
@@ -109,7 +111,7 @@ const OverviewView: React.FC = () => {
       {/* Models list */}
       {status?.models && status.models.length > 0 && (
         <div>
-          <h3 className="mb-2 text-sm font-medium text-gray-600">可用模型</h3>
+          <h3 className="mb-2 text-sm font-medium text-gray-600">{t('overview.availableModels')}</h3>
           <div className="flex flex-wrap gap-2">
             {status.models.map((m) => (
               <span key={m} className="rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700">

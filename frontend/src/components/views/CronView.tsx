@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get, post, put, del } from '../../services/apiClient';
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,7 @@ function SchedulerJobCard({
   onTrigger: () => void;
   onSave: (updates: Partial<SchedulerJob>) => void;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(job.name);
   const [schedule, setSchedule] = useState(job.schedule);
@@ -83,7 +85,7 @@ function SchedulerJobCard({
           <button
             onClick={onToggle}
             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${job.enabled ? 'bg-blue-500' : 'bg-gray-300'}`}
-            aria-label={job.enabled ? '禁用' : '启用'}
+            aria-label={job.enabled ? t('cron.disable') : t('cron.enable')}
           >
             <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${job.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
           </button>
@@ -111,20 +113,20 @@ function SchedulerJobCard({
             disabled={triggering}
             className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50"
           >
-            {triggering ? '运行中...' : '▶ 运行'}
+            {triggering ? t('cron.runningNow') : t('cron.runNow')}
           </button>
           <button
             onClick={() => editing ? handleSave() : setEditing(true)}
             className="rounded px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
           >
-            {editing ? '💾 保存' : '✏️ 编辑'}
+            {editing ? `💾 ${t('common.save')}` : `✏️ ${t('common.edit')}`}
           </button>
           {editing && (
             <button
               onClick={() => { setEditing(false); setName(job.name); setSchedule(job.schedule); setConfigStr(job.config ? JSON.stringify(job.config, null, 2) : ''); }}
               className="rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-50"
             >
-              取消
+              {t('common.cancel')}
             </button>
           )}
         </div>
@@ -132,7 +134,7 @@ function SchedulerJobCard({
 
       {/* Schedule */}
       <div className="mt-2 flex items-center gap-2">
-        <span className="text-xs text-gray-500">调度:</span>
+        <span className="text-xs text-gray-500">{t('cron.schedule')}:</span>
         {editing ? (
           <input
             value={schedule}
@@ -148,7 +150,7 @@ function SchedulerJobCard({
       {/* Config */}
       {(editing || job.config) && (
         <div className="mt-2">
-          <span className="text-xs text-gray-500">配置:</span>
+          <span className="text-xs text-gray-500">{t('cron.config')}:</span>
           {editing ? (
             <textarea
               value={configStr}
@@ -167,10 +169,10 @@ function SchedulerJobCard({
       {/* Meta */}
       <div className="mt-2 flex gap-4 text-xs text-gray-400">
         {job.lastRunAt && (
-          <span>上次运行: {new Date(job.lastRunAt * 1000).toLocaleString()}</span>
+          <span>{t('cron.lastRun')}: {new Date(job.lastRunAt * 1000).toLocaleString()}</span>
         )}
         {job.lastError && (
-          <span className="text-red-400">错误: {job.lastError}</span>
+          <span className="text-red-400">{t('cron.errorLabel')}: {job.lastError}</span>
         )}
       </div>
     </div>
@@ -182,6 +184,7 @@ function SchedulerJobCard({
 // ---------------------------------------------------------------------------
 
 const CronView: React.FC = () => {
+  const { t } = useTranslation();
   const [legacyJobs, setLegacyJobs] = useState<LegacyCronJob[]>([]);
   const [schedulerJobs, setSchedulerJobs] = useState<SchedulerJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,16 +262,16 @@ const CronView: React.FC = () => {
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">⏰</span>
-          <h1 className="text-lg font-semibold text-gray-800">定时任务</h1>
+          <h1 className="text-lg font-semibold text-gray-800">{t('cron.title')}</h1>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-            {totalJobs} 个任务
+            {t('cron.taskCount', { count: totalJobs })}
           </span>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
           className="rounded-md bg-blue-500 px-3 py-1.5 text-xs text-white hover:bg-blue-600"
         >
-          {showForm ? '取消' : '+ 新建任务'}
+          {showForm ? t('common.cancel') : t('cron.newTask')}
         </button>
       </div>
 
@@ -279,20 +282,20 @@ const CronView: React.FC = () => {
 
         {showForm && (
           <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-blue-700">新建定时任务</h3>
+            <h3 className="mb-3 text-sm font-semibold text-blue-700">{t('cron.createTask')}</h3>
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs text-gray-600">Cron 表达式</label>
+                <label className="mb-1 block text-xs text-gray-600">{t('cron.cronExpression')}</label>
                 <input
                   type="text"
                   value={formData.schedule}
                   onChange={e => setFormData(d => ({ ...d, schedule: e.target.value }))}
-                  placeholder="*/30 * * * * (每30分钟)"
+                  placeholder={t('cron.cronPlaceholder')}
                   className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-600">智能体 ID</label>
+                <label className="mb-1 block text-xs text-gray-600">{t('cron.agentId')}</label>
                 <input
                   type="text"
                   value={formData.agentId}
@@ -301,11 +304,11 @@ const CronView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-600">任务消息</label>
+                <label className="mb-1 block text-xs text-gray-600">{t('cron.taskMessage')}</label>
                 <textarea
                   value={formData.message}
                   onChange={e => setFormData(d => ({ ...d, message: e.target.value }))}
-                  placeholder="要发送给智能体的消息..."
+                  placeholder={t('cron.taskMessagePlaceholder')}
                   rows={3}
                   className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm"
                 />
@@ -315,26 +318,26 @@ const CronView: React.FC = () => {
                 disabled={!formData.schedule || !formData.message}
                 className="rounded bg-blue-500 px-4 py-1.5 text-xs text-white hover:bg-blue-600 disabled:opacity-50"
               >
-                创建
+                {t('cron.create')}
               </button>
             </div>
           </div>
         )}
 
         {loading ? (
-          <div className="flex h-32 items-center justify-center text-sm text-gray-400">加载中...</div>
+          <div className="flex h-32 items-center justify-center text-sm text-gray-400">{t('common.loading')}</div>
         ) : totalJobs === 0 ? (
           <div className="rounded-lg border border-gray-200 bg-white p-8 text-center">
             <div className="mb-3 text-4xl">⏰</div>
-            <p className="text-sm text-gray-500">暂无定时任务</p>
-            <p className="mt-1 text-xs text-gray-400">点击"新建任务"创建第一个定时任务</p>
+            <p className="text-sm text-gray-500">{t('cron.noTasks')}</p>
+            <p className="mt-1 text-xs text-gray-400">{t('cron.noTasksHint')}</p>
           </div>
         ) : (
           <div className="space-y-6">
             {/* Scheduler Jobs (DB-backed) */}
             {schedulerJobs.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-semibold text-gray-600">系统任务</h2>
+                <h2 className="mb-3 text-sm font-semibold text-gray-600">{t('cron.systemTasks')}</h2>
                 <div className="space-y-3">
                   {schedulerJobs.map(job => (
                     <SchedulerJobCard
@@ -352,7 +355,7 @@ const CronView: React.FC = () => {
             {/* Legacy Jobs (agent-based) */}
             {legacyJobs.length > 0 && (
               <div>
-                <h2 className="mb-3 text-sm font-semibold text-gray-600">智能体任务</h2>
+                <h2 className="mb-3 text-sm font-semibold text-gray-600">{t('cron.agentTasks')}</h2>
                 <div className="space-y-3">
                   {legacyJobs.map(job => (
                     <div key={job.id} className="rounded-lg border border-gray-200 bg-white p-4">
@@ -361,7 +364,7 @@ const CronView: React.FC = () => {
                           <button
                             onClick={() => handleLegacyToggle(job.id)}
                             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${job.enabled ? 'bg-blue-500' : 'bg-gray-300'}`}
-                            aria-label={job.enabled ? '禁用' : '启用'}
+                            aria-label={job.enabled ? t('cron.disable') : t('cron.enable')}
                           >
                             <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${job.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                           </button>
@@ -376,13 +379,13 @@ const CronView: React.FC = () => {
                               {job.lastStatus}
                             </span>
                           )}
-                          <button onClick={() => handleLegacyRun(job.id)} className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50">▶ 运行</button>
-                          <button onClick={() => handleLegacyDelete(job.id)} className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50">删除</button>
+                          <button onClick={() => handleLegacyRun(job.id)} className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50">{t('cron.runNow')}</button>
+                          <button onClick={() => handleLegacyDelete(job.id)} className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50">{t('common.delete')}</button>
                         </div>
                       </div>
                       <p className="mt-2 text-sm text-gray-600">{job.message}</p>
                       {job.lastRunAt && (
-                        <p className="mt-1 text-xs text-gray-400">上次运行: {new Date(job.lastRunAt).toLocaleString()}</p>
+                        <p className="mt-1 text-xs text-gray-400">{t('cron.lastRun')}: {new Date(job.lastRunAt).toLocaleString()}</p>
                       )}
                     </div>
                   ))}

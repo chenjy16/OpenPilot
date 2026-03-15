@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import { wsClient } from '../../services/wsClient';
 
 const ChatInput: React.FC = () => {
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const { isStreaming, sendMessage } = useChatStore();
   const [queue, setQueue] = useState<string[]>([]);
@@ -73,7 +75,7 @@ const ChatInput: React.FC = () => {
               <button
                 onClick={() => removeFromQueue(i)}
                 className="ml-0.5 text-blue-400 hover:text-blue-600"
-                aria-label="移除排队消息"
+                aria-label={t('chat.removeQueued')}
               >
                 ×
               </button>
@@ -88,7 +90,7 @@ const ChatInput: React.FC = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={isStreaming ? '输入消息排队，或输入 /stop 中止...' : '输入消息...'}
+          placeholder={isStreaming ? t('chat.inputPlaceholderStreaming') : t('chat.inputPlaceholder')}
           rows={1}
           className="flex-1 resize-none rounded-lg border border-gray-300 p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -98,7 +100,7 @@ const ChatInput: React.FC = () => {
             onClick={handleAbort}
             className="rounded-lg bg-red-500 px-4 py-2 text-white hover:bg-red-600"
           >
-            停止
+            {t('chat.stop')}
           </button>
         ) : (
           <button
@@ -106,7 +108,7 @@ const ChatInput: React.FC = () => {
             disabled={!input.trim()}
             className="rounded-lg bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {queue.length > 0 ? '排队' : '发送'}
+            {queue.length > 0 ? t('chat.queue') : t('chat.send')}
           </button>
         )}
       </div>

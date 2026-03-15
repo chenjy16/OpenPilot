@@ -11,6 +11,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatUSD, pnlColorClass } from '../../utils/liveDashboardUtils';
 import type { AccountSummary } from '../../stores/liveDashboardStore';
 
@@ -19,10 +20,12 @@ export interface AccountSummaryCardProps {
 }
 
 const AccountSummaryCard: React.FC<AccountSummaryCardProps> = ({ summary }) => {
+  const { t } = useTranslation();
+
   if (!summary) {
     return (
       <div data-testid="account-summary-unavailable" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        数据暂不可用
+        {t('common.dataUnavailable')}
       </div>
     );
   }
@@ -38,10 +41,10 @@ const AccountSummaryCard: React.FC<AccountSummaryCardProps> = ({ summary }) => {
       : `${summary.total_return_pct.toFixed(2)}%`;
 
   const cards: { label: string; value: string; colorClass?: string }[] = [
-    { label: '持仓成本', value: formatUSD(summary.initial_capital) },
-    { label: '持仓市值', value: formatUSD(summary.current_equity) },
-    { label: '累计收益率', value: returnPctFormatted, colorClass: pnlColorClass(summary.total_return_pct) },
-    { label: '当日盈亏', value: dailyPnlFormatted, colorClass: pnlColorClass(summary.daily_pnl) },
+    { label: t('live.costBasis'), value: formatUSD(summary.initial_capital) },
+    { label: t('live.marketValue'), value: formatUSD(summary.current_equity) },
+    { label: t('live.cumulativeReturn'), value: returnPctFormatted, colorClass: pnlColorClass(summary.total_return_pct) },
+    { label: t('live.dailyPnl'), value: dailyPnlFormatted, colorClass: pnlColorClass(summary.daily_pnl) },
   ];
 
   return (

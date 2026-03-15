@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useChatStore } from '../../stores/chatStore';
 import MessageBubble from './MessageBubble';
 import ToolCallMessage from './ToolCallMessage';
 
 const MessageList: React.FC = () => {
+  const { t } = useTranslation();
   const messages = useChatStore((state) => state.messages);
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,7 +48,7 @@ const MessageList: React.FC = () => {
       >
         {messages.length === 0 && (
           <div className="flex h-full items-center justify-center text-gray-400 text-sm">
-            发送消息开始对话
+            {t('chat.sendMessage')}
           </div>
         )}
         {messages.map((message) => (
@@ -68,7 +70,7 @@ const MessageList: React.FC = () => {
         <button
           onClick={scrollToTop}
           className="absolute right-4 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-opacity"
-          aria-label="滚动到顶部"
+          aria-label={t('chat.scrollToTop')}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -81,7 +83,7 @@ const MessageList: React.FC = () => {
         <button
           onClick={scrollToBottom}
           className="absolute right-4 bottom-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-md border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-opacity"
-          aria-label="滚动到底部"
+          aria-label={t('chat.scrollToBottom')}
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />

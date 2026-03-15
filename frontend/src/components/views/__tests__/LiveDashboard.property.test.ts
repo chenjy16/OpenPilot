@@ -145,19 +145,19 @@ describe('Property 10: 买卖方向标签映射', () => {
   /**
    * Validates: Requirements 5.5, 5.6
    *
-   * For side='buy' returns {text:'买入', colorClass:'text-green-500'},
-   * for side='sell' returns {text:'卖出', colorClass:'text-red-500'}
+   * For side='buy' returns {text:'live.buy', colorClass:'text-green-500'},
+   * for side='sell' returns {text:'live.sell', colorClass:'text-red-500'}
    */
-  it('buy always maps to 买入 with green, sell always maps to 卖出 with red', () => {
+  it('buy always maps to live.buy with green, sell always maps to live.sell with red', () => {
     fc.assert(
       fc.property(
         fc.constantFrom('buy' as const, 'sell' as const),
         (side) => {
           const result = getSideLabel(side);
           if (side === 'buy') {
-            expect(result).toEqual({ text: '买入', colorClass: 'text-green-500' });
+            expect(result).toEqual({ text: 'live.buy', colorClass: 'text-green-500' });
           } else {
-            expect(result).toEqual({ text: '卖出', colorClass: 'text-red-500' });
+            expect(result).toEqual({ text: 'live.sell', colorClass: 'text-red-500' });
           }
         },
       ),

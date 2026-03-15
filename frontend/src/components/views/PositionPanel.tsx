@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatUSD, pnlColorClass } from '../../utils/liveDashboardUtils';
 import type { LivePosition } from '../../stores/liveDashboardStore';
 
@@ -17,20 +18,20 @@ export interface PositionPanelProps {
 }
 
 const PositionPanel: React.FC<PositionPanelProps> = ({ positions }) => {
-  // null/undefined → data unavailable
+  const { t } = useTranslation();
+
   if (positions == null) {
     return (
       <div data-testid="position-panel-unavailable" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        数据暂不可用
+        {t('common.dataUnavailable')}
       </div>
     );
   }
 
-  // Empty array → no positions
   if (positions.length === 0) {
     return (
       <div data-testid="position-panel-empty" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        当前无持仓
+        {t('live.noPositions')}
       </div>
     );
   }
@@ -40,12 +41,12 @@ const PositionPanel: React.FC<PositionPanelProps> = ({ positions }) => {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-700 text-gray-400">
-            <th className="px-4 py-3 text-left">标的</th>
-            <th className="px-4 py-3 text-right">数量</th>
-            <th className="px-4 py-3 text-right">成本价</th>
-            <th className="px-4 py-3 text-right">当前价</th>
-            <th className="px-4 py-3 text-right">浮动盈亏</th>
-            <th className="px-4 py-3 text-right">盈亏%</th>
+            <th className="px-4 py-3 text-left">{t('live.positionSymbol')}</th>
+            <th className="px-4 py-3 text-right">{t('live.positionQty')}</th>
+            <th className="px-4 py-3 text-right">{t('live.positionCost')}</th>
+            <th className="px-4 py-3 text-right">{t('live.positionPrice')}</th>
+            <th className="px-4 py-3 text-right">{t('live.positionPnl')}</th>
+            <th className="px-4 py-3 text-right">{t('live.positionPnlPct')}</th>
           </tr>
         </thead>
         <tbody>

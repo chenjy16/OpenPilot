@@ -9,6 +9,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatUSD, pnlColorClass } from '../../utils/liveDashboardUtils';
 import type { LiveTradeRecord } from '../../stores/liveDashboardStore';
 
@@ -28,20 +29,20 @@ function formatExitTime(ts: number): string {
 }
 
 const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) => {
-  // null/undefined → data unavailable
+  const { t } = useTranslation();
+
   if (trades == null) {
     return (
       <div data-testid="trade-history-unavailable" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        数据暂不可用
+        {t('common.dataUnavailable')}
       </div>
     );
   }
 
-  // Empty array → no trades
   if (trades.length === 0) {
     return (
       <div data-testid="trade-history-empty" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        暂无交易记录
+        {t('live.noTrades')}
       </div>
     );
   }
@@ -51,14 +52,14 @@ const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({ trades }) => {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-700 text-gray-400">
-            <th className="px-4 py-3 text-left">标的</th>
-            <th className="px-4 py-3 text-left">策略</th>
-            <th className="px-4 py-3 text-right">买入价</th>
-            <th className="px-4 py-3 text-right">卖出价</th>
-            <th className="px-4 py-3 text-right">盈亏</th>
-            <th className="px-4 py-3 text-right">盈亏%</th>
-            <th className="px-4 py-3 text-right">持仓天数</th>
-            <th className="px-4 py-3 text-right">平仓时间</th>
+            <th className="px-4 py-3 text-left">{t('live.tradeSymbol')}</th>
+            <th className="px-4 py-3 text-left">{t('live.tradeStrategy')}</th>
+            <th className="px-4 py-3 text-right">{t('live.tradeEntryPrice')}</th>
+            <th className="px-4 py-3 text-right">{t('live.tradeExitPrice')}</th>
+            <th className="px-4 py-3 text-right">{t('live.tradePnl')}</th>
+            <th className="px-4 py-3 text-right">{t('live.tradePnlPct')}</th>
+            <th className="px-4 py-3 text-right">{t('live.tradeHoldDays')}</th>
+            <th className="px-4 py-3 text-right">{t('live.tradeExitTime')}</th>
           </tr>
         </thead>
         <tbody>

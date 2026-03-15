@@ -414,7 +414,26 @@ export const videoEditTool: Tool = {
       },
       timeline: {
         type: 'object',
-        description: 'Timeline JSON：{ output_format, resolution?, tracks: [{ action, start_time?, end_time?, parameters? }] }',
+        description: 'Timeline JSON 编辑指令',
+        properties: {
+          output_format: { type: 'string', description: '输出格式，如 mp4、webm' },
+          resolution: { type: 'string', description: '分辨率，如 1920x1080（可选）' },
+          tracks: {
+            type: 'array',
+            description: '编辑轨道数组',
+            items: {
+              type: 'object',
+              properties: {
+                action: { type: 'string', description: '操作: trim | speed_up | add_subtitle' },
+                start_time: { type: 'number', description: '开始时间（秒）' },
+                end_time: { type: 'number', description: '结束时间（秒）' },
+                parameters: { type: 'object', description: '操作参数' },
+              },
+              required: ['action'],
+            },
+          },
+        },
+        required: ['output_format', 'tracks'],
       },
     },
     required: ['source', 'timeline'],

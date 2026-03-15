@@ -13,6 +13,7 @@ import {
   HistogramSeries,
   LineSeries,
 } from 'lightweight-charts';
+import { useTranslation } from 'react-i18next';
 import { get } from '../../services/apiClient';
 
 // ---------------------------------------------------------------------------
@@ -38,17 +39,14 @@ interface OHLCVData {
   bollinger_lower?: number | null;
 }
 
-const timeframeLabels: Record<string, string> = {
-  daily: '日线',
-  weekly: '周线',
-  monthly: '月线',
-};
+
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 const KlineChart: React.FC<KlineChartProps> = ({ symbol, timeframe, indicators = [] }) => {
+  const { t } = useTranslation();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
@@ -122,7 +120,7 @@ const KlineChart: React.FC<KlineChartProps> = ({ symbol, timeframe, indicators =
       if (cancelled) return;
 
       if (rawData.length === 0) {
-        setError('暂无数据，API 端点可能尚未就绪');
+        setError(t('kline.noData'));
         setLoading(false);
         return;
       }
@@ -245,7 +243,7 @@ const KlineChart: React.FC<KlineChartProps> = ({ symbol, timeframe, indicators =
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
-          📈 K 线图 — {symbol}
+          📈 {t('kline.title')} — {symbol}
         </h3>
         <div className="flex gap-1">
           {(['daily', 'weekly', 'monthly'] as const).map(tf => (
@@ -258,7 +256,7 @@ const KlineChart: React.FC<KlineChartProps> = ({ symbol, timeframe, indicators =
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {timeframeLabels[tf]}
+              {t(`kline.timeframe.${tf}`)}
             </button>
           ))}
         </div>
@@ -266,7 +264,7 @@ const KlineChart: React.FC<KlineChartProps> = ({ symbol, timeframe, indicators =
 
       {loading && (
         <div className="flex h-[420px] items-center justify-center text-sm text-gray-400">
-          加载图表数据...
+          {t('kline.loading')}
         </div>
       )}
 
@@ -277,7 +275,7 @@ const KlineChart: React.FC<KlineChartProps> = ({ symbol, timeframe, indicators =
             onClick={() => setRetryCount(c => c + 1)}
             className="rounded bg-gray-100 px-3 py-1 text-xs text-gray-600 hover:bg-gray-200"
           >
-            🔄 重试
+            🔄 {t('kline.retry')}
           </button>
         </div>
       )}

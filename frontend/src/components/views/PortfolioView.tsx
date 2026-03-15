@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { get, post, put, del } from '../../services/apiClient';
 
 // ---------------------------------------------------------------------------
@@ -44,6 +45,7 @@ const emptyForm: PositionForm = { symbol: '', quantity: '', cost_price: '', curr
 // ---------------------------------------------------------------------------
 
 const PortfolioView: React.FC = () => {
+  const { t } = useTranslation();
   const [metrics, setMetrics] = useState<PortfolioMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,9 +149,9 @@ const PortfolioView: React.FC = () => {
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">💼</span>
-          <h1 className="text-lg font-semibold text-gray-800">投资组合</h1>
+          <h1 className="text-lg font-semibold text-gray-800">{t('portfolio.title')}</h1>
           <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-            持仓管理
+            {t('portfolio.positionManagement')}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -157,13 +159,13 @@ const PortfolioView: React.FC = () => {
             onClick={openAddForm}
             className="rounded-md bg-blue-500 px-3 py-1.5 text-xs text-white hover:bg-blue-600"
           >
-            ➕ 添加持仓
+            {t('portfolio.addPosition')}
           </button>
           <button
             onClick={fetchPortfolio}
             className="rounded-md bg-gray-100 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200"
           >
-            🔄 刷新
+            🔄 {t('common.refresh')}
           </button>
         </div>
       </div>
@@ -178,22 +180,22 @@ const PortfolioView: React.FC = () => {
         {showForm && (
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-6">
             <h2 className="text-base font-semibold text-gray-800">
-              {editingId != null ? '✏️ 编辑持仓' : '➕ 添加持仓'}
+              {editingId != null ? t('portfolio.editPosition') : t('portfolio.addPosition')}
             </h2>
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">股票代码</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('portfolio.symbolCode')}</label>
                 <input
                   type="text"
                   value={form.symbol}
                   onChange={e => setForm({ ...form, symbol: e.target.value })}
-                  placeholder="如 AAPL"
+                  placeholder={t('portfolio.symbolPlaceholder')}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   disabled={editingId != null}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">数量</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('portfolio.qty')}</label>
                 <input
                   type="number"
                   value={form.quantity}
@@ -203,7 +205,7 @@ const PortfolioView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">成本价</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('portfolio.costPrice')}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -214,7 +216,7 @@ const PortfolioView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">当前价 (可选)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('portfolio.currentPriceOptional')}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -231,13 +233,13 @@ const PortfolioView: React.FC = () => {
                 disabled={submitting || !form.symbol.trim() || !form.quantity || !form.cost_price}
                 className="rounded-md bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-600 disabled:opacity-50"
               >
-                {submitting ? '⏳ 提交中...' : editingId != null ? '保存修改' : '添加'}
+                {submitting ? `⏳ ${t('common.submitting')}` : editingId != null ? t('portfolio.saveChanges') : t('portfolio.add')}
               </button>
               <button
                 onClick={closeForm}
                 className="rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-600 hover:bg-gray-200"
               >
-                取消
+                {t('common.cancel')}
               </button>
             </div>
           </div>
@@ -247,19 +249,19 @@ const PortfolioView: React.FC = () => {
         {metrics && !loading && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <p className="text-xs text-gray-500">💰 总市值</p>
+              <p className="text-xs text-gray-500">{t('portfolio.totalMarketValue')}</p>
               <p className="mt-1 text-xl font-semibold text-gray-800">
                 ${metrics.total_market_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className={`rounded-lg border p-4 ${pnlBg(metrics.total_pnl)}`}>
-              <p className="text-xs text-gray-500">📊 总盈亏</p>
+              <p className="text-xs text-gray-500">{t('portfolio.totalPnl')}</p>
               <p className={`mt-1 text-xl font-semibold ${pnlColor(metrics.total_pnl)}`}>
                 {metrics.total_pnl >= 0 ? '+' : ''}${metrics.total_pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className={`rounded-lg border p-4 ${pnlBg(metrics.total_pnl_pct)}`}>
-              <p className="text-xs text-gray-500">📈 盈亏比例</p>
+              <p className="text-xs text-gray-500">{t('portfolio.pnlRatio')}</p>
               <p className={`mt-1 text-xl font-semibold ${pnlColor(metrics.total_pnl_pct)}`}>
                 {metrics.total_pnl_pct >= 0 ? '+' : ''}{(metrics.total_pnl_pct * 100).toFixed(2)}%
               </p>
@@ -270,32 +272,32 @@ const PortfolioView: React.FC = () => {
         {/* Positions Table (10.1.1) */}
         <div className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800">
-            📋 持仓列表
+            {t('portfolio.positionList')}
           </h2>
 
           {loading ? (
             <div className="flex h-32 items-center justify-center text-sm text-gray-400">
-              加载持仓数据...
+              {t('portfolio.loadingPositions')}
             </div>
           ) : !metrics || metrics.positions.length === 0 ? (
             <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-8 text-center">
               <div className="mb-3 text-4xl">💼</div>
-              <p className="text-sm text-gray-500">暂无持仓</p>
-              <p className="mt-1 text-xs text-gray-400">点击上方"添加持仓"按钮开始管理您的投资组合</p>
+              <p className="text-sm text-gray-500">{t('portfolio.noPositions')}</p>
+              <p className="mt-1 text-xs text-gray-400">{t('portfolio.noPositionsHint')}</p>
             </div>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
-                    <th className="pb-2 pr-4 font-medium">代码</th>
-                    <th className="pb-2 pr-4 font-medium text-right">数量</th>
-                    <th className="pb-2 pr-4 font-medium text-right">成本价</th>
-                    <th className="pb-2 pr-4 font-medium text-right">当前价</th>
-                    <th className="pb-2 pr-4 font-medium text-right">市值</th>
-                    <th className="pb-2 pr-4 font-medium text-right">盈亏</th>
-                    <th className="pb-2 pr-4 font-medium text-right">盈亏%</th>
-                    <th className="pb-2 font-medium text-right">操作</th>
+                    <th className="pb-2 pr-4 font-medium">{t('portfolio.symbolCode')}</th>
+                    <th className="pb-2 pr-4 font-medium text-right">{t('portfolio.qty')}</th>
+                    <th className="pb-2 pr-4 font-medium text-right">{t('portfolio.costPrice')}</th>
+                    <th className="pb-2 pr-4 font-medium text-right">{t('portfolio.currentPrice')}</th>
+                    <th className="pb-2 pr-4 font-medium text-right">{t('portfolio.marketValueCol')}</th>
+                    <th className="pb-2 pr-4 font-medium text-right">{t('portfolio.pnl')}</th>
+                    <th className="pb-2 pr-4 font-medium text-right">{t('portfolio.pnlPct')}</th>
+                    <th className="pb-2 font-medium text-right">{t('portfolio.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -322,7 +324,7 @@ const PortfolioView: React.FC = () => {
                             onClick={() => openEditForm(pos)}
                             className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50"
                           >
-                            ✏️ 编辑
+                            ✏️ {t('common.edit')}
                           </button>
                           {deletingId === pos.id ? (
                             <span className="flex items-center gap-1">
@@ -330,13 +332,13 @@ const PortfolioView: React.FC = () => {
                                 onClick={() => handleDelete(pos.id)}
                                 className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
                               >
-                                确认
+                                {t('portfolio.confirmDelete')}
                               </button>
                               <button
                                 onClick={() => setDeletingId(null)}
                                 className="rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-50"
                               >
-                                取消
+                                {t('common.cancel')}
                               </button>
                             </span>
                           ) : (
@@ -344,7 +346,7 @@ const PortfolioView: React.FC = () => {
                               onClick={() => setDeletingId(pos.id)}
                               className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
                             >
-                              🗑️ 删除
+                              🗑️ {t('common.delete')}
                             </button>
                           )}
                         </div>

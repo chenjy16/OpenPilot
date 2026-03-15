@@ -26,45 +26,46 @@ export interface NavGroup {
   tabs: { id: NavTab; label: string; icon: string }[];
 }
 
+// Nav group definitions use i18n keys for labels (resolved at render time)
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Chat',
-    tabs: [{ id: 'chat', label: '对话', icon: '💬' }],
+    tabs: [{ id: 'chat', label: 'nav.chat', icon: '💬' }],
   },
   {
     label: 'Control',
     tabs: [
-      { id: 'overview', label: '总览', icon: '📊' },
-      { id: 'channels', label: '渠道', icon: '🔗' },
-      { id: 'sessions', label: '会话', icon: '📄' },
-      { id: 'usage', label: '用量', icon: '📈' },
-      { id: 'cron', label: '定时任务', icon: '⏰' },
+      { id: 'overview', label: 'nav.overview', icon: '📊' },
+      { id: 'channels', label: 'nav.channels', icon: '🔗' },
+      { id: 'sessions', label: 'nav.sessions', icon: '📄' },
+      { id: 'usage', label: 'nav.usage', icon: '📈' },
+      { id: 'cron', label: 'nav.cron', icon: '⏰' },
     ],
   },
   {
     label: 'Agent',
     tabs: [
-      { id: 'agents', label: '智能体', icon: '🤖' },
-      { id: 'skills', label: '技能', icon: '⚡' },
-      { id: 'nodes', label: '节点', icon: '🖥️' },
+      { id: 'agents', label: 'nav.agents', icon: '🤖' },
+      { id: 'skills', label: 'nav.skills', icon: '⚡' },
+      { id: 'nodes', label: 'nav.nodes', icon: '🖥️' },
     ],
   },
   {
     label: 'Scenario Navigators',
     tabs: [
-      { id: 'polymarket', label: 'Polymarket Copilot', icon: '🔮' },
-      { id: 'stocks', label: 'Quant Copilot', icon: '📈' },
-      { id: 'portfolio', label: '投资组合', icon: '💼' },
-      { id: 'trading', label: '量化交易', icon: '📊' },
-      { id: 'performance', label: '交易绩效', icon: '🏆' },
-      { id: 'live', label: '实盘大屏', icon: '📺' },
+      { id: 'polymarket', label: 'nav.polymarket', icon: '🔮' },
+      { id: 'stocks', label: 'nav.stocks', icon: '📈' },
+      { id: 'portfolio', label: 'nav.portfolio', icon: '💼' },
+      { id: 'trading', label: 'nav.trading', icon: '📊' },
+      { id: 'performance', label: 'nav.performance', icon: '🏆' },
+      { id: 'live', label: 'nav.live', icon: '📺' },
     ],
   },
   {
     label: 'Settings',
     tabs: [
-      { id: 'models', label: '模型', icon: '🧩' },
-      { id: 'config', label: '配置', icon: '⚙️' },
+      { id: 'models', label: 'nav.models', icon: '🧩' },
+      { id: 'config', label: 'nav.config', icon: '⚙️' },
     ],
   },
 ];

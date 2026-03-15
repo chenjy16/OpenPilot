@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import type { AIDecision } from '../../stores/liveDashboardStore';
 import { getSideLabel, formatUSD } from '../../utils/liveDashboardUtils';
 
@@ -18,10 +19,12 @@ export interface AIDecisionFeedProps {
 }
 
 const AIDecisionFeed: React.FC<AIDecisionFeedProps> = ({ decisions }) => {
+  const { t } = useTranslation();
+
   if (decisions == null) {
     return (
       <div data-testid="ai-decisions-unavailable" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        数据暂不可用
+        {t('common.dataUnavailable')}
       </div>
     );
   }
@@ -29,35 +32,33 @@ const AIDecisionFeed: React.FC<AIDecisionFeedProps> = ({ decisions }) => {
   if (decisions.length === 0) {
     return (
       <div data-testid="ai-decisions-empty" className="rounded-lg bg-gray-800 px-6 py-4 text-center text-gray-400">
-        暂无 AI 决策
+        {t('live.noAiDecisions')}
       </div>
     );
   }
 
   return (
     <div data-testid="ai-decision-feed" className="space-y-3">
-      <h3 className="text-lg font-semibold text-white">AI 决策流</h3>
+      <h3 className="text-lg font-semibold text-white">{t('live.aiDecisionFeed')}</h3>
       {decisions.slice(0, 10).map((d, idx) => {
         const side = getSideLabel(d.side);
         const scorePercent = Math.round(d.composite_score * 100);
 
         return (
           <div key={`${d.timestamp}-${d.symbol}-${idx}`} className="rounded-lg bg-gray-800 p-4">
-            {/* Row 1: Strategy + Symbol + Side label */}
             <div className="mb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-white">{d.strategy_name}</span>
                 <span className="text-gray-300">{d.symbol}</span>
               </div>
               <span data-testid="side-label" className={`rounded px-2 py-0.5 text-sm font-medium ${side.colorClass}`}>
-                {side.text}
+                {t(side.text)}
               </span>
             </div>
 
-            {/* Row 2: Composite score bar */}
             <div className="mb-2">
               <div className="mb-1 flex items-center justify-between text-xs text-gray-400">
-                <span>综合评分</span>
+                <span>{t('live.compositeScore')}</span>
                 <span>{scorePercent}%</span>
               </div>
               <div className="h-2 w-full rounded-full bg-gray-700">
@@ -72,24 +73,22 @@ const AIDecisionFeed: React.FC<AIDecisionFeedProps> = ({ decisions }) => {
               </div>
             </div>
 
-            {/* Row 3: Prices */}
             <div className="mb-2 flex gap-4 text-sm">
               <span className="text-gray-400">
-                入场 <span className="text-white">{formatUSD(d.entry_price)}</span>
+                {t('live.entry')} <span className="text-white">{formatUSD(d.entry_price)}</span>
               </span>
               {d.stop_loss != null && (
                 <span className="text-gray-400">
-                  止损 <span className="text-red-400">{formatUSD(d.stop_loss)}</span>
+                  {t('live.stopLoss')} <span className="text-red-400">{formatUSD(d.stop_loss)}</span>
                 </span>
               )}
               {d.take_profit != null && (
                 <span className="text-gray-400">
-                  止盈 <span className="text-green-400">{formatUSD(d.take_profit)}</span>
+                  {t('live.takeProfit')} <span className="text-green-400">{formatUSD(d.take_profit)}</span>
                 </span>
               )}
             </div>
 
-            {/* Row 4: Reason */}
             <p className="text-sm text-gray-400">{d.reason}</p>
           </div>
         );

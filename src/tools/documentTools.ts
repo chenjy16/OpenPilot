@@ -89,7 +89,13 @@ export const pdfGenerationTool: Tool = {
       },
       style: {
         type: 'object',
-        description: '样式配置（可选）：{ fontSize, fontFamily, pageSize, margin }',
+        description: '样式配置（可选）',
+        properties: {
+          fontSize: { type: 'number', description: '字体大小' },
+          fontFamily: { type: 'string', description: '字体名称' },
+          pageSize: { type: 'string', description: '页面大小，如 A4、Letter' },
+          margin: { type: 'number', description: '页边距（mm）' },
+        },
       },
     },
     required: ['markdown_content'],
@@ -170,6 +176,17 @@ export const pptGenerationTool: Tool = {
       slides: {
         type: 'array',
         description: '幻灯片数组，每项: { title, content: string[], image_prompt?, notes?, layout? }',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: '幻灯片标题' },
+            content: { type: 'array', items: { type: 'string' }, description: '要点数组' },
+            image_prompt: { type: 'string', description: '配图描述（可选）' },
+            notes: { type: 'string', description: '演讲者备注（可选）' },
+            layout: { type: 'string', description: '布局: title | content | section | blank' },
+          },
+          required: ['title'],
+        },
       },
       title: {
         type: 'string',
@@ -181,7 +198,12 @@ export const pptGenerationTool: Tool = {
       },
       theme: {
         type: 'object',
-        description: '主题配置（可选）：{ primaryColor, backgroundColor, fontFace }',
+        description: '主题配置（可选）',
+        properties: {
+          primaryColor: { type: 'string', description: '主色调（hex）' },
+          backgroundColor: { type: 'string', description: '背景色（hex）' },
+          fontFace: { type: 'string', description: '字体名称' },
+        },
       },
     },
     required: ['slides'],

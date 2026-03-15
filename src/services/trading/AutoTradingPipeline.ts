@@ -508,8 +508,13 @@ export class AutoTradingPipeline {
       positions = await this.tradingGateway.getPositions();
       // Override total_assets with positions-based USD market value
       // (account.total_assets from Longport is netAssets in HKD, not USD)
+      // When no positions exist, fall back to available_cash as the portfolio value
       const positionsMarketValue = positions.reduce((sum, p) => sum + (p.current_price ?? p.avg_cost) * p.quantity, 0);
-      account = { ...account, total_assets: positionsMarketValue };
+      if (positionsMarketValue > 0) {
+        account = { ...account, total_assets: positionsMarketValue };
+      } else {
+        account = { ...account, total_assets: account.available_cash || account.total_assets };
+      }
     } catch (err: any) {
       logger.error('Failed to get account/positions for multi-strategy processing', { error: err.message });
       return results;

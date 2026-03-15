@@ -63,8 +63,9 @@ describe('AppLayout', () => {
     expect(screen.getByText('总览')).toBeDefined();
     // '会话' appears in both nav and chat panel, so use getAllByText
     expect(screen.getAllByText('会话').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('调试')).toBeDefined();
-    expect(screen.getByText('日志')).toBeDefined();
+    expect(screen.getByText('渠道')).toBeDefined();
+    // '模型' appears in both nav and model selector, so use getAllByText
+    expect(screen.getAllByText('模型').length).toBeGreaterThanOrEqual(1);
   });
 
   it('switches view when nav tab is clicked', () => {
