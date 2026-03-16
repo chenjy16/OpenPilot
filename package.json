@@ -1,7 +1,7 @@
 {
-  "name": "ai-assistant-mvp",
+  "name": "OpenPilot",
   "version": "1.0.0",
-  "description": "AI Assistant MVP with multi-model support and tool calling",
+  "description": "AI Assistant  with multi-model support and tool calling",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc && npm run copy-assets",

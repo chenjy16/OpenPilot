@@ -11,7 +11,7 @@ const zh = {
     skills: '技能',
     nodes: '节点',
     polymarket: 'Polymarket Copilot',
-    stocks: 'Quant Copilot',
+    stocks: '股票分析',
     portfolio: '投资组合',
     trading: '量化交易',
     performance: '交易绩效',
