@@ -346,7 +346,7 @@ function OrderSourceBadge({ order }: { order: TradingOrder }) {
 
 function ActiveOrdersTable({ orders, onCancel }: { orders: TradingOrder[]; onCancel: (id: number) => void }) {
   const { t } = useTranslation();
-  const active = orders.filter((o) => ['pending', 'submitted', 'partial_filled'].includes(o.status));
+  const active = (orders ?? []).filter((o) => ['pending', 'submitted', 'partial_filled'].includes(o.status));
   if (active.length === 0) return <p className="py-4 text-center text-sm text-gray-400">{t('trading.noActiveOrders')}</p>;
 
   return (
@@ -639,15 +639,16 @@ function DynamicRiskPanel() {
   } | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchRisk = async () => {
       try {
         const res = await fetch('/api/trading/dynamic-risk');
-        if (res.ok) setRiskState(await res.json());
+        if (res.ok && !cancelled) setRiskState(await res.json());
       } catch { /* ignore */ }
     };
     fetchRisk();
     const timer = setInterval(fetchRisk, 60000);
-    return () => clearInterval(timer);
+    return () => { cancelled = true; clearInterval(timer); };
   }, []);
 
   if (!riskState) return null;

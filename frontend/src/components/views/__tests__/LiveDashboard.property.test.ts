@@ -227,7 +227,9 @@ const arbLiveDashboardResponse: fc.Arbitrary<LiveDashboardResponse> = fc.record(
   }),
   equity_curve: fc.array(
     fc.record({
-      date: fc.date({ min: new Date('2020-01-01'), max: new Date('2030-01-01') }).map(
+      date: fc.date({ min: new Date('2020-01-01'), max: new Date('2030-01-01') }).filter(
+        (d) => !isNaN(d.getTime()),
+      ).map(
         (d) => d.toISOString().slice(0, 10),
       ),
       equity: fc.double({ min: 0, max: 1e6, noNaN: true, noDefaultInfinity: true }),

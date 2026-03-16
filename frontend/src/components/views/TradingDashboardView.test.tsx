@@ -18,10 +18,20 @@ vi.mock('./AutoTradingPanel', () => ({
   default: () => <div data-testid="auto-trading-panel">AutoTradingPanel</div>,
 }));
 
-// Mock global fetch for OrderHistoryTable
-const mockFetch = vi.fn().mockResolvedValue({
-  ok: true,
-  json: async () => ({ orders: [], total: 0 }),
+// Mock global fetch — route-aware
+const mockFetch = vi.fn().mockImplementation((url: string) => {
+  if (typeof url === 'string' && url.includes('/api/trading/dynamic-risk')) {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        regime: 'normal', vix_level: 15.5, portfolio_drawdown: 0.02, risk_multiplier: 1.0,
+      }),
+    });
+  }
+  return Promise.resolve({
+    ok: true,
+    json: async () => ({ orders: [], total: 0 }),
+  });
 });
 vi.stubGlobal('fetch', mockFetch);
 
@@ -91,16 +101,26 @@ describe('TradingDashboardView', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ orders: mockOrders, total: mockOrders.length }),
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/trading/dynamic-risk')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            regime: 'normal', vix_level: 15.5, portfolio_drawdown: 0.02, risk_multiplier: 1.0,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ orders: mockOrders, total: mockOrders.length }),
+      });
     });
     useTradingStore.setState(baseStoreState);
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     cleanup();
+    vi.useRealTimers();
   });
 
   it('should display positions-based account overview with correct labels', () => {

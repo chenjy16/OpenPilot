@@ -20,12 +20,12 @@ const strategySignalArb: fc.Arbitrary<StrategySignal> = fc.record({
   take_profit: fc.double({ min: 0.01, max: 100000, noNaN: true }),
   scores: fc.dictionary(
     fc.stringMatching(/^[a-z_]{1,20}$/),
-    fc.double({ min: 0, max: 1, noNaN: true }),
+    fc.double({ min: 0, max: 1, noNaN: true }).map(v => Object.is(v, -0) ? 0 : v),
   ),
   metadata: fc.dictionary(
     fc.stringMatching(/^[a-z_]{1,20}$/),
     fc.oneof(
-      fc.double({ noNaN: true, noDefaultInfinity: true, min: -1e308, max: 1e308 }),
+      fc.double({ noNaN: true, noDefaultInfinity: true, min: -1e308, max: 1e308 }).map(v => Object.is(v, -0) ? 0 : v),
       fc.string(),
       fc.boolean(),
       fc.constant(null),
