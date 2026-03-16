@@ -619,18 +619,27 @@ Advanced configuration uses JSON5 format, located at `~/.openpilot/config.json5`
 ### Build
 
 ```bash
-# Build backend
+# Build backend (TypeScript → dist/)
 npm run build
 
-# Build frontend (outputs to dist/control-ui/)
-cd frontend && npx vite build && cd ..
+# Build frontend (React → dist/control-ui/)
+npm run ui:build
+
+# Or build both in one command
+npm run gateway:dev   # build + ui:build + start
 ```
 
 ### Run
 
 ```bash
-# Start the service (single process, includes API + WebSocket + Control UI)
-node dist/index.js
+# Development mode (with hot reload via nodemon)
+npm run dev
+
+# Production mode (from compiled dist/)
+NODE_ENV=production NODE_OPTIONS=--dns-result-order=ipv4first node dist/index.js
+
+# Or simply
+npm start
 ```
 
 After startup:
@@ -638,6 +647,36 @@ After startup:
 - API Gateway: `http://127.0.0.1:3000/api/`
 - WebSocket: `ws://127.0.0.1:3000/ws`
 - Health Check: `http://127.0.0.1:3000/healthz`
+
+### Package & Distribute
+
+Build a distributable tarball for deployment on another machine:
+
+```bash
+# 1. Full build
+npm run build && npm run ui:build
+
+# 2. Package (includes compiled code, dependencies, scripts, config template)
+tar -czf openpilot-v1.0.0.tar.gz \
+  dist/ \
+  scripts/ \
+  node_modules/ \
+  package.json \
+  package-lock.json \
+  .env.example
+
+# 3. On the target machine
+tar -xzf openpilot-v1.0.0.tar.gz
+bash scripts/install.sh    # checks Node.js, installs deps, initializes .env
+npm start                  # start the service
+```
+
+The `scripts/install.sh` script handles:
+- Node.js version check (>= 20)
+- Python3 detection (optional, for stock analysis)
+- Production dependency installation (`npm ci --production`)
+- `.env` initialization from `.env.example`
+- Data directory creation
 
 ### Testing
 
@@ -654,7 +693,7 @@ cd frontend && npx vitest --run
 ### Single Process (Recommended)
 
 ```bash
-NODE_ENV=production node dist/index.js
+NODE_ENV=production NODE_OPTIONS=--dns-result-order=ipv4first node dist/index.js
 ```
 
 ### systemd Service
