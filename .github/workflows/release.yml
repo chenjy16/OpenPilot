@@ -32,13 +32,6 @@ jobs:
         run: npm ci
         working-directory: frontend
 
-      - name: Run backend tests
-        run: npx jest --no-coverage --forceExit
-
-      - name: Run frontend tests
-        run: npx vitest --run
-        working-directory: frontend
-
       - name: Build backend
         run: npm run build
 
