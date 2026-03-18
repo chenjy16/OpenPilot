@@ -65,7 +65,7 @@ const LiveDashboardView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen w-full bg-gray-900 text-white">
+    <div className="h-full w-full overflow-y-auto bg-gray-900 text-white">
       {/* Stale data warning banner — Requirement 11.3 */}
       {stale && (
         <div className="w-full bg-yellow-600 px-4 py-2 text-center text-sm text-white">
