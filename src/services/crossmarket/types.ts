@@ -1,7 +1,7 @@
 // ─── Cross-Market Arbitrage Types ──────────────────────────────────────────
 
 /** 支持的预测市场平台 */
-export type Platform = 'polymarket' | 'kalshi' | 'myriad';
+export type Platform = 'polymarket' | 'kalshi' | 'myriad' | 'manifold';
 
 /** 标准化市场数据 */
 export interface NormalizedMarket {
@@ -121,6 +121,7 @@ export const DEFAULT_PLATFORM_FEES: Record<Platform, number> = {
   polymarket: 0.02,
   kalshi: 0.03,
   myriad: 0.01,
+  manifold: 0.0,
 };
 
 /** FinFeedAPI 配置 */

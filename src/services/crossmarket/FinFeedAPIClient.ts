@@ -1,9 +1,9 @@
 /**
  * FinFeedAPIClient — unified cross-platform prediction market data client.
  *
- * Fetches market data and order books from Polymarket, Kalshi, and Myriad
- * via the FinFeedAPI. Includes per-platform exponential backoff with jitter
- * for HTTP 429 rate limiting.
+ * Fetches market data and order books from Polymarket, Kalshi, Myriad, and
+ * Manifold via the FinFeedAPI (https://finfeedapi.com).
+ * Includes per-platform exponential backoff with jitter for HTTP 429 rate limiting.
  */
 
 import type {
@@ -34,10 +34,21 @@ export function calculateBackoffDelay(attempt: number): number {
   return Math.round(baseDelay * jitter);
 }
 
-const ALL_PLATFORMS: Platform[] = ['polymarket', 'kalshi', 'myriad'];
+const ALL_PLATFORMS: Platform[] = ['polymarket', 'kalshi', 'myriad', 'manifold'];
+
+/** Maps our lowercase Platform to FinFeedAPI's uppercase exchange_id */
+const EXCHANGE_ID_MAP: Record<Platform, string> = {
+  polymarket: 'POLYMARKET',
+  kalshi: 'KALSHI',
+  myriad: 'MYRIAD',
+  manifold: 'MANIFOLD',
+};
 
 const DEFAULT_CONFIG: FinFeedConfig = {
-  baseUrl: process.env.FINFEED_API_URL || 'https://api.finfeed.io',
+  baseUrl:
+    process.env.FINFEED_API_URL ||
+    'https://api.prediction-markets.finfeedapi.com',
+  apiKey: process.env.FINFEED_API_KEY,
   syncIntervalMs: 60000,
   timeoutMs: 15000,
 };
@@ -63,7 +74,9 @@ export class FinFeedAPIClient {
    * Fetch active markets for a specific platform via FinFeedAPI.
    */
   async fetchMarkets(platform: Platform): Promise<NormalizedMarket[]> {
-    const url = `${this.config.baseUrl}/v1/markets/${platform}?active=true`;
+    const exchangeId = EXCHANGE_ID_MAP[platform];
+    const apiKeyParam = this.config.apiKey ? `&apikey=${this.config.apiKey}` : '';
+    const url = `${this.config.baseUrl}/v1/markets/${exchangeId}?active=true${apiKeyParam}`;
 
     try {
       const data = await this.request<any[]>(platform, url);
@@ -108,7 +121,8 @@ export class FinFeedAPIClient {
     platform: Platform,
     marketId: string,
   ): Promise<CrossMarketOrderBook> {
-    const url = `${this.config.baseUrl}/v1/orderbook/${platform}/${marketId}`;
+    const exchangeId = EXCHANGE_ID_MAP[platform];
+    const url = `${this.config.baseUrl}/v1/orderbook/${exchangeId}/${marketId}`;
     const data = await this.request<any>(platform, url);
     return this.parseOrderBook(platform, marketId, data);
   }
@@ -136,7 +150,7 @@ export class FinFeedAPIClient {
         Accept: 'application/json',
       };
       if (this.config.apiKey) {
-        headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+        headers['Authorization'] = this.config.apiKey;
       }
 
       const resp = await fetch(url, {

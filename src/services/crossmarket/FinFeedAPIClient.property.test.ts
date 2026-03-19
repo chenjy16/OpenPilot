@@ -14,7 +14,7 @@ import { FinFeedAPIClient } from './FinFeedAPIClient';
 // Arbitraries
 // ---------------------------------------------------------------------------
 
-const platformArb = fc.constantFrom<Platform>('polymarket', 'kalshi', 'myriad');
+const platformArb = fc.constantFrom<Platform>('polymarket', 'kalshi', 'myriad', 'manifold');
 
 /**
  * Generate raw market data as it might come from FinFeedAPI.
@@ -97,7 +97,7 @@ describe('Feature: cross-market-arbitrage, Property 1: Market data normalization
           for (const market of markets) {
             // All required fields must be present and have correct types
             expect(typeof market.platform).toBe('string');
-            expect(['polymarket', 'kalshi', 'myriad']).toContain(market.platform);
+            expect(['polymarket', 'kalshi', 'myriad', 'manifold']).toContain(market.platform);
             expect(market.platform).toBe(platform);
 
             expect(typeof market.marketId).toBe('string');

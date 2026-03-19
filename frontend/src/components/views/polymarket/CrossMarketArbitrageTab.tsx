@@ -259,7 +259,7 @@ const CrossMarketArbitrageTab: React.FC = () => {
       {/* Info hint */}
       {sorted.length > 0 && (
         <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-700">
-          Cross-market opportunities compare prices across Polymarket, Kalshi, and Myriad.
+          Cross-market opportunities compare prices across Polymarket, Kalshi, Myriad, and Manifold.
           Default sort is by profit percentage (highest first). Click column headers to change sort order.
         </div>
       )}

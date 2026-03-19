@@ -29,7 +29,7 @@ describe('Feature: cross-market-arbitrage', () => {
   describe('Property 17: 数据库持久化往返一致性', () => {
     // ── Arbitraries ──────────────────────────────────────────────────────
 
-    const platformArb = fc.constantFrom('polymarket' as const, 'kalshi' as const, 'myriad' as const);
+    const platformArb = fc.constantFrom('polymarket' as const, 'kalshi' as const, 'myriad' as const, 'manifold' as const);
 
     const priceArb = fc.double({ min: 0.01, max: 0.99, noNaN: true, noDefaultInfinity: true });
 

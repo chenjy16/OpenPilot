@@ -14,7 +14,7 @@ import type { CrossMarketArbitrageOpportunity, Platform } from './types';
 // Arbitraries (same as types.property.test.ts)
 // ---------------------------------------------------------------------------
 
-const platformArb = fc.constantFrom<Platform>('polymarket', 'kalshi', 'myriad');
+const platformArb = fc.constantFrom<Platform>('polymarket', 'kalshi', 'myriad', 'manifold');
 
 const priceArb = fc.double({ min: 0.01, max: 0.99, noNaN: true, noDefaultInfinity: true });
 

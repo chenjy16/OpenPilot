@@ -102,7 +102,7 @@ describe('FinFeedAPIClient', () => {
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const calledUrl = fetchSpy.mock.calls[0][0];
-      expect(calledUrl).toBe('https://api.test.io/v1/markets/polymarket?active=true');
+      expect(calledUrl).toBe('https://api.test.io/v1/markets/POLYMARKET?active=true');
     });
 
     it('constructs correct URLs for each platform', async () => {
@@ -111,12 +111,13 @@ describe('FinFeedAPIClient', () => {
         timeoutMs: 5000,
       });
 
-      const platforms: Platform[] = ['polymarket', 'kalshi', 'myriad'];
+      const platforms: Platform[] = ['polymarket', 'kalshi', 'myriad', 'manifold'];
       for (const platform of platforms) {
         fetchSpy.mockResolvedValue(mockFetchResponse([]));
         await client.fetchMarkets(platform);
         const calledUrl = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1][0];
-        expect(calledUrl).toBe(`https://api.test.io/v1/markets/${platform}?active=true`);
+        const expectedExchangeId = platform.toUpperCase();
+        expect(calledUrl).toBe(`https://api.test.io/v1/markets/${expectedExchangeId}?active=true`);
       }
     });
 
@@ -156,7 +157,7 @@ describe('FinFeedAPIClient', () => {
       await client.fetchMarkets('myriad');
 
       const fetchOptions = fetchSpy.mock.calls[0][1];
-      expect(fetchOptions.headers['Authorization']).toBe('Bearer test-key-123');
+      expect(fetchOptions.headers['Authorization']).toBe('test-key-123');
     });
 
     it('sends Accept: application/json header', async () => {
@@ -184,22 +185,22 @@ describe('FinFeedAPIClient', () => {
   // -------------------------------------------------------------------------
 
   describe('fetchAllMarkets', () => {
-    it('fetches from all 3 platforms independently', async () => {
+    it('fetches from all 4 platforms independently', async () => {
       fetchSpy.mockResolvedValue(mockFetchResponse(SAMPLE_MARKETS));
 
       const client = new FinFeedAPIClient({ baseUrl: 'https://api.test.io', timeoutMs: 5000 });
       const markets = await client.fetchAllMarkets();
 
-      // 3 platforms × 2 markets each = 6
-      expect(markets).toHaveLength(6);
-      expect(fetchSpy).toHaveBeenCalledTimes(3);
+      // 4 platforms × 2 markets each = 8
+      expect(markets).toHaveLength(8);
+      expect(fetchSpy).toHaveBeenCalledTimes(4);
     });
 
     it('one platform failure does not block others', async () => {
       let callCount = 0;
       fetchSpy.mockImplementation(async (url: string) => {
         callCount++;
-        if (url.includes('kalshi')) {
+        if (url.includes('KALSHI')) {
           throw new Error('Network error');
         }
         return mockFetchResponse(SAMPLE_MARKETS);
@@ -208,8 +209,8 @@ describe('FinFeedAPIClient', () => {
       const client = new FinFeedAPIClient({ baseUrl: 'https://api.test.io', timeoutMs: 5000 });
       const markets = await client.fetchAllMarkets();
 
-      // polymarket + myriad succeed (2 markets each), kalshi fails
-      expect(markets).toHaveLength(4);
+      // polymarket + myriad + manifold succeed (2 markets each), kalshi fails
+      expect(markets).toHaveLength(6);
     });
   });
 
@@ -224,7 +225,7 @@ describe('FinFeedAPIClient', () => {
       const client = new FinFeedAPIClient({ baseUrl: 'https://api.test.io', timeoutMs: 5000 });
       const ob = await client.getOrderBook('polymarket', 'mkt-abc');
 
-      expect(fetchSpy.mock.calls[0][0]).toBe('https://api.test.io/v1/orderbook/polymarket/mkt-abc');
+      expect(fetchSpy.mock.calls[0][0]).toBe('https://api.test.io/v1/orderbook/POLYMARKET/mkt-abc');
       expect(ob.platform).toBe('polymarket');
       expect(ob.marketId).toBe('mkt-abc');
       expect(ob.bids).toHaveLength(2);
@@ -367,7 +368,7 @@ describe('FinFeedAPIClient', () => {
     it('backoff state is per-platform', async () => {
       // polymarket gets 429, kalshi succeeds immediately
       fetchSpy.mockImplementation(async (url: string) => {
-        if (url.includes('polymarket')) {
+        if (url.includes('POLYMARKET')) {
           return mockFetchResponse(null, 429, false);
         }
         return mockFetchResponse(SAMPLE_MARKETS);
@@ -376,7 +377,7 @@ describe('FinFeedAPIClient', () => {
       // After first 429, make polymarket succeed on retry
       let polyCallCount = 0;
       fetchSpy.mockImplementation(async (url: string) => {
-        if (url.includes('polymarket')) {
+        if (url.includes('POLYMARKET')) {
           polyCallCount++;
           if (polyCallCount === 1) {
             return mockFetchResponse(null, 429, false);

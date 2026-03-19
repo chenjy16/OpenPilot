@@ -133,9 +133,9 @@ describe('CrossMarketArbitrageTab', () => {
   it('Property 16: default sort is profitPct descending', () => {
     const opportunityArb = fc.record({
       id: fc.integer({ min: 1, max: 100000 }),
-      platformA: fc.constantFrom('polymarket', 'kalshi', 'myriad'),
+      platformA: fc.constantFrom('polymarket', 'kalshi', 'myriad', 'manifold'),
       platformAMarketId: fc.stringMatching(/^[0-9a-f]{8,16}$/),
-      platformB: fc.constantFrom('polymarket', 'kalshi', 'myriad'),
+      platformB: fc.constantFrom('polymarket', 'kalshi', 'myriad', 'manifold'),
       platformBMarketId: fc.stringMatching(/^[0-9a-f]{8,16}$/),
       question: fc.string({ minLength: 5, maxLength: 100 }),
       direction: fc.constantFrom<'A_YES_B_NO' | 'A_NO_B_YES'>(

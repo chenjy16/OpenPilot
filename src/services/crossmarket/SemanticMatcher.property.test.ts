@@ -16,7 +16,7 @@ import type { Platform, NormalizedMarket, MatchResult } from './types';
 // Arbitraries
 // ---------------------------------------------------------------------------
 
-const platformArb = fc.constantFrom<Platform>('polymarket', 'kalshi', 'myriad');
+const platformArb = fc.constantFrom<Platform>('polymarket', 'kalshi', 'myriad', 'manifold');
 
 const priceArb = fc.double({ min: 0.01, max: 0.99, noNaN: true, noDefaultInfinity: true });
 
