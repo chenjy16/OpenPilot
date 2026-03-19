@@ -592,6 +592,7 @@ export interface VideoEditConfig {
 /** Polymarket / PolyOracle configuration */
 export interface PolymarketConfig {
   enabled?: boolean;
+  privateKey?: string;
   gammaApiUrl?: string;
   scanLimit?: number;
   minVolume?: number;
