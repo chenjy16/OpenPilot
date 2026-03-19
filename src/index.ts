@@ -824,6 +824,14 @@ async function main(): Promise<void> {
   });
 
   // Initialize Polymarket Trading Service + Arbitrage Detector
+  // Restore privateKey from persisted config to process.env (same pattern as FINNHUB_API_KEY)
+  if (polyConfig?.privateKey && !process.env.POLYMARKET_PRIVATE_KEY) {
+    let key = polyConfig.privateKey.trim();
+    if (/^[0-9a-fA-F]{64}$/.test(key)) {
+      key = '0x' + key;
+    }
+    process.env.POLYMARKET_PRIVATE_KEY = key;
+  }
   const { PolymarketTradingService } = await import('./services/polymarket/PolymarketTradingService');
   const { ArbitrageDetector } = await import('./services/polymarket/ArbitrageDetector');
   const polymarketTradingService = new PolymarketTradingService(db);
