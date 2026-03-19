@@ -823,6 +823,17 @@ async function main(): Promise<void> {
     cronScheduler,
   });
 
+  // Initialize Polymarket Trading Service + Arbitrage Detector
+  const { PolymarketTradingService } = await import('./services/polymarket/PolymarketTradingService');
+  const { ArbitrageDetector } = await import('./services/polymarket/ArbitrageDetector');
+  const polymarketTradingService = new PolymarketTradingService(db);
+  const polymarketArbitrageDetector = new ArbitrageDetector(polymarketTradingService);
+  server.setPolymarketTradingServices({
+    tradingService: polymarketTradingService,
+    arbitrageDetector: polymarketArbitrageDetector,
+  });
+  console.log(`[${new Date().toISOString()}] Polymarket Trading: ${polymarketTradingService.isConfigured() ? '✓ configured' : '✗ not configured (set POLYMARKET_PRIVATE_KEY)'}`);
+
   // Inject StockScanner + Sandbox into API server
   server.setStockServices({ scanner: stockScanner, sandbox });
 

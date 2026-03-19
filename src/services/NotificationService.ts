@@ -11,6 +11,7 @@
 import type Database from 'better-sqlite3';
 import type { ChannelManager } from '../channels/ChannelManager';
 import type { SignalResult } from './PolymarketScanner';
+import type { CrossMarketArbitrageOpportunity } from './crossmarket/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,6 +25,64 @@ export interface NotifyConfig {
   minEdge?: number;
   /** Dedup window in hours (default: 24) */
   dedupHours?: number;
+  /** Cross-market dedup window in hours (default: 4) */
+  crossMarketDedupHours?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Cross-market dedup state
+// ---------------------------------------------------------------------------
+
+interface CrossMarketDedupEntry {
+  notifiedAt: number;
+  profitPct: number;
+}
+
+// ---------------------------------------------------------------------------
+// Standalone formatter (exported for property testing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Format a cross-market arbitrage opportunity into a human-readable alert message.
+ * Exported as a standalone function for property testing (Property 15).
+ */
+export function formatCrossMarketAlert(opp: CrossMarketArbitrageOpportunity): string {
+  const directionLabel =
+    opp.direction === 'A_YES_B_NO'
+      ? `Buy ${opp.platformA} YES + Buy ${opp.platformB} NO`
+      : `Buy ${opp.platformA} NO + Buy ${opp.platformB} YES`;
+
+  const lines: string[] = [
+    '🔀 跨市场套利机会',
+    '',
+    `📊 ${opp.question}`,
+    '',
+    `🔄 方向: ${opp.direction} — ${directionLabel}`,
+    '',
+    `🅰️ ${opp.platformA}`,
+    `   Yes: ${opp.platformAYesPrice.toFixed(4)}  |  No: ${opp.platformANoPrice.toFixed(4)}`,
+    `🅱️ ${opp.platformB}`,
+    `   Yes: ${opp.platformBYesPrice.toFixed(4)}  |  No: ${opp.platformBNoPrice.toFixed(4)}`,
+    '',
+    `📈 VWAP Buy: ${opp.vwapBuyPrice.toFixed(4)}  |  VWAP Sell: ${opp.vwapSellPrice.toFixed(4)}`,
+    `💰 实际套利成本: ${opp.realArbitrageCost.toFixed(4)}`,
+    `📊 预期利润: ${opp.profitPct.toFixed(2)}%`,
+    `⭐ Arb_Score: ${opp.arbScore}`,
+  ];
+
+  if (opp.liquidityWarning) {
+    lines.push('⚠️ 流动性警告: 买卖价差较大，执行风险较高');
+  }
+
+  if (opp.oracleMismatch) {
+    lines.push('⚠️ Oracle Mismatch: 双方结算规则存在差异，请谨慎评估');
+  }
+
+  lines.push('');
+  lines.push(`💡 建议: ${opp.profitPct >= 5 ? '值得关注，建议进一步验证深度后执行' : '利润较薄，建议持续观察'}`);
+  lines.push(`⏰ ${new Date(opp.detectedAt * 1000).toISOString().replace('T', ' ').slice(0, 19)} UTC`);
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -34,6 +93,8 @@ export class NotificationService {
   private db: Database.Database;
   private channelManager?: ChannelManager;
   private config: NotifyConfig;
+  /** In-memory dedup state for cross-market alerts: key = "platformA:marketIdA|platformB:marketIdB" */
+  private crossMarketDedup: Map<string, CrossMarketDedupEntry> = new Map();
 
   constructor(db: Database.Database, channelManager?: ChannelManager, config?: NotifyConfig) {
     this.db = db;
@@ -162,6 +223,71 @@ export class NotificationService {
           text,
         });
       } catch { /* ignore */ }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Cross-market arbitrage alerts
+  // -------------------------------------------------------------------------
+
+  /**
+   * Send a cross-market arbitrage alert via Telegram.
+   * Dedup: same market pair not re-notified within crossMarketDedupHours (default 4),
+   * unless profitPct changes by more than 2 percentage points.
+   * On send failure, retries once after 30 seconds.
+   */
+  async sendCrossMarketAlert(opportunity: CrossMarketArbitrageOpportunity): Promise<void> {
+    if (!this.config.enabled || !this.channelManager) return;
+
+    const dedupHours = this.config.crossMarketDedupHours ?? 4;
+    const dedupKey = `${opportunity.platformA}:${opportunity.platformAMarketId}|${opportunity.platformB}:${opportunity.platformBMarketId}`;
+
+    // Dedup check
+    const existing = this.crossMarketDedup.get(dedupKey);
+    if (existing) {
+      const elapsedMs = Date.now() - existing.notifiedAt;
+      const withinWindow = elapsedMs < dedupHours * 3600 * 1000;
+      const profitChange = Math.abs(opportunity.profitPct - existing.profitPct);
+      if (withinWindow && profitChange <= 2) {
+        return; // skip — dedup hit
+      }
+    }
+
+    const text = formatCrossMarketAlert(opportunity);
+
+    if (this.config.telegram?.chatId) {
+      let sent = false;
+      try {
+        await this.channelManager.sendMessage('telegram', {
+          chatId: this.config.telegram.chatId,
+          text,
+        });
+        sent = true;
+      } catch (err: any) {
+        console.warn(`[NotificationService] Cross-market alert send failed: ${err.message}`);
+      }
+
+      // Retry once after 30 seconds on failure
+      if (!sent) {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 30_000));
+          await this.channelManager!.sendMessage('telegram', {
+            chatId: this.config.telegram.chatId,
+            text,
+          });
+          sent = true;
+        } catch (err: any) {
+          console.warn(`[NotificationService] Cross-market alert retry failed: ${err.message}`);
+        }
+      }
+
+      if (sent) {
+        // Update dedup state
+        this.crossMarketDedup.set(dedupKey, {
+          notifiedAt: Date.now(),
+          profitPct: opportunity.profitPct,
+        });
+      }
     }
   }
 

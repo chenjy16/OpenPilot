@@ -32,30 +32,30 @@ const SECTION_META: Record<string, { icon: string; label: string; description: s
   models: { icon: '🧩', label: 'config.models', description: '', order: 3 },
   tools: { icon: '🔧', label: 'config.tools', description: '', order: 4 },
   skills: { icon: '⚡', label: 'config.skills', description: '', order: 5 },
-  plugins: { icon: '�', label: 'config.plugins', description: '', order: 6 },
-  channels: { icon: '�', label: 'config.channels', description: '', order: 7 },
+  plugins: { icon: '🧩', label: 'config.plugins', description: '', order: 6 },
+  channels: { icon: '📡', label: 'config.channels', description: '', order: 7 },
   bindings: { icon: '🔀', label: 'config.bindings', description: '', order: 8 },
-  session: { icon: '�', label: 'config.session', description: '', order: 9 },
+  session: { icon: '📂', label: 'config.session', description: '', order: 9 },
   logging: { icon: '📋', label: 'config.logging', description: '', order: 10 },
   cron: { icon: '⏰', label: 'config.cronConfig', description: '', order: 11 },
-  messages: { icon: '�', label: 'config.messages', description: '', order: 12 },
+  messages: { icon: '💬', label: 'config.messages', description: '', order: 12 },
   commands: { icon: '⌨️', label: 'config.commands', description: '', order: 13 },
   broadcast: { icon: '📡', label: 'config.broadcast', description: '', order: 14 },
   memory: { icon: '🧠', label: 'config.memory', description: '', order: 15 },
-  diagnostics: { icon: '�', label: 'config.diagnostics', description: '', order: 16 },
+  diagnostics: { icon: '🩺', label: 'config.diagnostics', description: '', order: 16 },
   update: { icon: '🔄', label: 'config.update', description: '', order: 17 },
   hooks: { icon: '🪝', label: 'Webhook', description: '', order: 18 },
   browser: { icon: '🌍', label: 'config.browser', description: '', order: 19 },
   approvals: { icon: '✅', label: 'config.approvals', description: '', order: 20 },
-  auth: { icon: '�', label: 'config.auth', description: '', order: 21 },
-  discovery: { icon: '�', label: 'config.discovery', description: '', order: 22 },
+  auth: { icon: '🔐', label: 'config.auth', description: '', order: 21 },
+  discovery: { icon: '🔍', label: 'config.discovery', description: '', order: 22 },
   talk: { icon: '🎙️', label: 'config.talk', description: '', order: 23 },
   voice: { icon: '🎤', label: 'config.voice', description: '', order: 24 },
   imageGeneration: { icon: '🖼️', label: 'config.imageGeneration', description: '', order: 25 },
   documentGeneration: { icon: '📄', label: 'config.documentGeneration', description: '', order: 26 },
   video: { icon: '🎬', label: 'config.video', description: '', order: 27 },
-  polymarket: { icon: '📈', label: 'PolyOracle', description: '', order: 28 },
-  stockAnalysis: { icon: '📊', label: 'Quant Copilot', description: '', order: 29 },
+  polymarket: { icon: '📈', label: 'config.polymarket', description: '', order: 28 },
+  stockAnalysis: { icon: '📊', label: 'config.stockAnalysis', description: '', order: 29 },
   ui: { icon: '🎨', label: 'config.ui', description: '', order: 30 },
   cli: { icon: '💻', label: 'config.cli', description: '', order: 31 },
   secrets: { icon: '🔒', label: 'config.secrets', description: '', order: 32 },
@@ -254,7 +254,7 @@ const ConfigView: React.FC = () => {
                 activeSection === item.key ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              {item.icon} {item.label}
+              {item.label}
             </button>
           ))}
         </div>
@@ -335,13 +335,14 @@ const ConfigView: React.FC = () => {
                 const meta = SECTION_META[key] ?? { icon: '📄', label: key, description: '', order: 99 };
                 return (
                   <ConfigSection
-                    key={key}
+                    key={`${key}-${activeSection}`}
                     sectionKey={key}
                     icon={meta.icon}
                     label={meta.label ? t(meta.label) : key}
                     description={meta.description}
                     value={value}
                     schema={schema[key]}
+                    defaultExpanded={activeSection === key}
                     onChange={(newVal) => setConfig(prev => prev ? { ...prev, [key]: newVal } : prev)}
                   />
                 );
@@ -368,9 +369,9 @@ function getEnumOptions(path: string): string[] | null {
 // Editable config section
 const ConfigSection: React.FC<{
   sectionKey: string; icon: string; label: string; description: string;
-  value: unknown; onChange: (v: unknown) => void; schema?: any;
-}> = ({ sectionKey, icon, label, description, value, onChange, schema }) => {
-  const [expanded, setExpanded] = useState(false);
+  value: unknown; onChange: (v: unknown) => void; schema?: any; defaultExpanded?: boolean;
+}> = ({ sectionKey, icon, label, description, value, onChange, schema, defaultExpanded = false }) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
   const isSimple = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 
@@ -382,7 +383,6 @@ const ConfigSection: React.FC<{
       >
         <div>
           <div className="flex items-center gap-2">
-            <span>{icon}</span>
             <span className="text-sm font-medium text-gray-700">{label}</span>
             <span className="text-xs text-gray-400">{sectionKey}</span>
           </div>
@@ -414,6 +414,7 @@ const ConfigSection: React.FC<{
 
 // Generic field editor with enum detection
 const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknown) => void }> = ({ path, value, onChange }) => {
+  const { t } = useTranslation();
   const enumOpts = getEnumOptions(path);
   // Must declare all hooks before any early returns (React Rules of Hooks)
   const isPassword = path.includes('apiKey') || path.includes('token') || path.includes('password') || path.includes('secret');
@@ -515,6 +516,7 @@ const FieldEditor: React.FC<{ path: string; value: unknown; onChange: (v: unknow
 const NestedFields: React.FC<{
   path: string; value: Record<string, unknown>; onChange: (v: unknown) => void; schema?: any;
 }> = ({ path, value, onChange, schema }) => {
+  const { t } = useTranslation();
   // Guard against null/undefined values
   if (!value || typeof value !== 'object') {
     return <span className="text-xs text-gray-400 font-mono">{JSON.stringify(value)}</span>;
@@ -598,6 +600,7 @@ const NestedFields: React.FC<{
 const NestedBlock: React.FC<{
   path: string; value: Record<string, unknown>; onChange: (v: unknown) => void; schema?: any;
 }> = ({ path, value, onChange, schema }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const keyCount = Object.keys(value).length;
 
@@ -620,6 +623,7 @@ const NestedBlock: React.FC<{
 const ArrayField: React.FC<{
   path: string; value: unknown[]; onChange: (v: unknown) => void;
 }> = ({ path, value, onChange }) => {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value.join(', '));
   const isModelArray = isModelArrayField(path) && _modelOptions.length > 0;

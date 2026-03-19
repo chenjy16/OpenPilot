@@ -48,11 +48,16 @@ import { PortfolioManager } from '../services/PortfolioManager';
 import { SignalTracker } from '../services/SignalTracker';
 import type { ExecutionSandbox } from '../runtime/sandbox';
 import { createTradingRoutes } from './tradingRoutes';
+import { createPolymarketTradingRoutes } from './polymarketRoutes';
+import { createCrossMarketRoutes } from './crossMarketRoutes';
 import type { TradingGateway } from '../services/trading/TradingGateway';
 import type { RiskController } from '../services/trading/RiskController';
 import type { OrderManager } from '../services/trading/OrderManager';
 import type { AutoTradingPipeline } from '../services/trading/AutoTradingPipeline';
 import type { StopLossManager } from '../services/trading/StopLossManager';
+import type { PolymarketTradingService } from '../services/polymarket/PolymarketTradingService';
+import type { ArbitrageDetector } from '../services/polymarket/ArbitrageDetector';
+import type { CrossMarketArbitrageDetector } from '../services/crossmarket/CrossMarketArbitrageDetector';
 import type Database from 'better-sqlite3';
 import {
   upsertPairingRequest,
@@ -192,9 +197,10 @@ const CONFIG_SECTION_SCHEMA: Record<string, {
     },
   },
   polymarket: {
-    icon: '📈', label: 'PolyOracle', description: 'Polymarket 预测市场扫描、信号阈值、通知配置',
+    icon: '📈', label: 'Polymarket Copilot', description: 'Polymarket 预测市场扫描、信号阈值、通知配置',
     fields: {
-      enabled: { type: 'boolean', label: '启用 PolyOracle' },
+      enabled: { type: 'boolean', label: '启用 Polymarket Copilot' },
+      privateKey: { type: 'password', label: 'Polymarket 私钥', description: 'EOA 钱包私钥（MetaMask 导出的 64 位 hex 或 0x 开头均可，系统自动补全）' },
       scanLimit: { type: 'number', label: '扫描市场数量', description: '每次扫描的最大市场数' },
       minVolume: { type: 'number', label: '最小交易量', description: '过滤低交易量市场' },
       signalThreshold: { type: 'number', label: '信号阈值', description: 'AI概率与市场概率的最小差值' },
@@ -338,6 +344,12 @@ export class APIServer {
   /** DataManager for OHLCV data cache */
   private dataManager?: any;
   private _dataDb?: any;
+  /** PolymarketTradingService for Polymarket CLOB trading */
+  private polymarketTradingService?: PolymarketTradingService;
+  /** ArbitrageDetector for Polymarket arbitrage detection */
+  private polymarketArbitrageDetector?: ArbitrageDetector;
+  /** CrossMarketArbitrageDetector for cross-market arbitrage detection */
+  private crossMarketArbitrageDetector?: CrossMarketArbitrageDetector;
 
   constructor(aiRuntime: AIRuntime, sessionManager: SessionManager, auditLogger?: AuditLogger, channelManager?: ChannelManager, pluginManager?: PluginManager, agentManager?: AgentManager, appConfig?: any, policyEngine?: PolicyEngine) {
     this.aiRuntime = aiRuntime;
@@ -497,6 +509,21 @@ export class APIServer {
           this.stockScanner.updateConfig(updates);
         }
       }
+    }
+
+    // 9. Polymarket config — apply private key to env
+    if (incoming.polymarket) {
+      const polyCfg = this.appConfig.polymarket;
+      if (polyCfg?.privateKey && typeof polyCfg.privateKey === 'string' && !polyCfg.privateKey.startsWith('••••')) {
+        let key = polyCfg.privateKey.trim();
+        // MetaMask exports private keys without 0x prefix — auto-add it
+        if (/^[0-9a-fA-F]{64}$/.test(key)) {
+          key = '0x' + key;
+        }
+        process.env.POLYMARKET_PRIVATE_KEY = key;
+        console.log('[Config] POLYMARKET_PRIVATE_KEY updated from polymarket config');
+      }
+      // privateKey is kept in persisted config so it survives restarts
     }
   }
 
@@ -1743,10 +1770,19 @@ export class APIServer {
       if (!safe.polymarket) {
         safe.polymarket = {
           enabled: false,
+          privateKey: '',
           scanLimit: 20,
           minVolume: 10000,
           signalThreshold: 0.1,
         };
+      }
+      // Always ensure privateKey field exists for UI editing
+      if (safe.polymarket.privateKey === undefined) {
+        safe.polymarket.privateKey = process.env.POLYMARKET_PRIVATE_KEY || '';
+      }
+      // Mask privateKey for display
+      if (safe.polymarket.privateKey && typeof safe.polymarket.privateKey === 'string' && safe.polymarket.privateKey.length > 0) {
+        safe.polymarket.privateKey = '••••' + safe.polymarket.privateKey.slice(-4);
       }
 
       // Ensure stockAnalysis config has default structure for UI editing
@@ -3028,6 +3064,43 @@ export class APIServer {
     this.polymarketScanner = services.scanner;
     this.notificationService = services.notificationService;
     this.cronScheduler = services.cronScheduler;
+  }
+
+  // -----------------------------------------------------------------------
+  // Polymarket Trading service injection
+  // -----------------------------------------------------------------------
+
+  setPolymarketTradingServices(services: {
+    tradingService: PolymarketTradingService;
+    arbitrageDetector: ArbitrageDetector;
+  }): void {
+    this.polymarketTradingService = services.tradingService;
+    this.polymarketArbitrageDetector = services.arbitrageDetector;
+    // Mount trading routes if scanner is available
+    if (this.polymarketScanner) {
+      const routes = createPolymarketTradingRoutes(
+        services.tradingService,
+        services.arbitrageDetector,
+        this.polymarketScanner,
+      );
+      this.app.use('/api/polymarket', routes);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Cross-market arbitrage service injection
+  // -----------------------------------------------------------------------
+
+  setCrossMarketServices(services: {
+    crossMarketDetector: CrossMarketArbitrageDetector;
+    db: Database.Database;
+  }): void {
+    this.crossMarketArbitrageDetector = services.crossMarketDetector;
+    const routes = createCrossMarketRoutes(
+      services.crossMarketDetector,
+      services.db,
+    );
+    this.app.use('/api/cross-market', routes);
   }
 
   // -----------------------------------------------------------------------

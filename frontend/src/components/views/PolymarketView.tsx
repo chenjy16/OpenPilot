@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { get, post, put } from '../../services/apiClient';
+import TradingTab from './polymarket/TradingTab';
+import ArbitrageTab from './polymarket/ArbitrageTab';
+import CrossMarketArbitrageTab from './polymarket/CrossMarketArbitrageTab';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,7 +49,7 @@ interface CronJob {
   createdAt: number;
 }
 
-type Tab = 'about' | 'markets' | 'signals' | 'cron' | 'settings';
+type Tab = 'about' | 'markets' | 'signals' | 'trading' | 'arbitrage' | 'cross-market' | 'cron' | 'settings';
 
 // ---------------------------------------------------------------------------
 // Main View
@@ -60,6 +63,7 @@ const PolymarketView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
+  const [prefillOrder, setPrefillOrder] = useState<{ token_id: string; price: number; side: 'BUY' | 'SELL' } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [lastScan, setLastScan] = useState<string | null>(null);
 
@@ -124,10 +128,20 @@ const PolymarketView: React.FC = () => {
     }
   };
 
+  const handleSetTab = (newTab: Tab) => {
+    if (newTab !== 'trading') {
+      setPrefillOrder(null);
+    }
+    setTab(newTab);
+  };
+
   const tabs: [Tab, string][] = [
     ['about', t('polymarket.tabAbout')],
     ['markets', t('polymarket.tabMarkets')],
     ['signals', t('polymarket.tabSignals')],
+    ['trading', 'Trading'],
+    ['arbitrage', 'Arbitrage'],
+    ['cross-market', 'Cross-Market'],
     ['cron', t('polymarket.tabCron')],
     ['settings', t('polymarket.tabSettings')],
   ];
@@ -138,7 +152,7 @@ const PolymarketView: React.FC = () => {
       <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔮</span>
-          <h1 className="text-lg font-semibold text-gray-800">PolyOracle</h1>
+          <h1 className="text-lg font-semibold text-gray-800">Polymarket Copilot</h1>
           <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
             {t('polymarket.aiPredictionAnalysis')}
           </span>
@@ -175,7 +189,7 @@ const PolymarketView: React.FC = () => {
         {tabs.map(([id, label]) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => handleSetTab(id)}
             className={`px-4 py-2.5 text-sm transition-colors ${
               tab === id ? 'border-b-2 border-purple-500 text-purple-600' : 'text-gray-500 hover:text-gray-700'
             }`}
@@ -195,6 +209,16 @@ const PolymarketView: React.FC = () => {
           <MarketsPanel markets={markets} signals={signals} loading={loading} analyzing={analyzing} onAnalyze={handleAnalyze} />
         )}
         {tab === 'signals' && <SignalsPanel signals={signals} />}
+        {tab === 'trading' && <TradingTab prefillOrder={prefillOrder} />}
+        {tab === 'arbitrage' && (
+          <ArbitrageTab
+            onTradeOpportunity={(opp) => {
+              setPrefillOrder(opp);
+              handleSetTab('trading');
+            }}
+          />
+        )}
+        {tab === 'cross-market' && <CrossMarketArbitrageTab />}
         {tab === 'cron' && <CronPanel />}
         {tab === 'settings' && <SettingsPanel />}
       </div>

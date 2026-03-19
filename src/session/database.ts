@@ -25,6 +25,9 @@ export function initializeDatabase(dbPath: string): Database.Database {
   // Enable foreign keys
   db.pragma('foreign_keys = ON');
 
+  // Enable WAL mode for better concurrent write performance
+  db.pragma('journal_mode = WAL');
+
   // Create sessions table
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
@@ -212,6 +215,117 @@ export function initializeDatabase(dbPath: string): Database.Database {
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
+  `);
+
+  // Create polymarket_orders table (Polymarket Trading)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS polymarket_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id TEXT,
+      market_id TEXT NOT NULL,
+      token_id TEXT NOT NULL,
+      side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
+      price REAL NOT NULL CHECK(price >= 0.01 AND price <= 0.99),
+      size REAL NOT NULL CHECK(size > 0),
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'submitted', 'filled', 'canceled', 'failed')),
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_orders_status ON polymarket_orders(status)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_orders_market ON polymarket_orders(market_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_orders_created ON polymarket_orders(created_at DESC)
+  `);
+
+  // Create polymarket_trades table (Polymarket Trading)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS polymarket_trades (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trade_id TEXT,
+      order_id TEXT,
+      market_id TEXT NOT NULL,
+      token_id TEXT NOT NULL,
+      side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
+      price REAL NOT NULL,
+      size REAL NOT NULL,
+      fee REAL NOT NULL DEFAULT 0,
+      timestamp INTEGER NOT NULL
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_trades_market ON polymarket_trades(market_id)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_trades_timestamp ON polymarket_trades(timestamp DESC)
+  `);
+
+  // Create cross_market_match_cache table (Cross-Market Arbitrage Radar)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cross_market_match_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      platform_a TEXT NOT NULL,
+      market_id_a TEXT NOT NULL,
+      platform_b TEXT NOT NULL,
+      market_id_b TEXT NOT NULL,
+      confidence TEXT NOT NULL CHECK(confidence IN ('high', 'medium', 'low')),
+      confidence_score REAL NOT NULL,
+      oracle_mismatch INTEGER NOT NULL DEFAULT 0,
+      oracle_mismatch_reason TEXT,
+      market_end_date TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      expires_at INTEGER NOT NULL,
+      UNIQUE(platform_a, market_id_a, platform_b, market_id_b)
+    )
+  `);
+
+  // Create cross_market_arbitrage table (Cross-Market Arbitrage Radar)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cross_market_arbitrage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      platform_a TEXT NOT NULL,
+      platform_a_market_id TEXT NOT NULL,
+      platform_b TEXT NOT NULL,
+      platform_b_market_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('A_YES_B_NO', 'A_NO_B_YES')),
+      platform_a_yes_price REAL NOT NULL,
+      platform_a_no_price REAL,
+      platform_b_yes_price REAL,
+      platform_b_no_price REAL NOT NULL,
+      vwap_buy_price REAL NOT NULL,
+      vwap_sell_price REAL NOT NULL,
+      real_arbitrage_cost REAL NOT NULL,
+      platform_a_fee REAL NOT NULL,
+      platform_b_fee REAL NOT NULL,
+      total_fees REAL NOT NULL,
+      profit_pct REAL NOT NULL,
+      arb_score INTEGER NOT NULL,
+      liquidity_warning INTEGER NOT NULL DEFAULT 0,
+      oracle_mismatch INTEGER NOT NULL DEFAULT 0,
+      depth_status TEXT NOT NULL DEFAULT 'sufficient',
+      detected_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_cross_market_arb_detected
+    ON cross_market_arbitrage(detected_at DESC)
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_cross_market_arb_profit
+    ON cross_market_arbitrage(profit_pct DESC)
   `);
 
   return db;
